@@ -12,16 +12,26 @@ from typing import Any
 
 import httpx
 from fastapi import Body, FastAPI, HTTPException
+from pydantic import BaseModel, Field
+from redis.exceptions import RedisError
 
 from shared_contracts.config import get_settings
 from shared_contracts.http_clients import HttpProcessingClient
 from shared_contracts.interfaces import EventConsumer, EventProducer, ProcessingClient
-from shared_contracts.models import Prediction, RawEvent
+from shared_contracts.models import ErrorResponse, Prediction, RawEvent
 
 from .broker import InMemoryBroker, RedisStreamBroker, create_broker
 from .validator import IngestionValidator
 
 log = logging.getLogger("ingestion")
+INGESTION_TAG = "Data Ingestion"
+
+
+class AcceptedEvent(BaseModel):
+    """Acknowledgement returned when downstream processing is still pending."""
+
+    status: str = Field(default="accepted", examples=["accepted"])
+    event_id: str = Field(description="Identifier retained for asynchronous retry")
 
 
 @dataclass
@@ -105,15 +115,100 @@ def create_app(
             daemon=True,
         ).start()
 
-    app = FastAPI(title="ingestion")
+    app = FastAPI(
+        title="Dissanayaka Ingestion API",
+        description=(
+            "Validates incoming real-time events, publishes them to the configured "
+            "stream broker, and forwards them to the processing pipeline."
+        ),
+        version="1.0.0",
+        openapi_tags=[
+            {
+                "name": INGESTION_TAG,
+                "description": "Validate and publish real-time events.",
+            }
+        ],
+    )
 
-    @app.get("/health")
+    @app.get(
+        "/health",
+        tags=[INGESTION_TAG],
+        summary="Check ingestion service health",
+        description="Returns a liveness response for the ingestion service.",
+    )
     def health() -> dict[str, str]:
         """Return the service health status."""
         return {"status": "ok", "service": "ingestion"}
 
-    @app.post("/v1/ingest", status_code=202)
-    def ingest(payload: dict[str, Any] = Body(...)) -> Prediction | dict[str, str]:
+    @app.post(
+        "/v1/ingest",
+        tags=[INGESTION_TAG],
+        summary="Ingest a real-time event",
+        description=(
+            "Validates a RawEvent-compatible JSON object and publishes it for "
+            "downstream processing. Invalid requests are written to the DLQ."
+        ),
+        status_code=202,
+        response_model=Prediction | AcceptedEvent,
+        responses={
+            202: {
+                "description": (
+                    "Event accepted and processed, or retained for asynchronous retry."
+                ),
+                "content": {
+                    "application/json": {
+                        "examples": {
+                            "prediction": {
+                                "summary": "Processed prediction",
+                                "value": {
+                                    "event_id": "evt-123",
+                                    "score": 0.12,
+                                    "label": "normal",
+                                    "threshold": 0.8,
+                                    "model_version": "stub-0.1",
+                                },
+                            },
+                            "queued": {
+                                "summary": "Processing pending",
+                                "value": {
+                                    "status": "accepted",
+                                    "event_id": "evt-123",
+                                },
+                            },
+                        }
+                    }
+                },
+            },
+            422: {
+                "model": ErrorResponse,
+                "description": "The event payload failed ingestion validation.",
+            },
+            502: {
+                "model": ErrorResponse,
+                "description": "The ingestion broker is unavailable.",
+            },
+        },
+    )
+    def ingest(
+        payload: dict[str, Any] = Body(
+            ...,
+            description="RawEvent-compatible JSON payload.",
+            examples={
+                "valid": {
+                    "summary": "Valid event",
+                    "value": {
+                        "source": "sensor-01",
+                        "timestamp": "2026-10-05T18:00:00Z",
+                        "payload": {"temperature": 22.5, "humidity": 0.61},
+                    },
+                },
+                "invalid": {
+                    "summary": "Invalid event",
+                    "value": {"payload": {"temperature": "not-a-number"}},
+                },
+            },
+        ),
+    ) -> Prediction | AcceptedEvent:
         """Validate, publish, and await a bounded window for processing."""
         try:
             event = validator.validate(payload)
@@ -138,10 +233,10 @@ def create_app(
                 processing_timeout,
                 event.event_id,
             )
-            return {"status": "accepted", "event_id": event.event_id}
-        except (httpx.HTTPError, ValueError) as exc:
-            log.exception("Unable to queue event %s", event.event_id)
-            raise HTTPException(503, f"event queued for retry: {exc}") from exc
+            return AcceptedEvent(event_id=event.event_id)
+        except (httpx.HTTPError, RedisError, OSError) as exc:
+            log.exception("Unable to publish event %s", event.event_id)
+            raise HTTPException(502, f"ingestion broker unavailable: {exc}") from exc
 
     return app
 

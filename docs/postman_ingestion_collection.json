@@ -1,0 +1,99 @@
+{
+  "info": {
+    "_postman_id": "8c1fb1da-0a46-4a6f-9e1e-7bd8b8a1c001",
+    "name": "Dissanayaka Ingestion API",
+    "description": "Postman requests for the FastAPI ingestion service.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8001"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Ingest Valid Event",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"source\": \"sensor-01\",\n  \"timestamp\": \"2026-10-05T18:00:00Z\",\n  \"payload\": {\n    \"temperature\": 22.5,\n    \"humidity\": 0.61,\n    \"pressure\": 1013.25\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/ingest",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "ingest"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "Ingest Invalid Event",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"payload\": {\n    \"temperature\": \"not-a-number\"\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/ingest",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "v1",
+            "ingest"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}
