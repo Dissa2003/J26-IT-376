@@ -1,20 +1,25 @@
+"""In-memory event broker for local development and unit tests."""
+
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from shared_contracts.interfaces import EventConsumer, EventProducer
 from shared_contracts.models import RawEvent
 
 
 class InMemoryBroker(EventProducer, EventConsumer):
-    """Synchronous stub. Replace with Redis Streams/Kafka implementing the same interfaces."""
+    """Publish events synchronously to all registered consumers."""
 
     def __init__(self) -> None:
+        """Initialize an empty broker."""
         self._handlers: list[Callable[[RawEvent], None]] = []
 
     def subscribe(self, handler: Callable[[RawEvent], None]) -> None:
+        """Register a consumer callback for future events."""
         self._handlers.append(handler)
 
     def publish(self, event: RawEvent) -> None:
-        for h in self._handlers:
-            h(event)
+        """Deliver an event to each registered consumer in registration order."""
+        for handler in self._handlers:
+            handler(event)

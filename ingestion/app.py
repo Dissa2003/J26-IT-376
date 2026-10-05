@@ -1,3 +1,5 @@
+"""FastAPI entry point for event ingestion."""
+
 from __future__ import annotations
 
 import logging
@@ -16,6 +18,7 @@ log = logging.getLogger("ingestion")
 
 
 def create_app(processing: ProcessingClient | None = None) -> FastAPI:
+    """Create the ingestion API with an injectable processing client."""
     settings = get_settings()
     logging.basicConfig(level=settings.log_level)
     processing = processing or HttpProcessingClient(settings.processing_url)
@@ -29,11 +32,13 @@ def create_app(processing: ProcessingClient | None = None) -> FastAPI:
     app = FastAPI(title="ingestion")
 
     @app.get("/health")
-    def health():
+    def health() -> dict[str, str]:
+        """Return the service health status."""
         return {"status": "ok", "service": "ingestion"}
 
     @app.post("/v1/ingest", status_code=202)
     def ingest(event: RawEvent) -> Prediction:
+        """Publish an event and return the downstream prediction."""
         try:
             broker.publish(event)
         except (httpx.HTTPError, ValueError) as exc:
