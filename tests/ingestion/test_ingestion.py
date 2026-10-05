@@ -23,6 +23,25 @@ class FakeProcessing(ProcessingClient):
         return Prediction(event_id=event.event_id, score=0.1, label=Label.NORMAL, threshold=0.8, model_version="t")
 
 
+class FlakyProcessing(ProcessingClient):
+    """Fail once to model a temporary processing outage."""
+
+    def __init__(self) -> None:
+        self.attempts = 0
+
+    def process(self, event: RawEvent) -> Prediction:
+        self.attempts += 1
+        if self.attempts == 1:
+            raise ConnectionError("processing is offline")
+        return Prediction(
+            event_id=event.event_id,
+            score=0.2,
+            label=Label.NORMAL,
+            threshold=0.8,
+            model_version="retry-test",
+        )
+
+
 def test_publish_delivers_raw_event_to_subscriber() -> None:
     """A published RawEvent is delivered to each subscribed consumer."""
     broker = InMemoryBroker()
@@ -61,6 +80,43 @@ def test_ingest_forwards_to_processing() -> None:
     c = TestClient(create_app(processing=FakeProcessing()))
     r = c.post("/v1/ingest", json={"source": "s", "payload": {"x": 1}})
     assert r.status_code == 202 and r.json()["label"] == "normal"
+
+
+def test_ingest_full_path_uses_broker_and_processing_response() -> None:
+    """POST /v1/ingest publishes through the broker to the processing client."""
+    broker = InMemoryBroker()
+    processing = FakeProcessing()
+    client = TestClient(create_app(processing=processing, broker=broker))
+
+    response = client.post(
+        "/v1/ingest",
+        json={"source": "integration-test", "payload": {"value": 4}},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["label"] == "normal"
+    assert response.json()["model_version"] == "t"
+
+
+def test_processing_outage_retries_without_dropping_event() -> None:
+    """A transient processing outage is retried from the in-process queue."""
+    processing = FlakyProcessing()
+    client = TestClient(
+        create_app(
+            processing=processing,
+            broker=InMemoryBroker(),
+            processing_timeout=2.0,
+        )
+    )
+
+    response = client.post(
+        "/v1/ingest",
+        json={"source": "retry-test", "payload": {"value": 4}},
+    )
+
+    assert response.status_code == 202
+    assert response.json()["model_version"] == "retry-test"
+    assert processing.attempts == 2
 
 
 def test_validator_rejects_empty_source() -> None:
