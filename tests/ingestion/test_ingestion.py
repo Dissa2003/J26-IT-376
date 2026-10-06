@@ -204,3 +204,20 @@ def test_create_broker_falls_back_when_redis_is_unavailable(
     broker = create_broker(Settings(app_env="production"))
 
     assert isinstance(broker, InMemoryBroker)
+
+
+def test_ingest_captures_http_interception_payload() -> None:
+    """HTTP interception payloads return an immediate capture acknowledgement."""
+    client = TestClient(create_app(processing=FakeProcessing()))
+
+    r = client.post(
+        "/v1/ingest",
+        json={
+            "metadata": {"path": "/orders", "method": "POST"},
+            "payload": {"x": 1},
+            "threat_score": 0.1,
+        },
+    )
+    assert r.status_code == 202
+    assert r.json()["status"] == "accepted"
+    assert r.json()["payload_bytes"] > 0

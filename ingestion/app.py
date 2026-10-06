@@ -1,4 +1,4 @@
-"""FastAPI entry point for resilient event ingestion."""
+"""FastAPI entry point for resilient event ingestion and HTTP interception."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import threading
 import time
 from concurrent.futures import Future, TimeoutError
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from queue import Queue
 from typing import Any
 
@@ -20,7 +21,7 @@ from shared_contracts.http_clients import HttpProcessingClient
 from shared_contracts.interfaces import EventConsumer, EventProducer, ProcessingClient
 from shared_contracts.models import ErrorResponse, Prediction, RawEvent
 
-from .broker import InMemoryBroker, RedisStreamBroker, create_broker
+from .broker import InMemoryBroker, create_broker
 from .validator import IngestionValidator
 
 log = logging.getLogger("ingestion")
@@ -32,6 +33,41 @@ class AcceptedEvent(BaseModel):
 
     status: str = Field(default="accepted", examples=["accepted"])
     event_id: str = Field(description="Identifier retained for asynchronous retry")
+
+
+class HttpRequestMetadata(BaseModel):
+    """Metadata captured with an intercepted HTTP request."""
+
+    method: str = Field(default="POST", min_length=1)
+    path: str = Field(default="/v1/ingest", min_length=1)
+    content_type: str = Field(default="application/json", min_length=1)
+    client_ip: str | None = None
+    headers: dict[str, str] = Field(default_factory=dict)
+
+
+class InterceptionRequest(BaseModel):
+    """Explicit wire schema for request metadata, payload, and threat score."""
+
+    metadata: HttpRequestMetadata = Field(default_factory=HttpRequestMetadata)
+    payload: dict[str, Any] = Field(
+        description="Raw request payload attributes captured as x."
+    )
+    threat_score: float = Field(
+        ge=0.0,
+        le=1.0,
+        description="Probabilistic AI threat score y in the range [0, 1].",
+    )
+
+
+class InterceptionAcknowledgement(BaseModel):
+    """Immediate capture acknowledgement with nanosecond timing metrics."""
+
+    status: str = "accepted"
+    event_id: str
+    received_at: datetime
+    acknowledged_at: datetime
+    capture_latency_ns: int = Field(ge=0)
+    payload_bytes: int = Field(ge=0)
 
 
 @dataclass
@@ -143,42 +179,14 @@ def create_app(
     @app.post(
         "/v1/ingest",
         tags=[INGESTION_TAG],
-        summary="Ingest a real-time event",
+        summary="Ingest or capture a real-time event",
         description=(
-            "Validates a RawEvent-compatible JSON object and publishes it for "
-            "downstream processing. Invalid requests are written to the DLQ."
+            "Accepts either a RawEvent-compatible payload or an HTTP interception "
+            "payload with metadata and a threat score."
         ),
         status_code=202,
-        response_model=Prediction | AcceptedEvent,
+        response_model=Prediction | AcceptedEvent | InterceptionAcknowledgement,
         responses={
-            202: {
-                "description": (
-                    "Event accepted and processed, or retained for asynchronous retry."
-                ),
-                "content": {
-                    "application/json": {
-                        "examples": {
-                            "prediction": {
-                                "summary": "Processed prediction",
-                                "value": {
-                                    "event_id": "evt-123",
-                                    "score": 0.12,
-                                    "label": "normal",
-                                    "threshold": 0.8,
-                                    "model_version": "stub-0.1",
-                                },
-                            },
-                            "queued": {
-                                "summary": "Processing pending",
-                                "value": {
-                                    "status": "accepted",
-                                    "event_id": "evt-123",
-                                },
-                            },
-                        }
-                    }
-                },
-            },
             422: {
                 "model": ErrorResponse,
                 "description": "The event payload failed ingestion validation.",
@@ -190,26 +198,39 @@ def create_app(
         },
     )
     def ingest(
-        payload: dict[str, Any] = Body(
-            ...,
-            description="RawEvent-compatible JSON payload.",
-            examples={
-                "valid": {
-                    "summary": "Valid event",
-                    "value": {
-                        "source": "sensor-01",
-                        "timestamp": "2026-10-05T18:00:00Z",
-                        "payload": {"temperature": 22.5, "humidity": 0.61},
-                    },
+        payload: dict[str, Any] = Body(..., description="Ingestion request payload."),
+    ) -> Prediction | AcceptedEvent | InterceptionAcknowledgement:
+        """Validate, publish, and await processing for standard events."""
+        started_ns = time.perf_counter_ns()
+        interception = "metadata" in payload and "threat_score" in payload
+        if interception:
+            try:
+                request = InterceptionRequest.model_validate(payload)
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
+            received_at = datetime.now(timezone.utc)
+            event = RawEvent(
+                source=request.metadata.path,
+                payload={
+                    **request.payload,
+                    "_http_metadata": request.metadata.model_dump(),
+                    "_threat_score": request.threat_score,
                 },
-                "invalid": {
-                    "summary": "Invalid event",
-                    "value": {"payload": {"temperature": "not-a-number"}},
-                },
-            },
-        ),
-    ) -> Prediction | AcceptedEvent:
-        """Validate, publish, and await a bounded window for processing."""
+            )
+            try:
+                event_broker.publish(event)
+            except (httpx.HTTPError, RedisError, OSError) as exc:
+                log.exception("Unable to publish intercepted event %s", event.event_id)
+                raise HTTPException(502, f"ingestion broker unavailable: {exc}") from exc
+            acknowledged_at = datetime.now(timezone.utc)
+            return InterceptionAcknowledgement(
+                event_id=event.event_id,
+                received_at=received_at,
+                acknowledged_at=acknowledged_at,
+                capture_latency_ns=max(0, time.perf_counter_ns() - started_ns),
+                payload_bytes=len(event.model_dump_json()),
+            )
+
         try:
             event = validator.validate(payload)
         except ValueError as exc:
