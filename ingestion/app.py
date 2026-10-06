@@ -22,6 +22,7 @@ from shared_contracts.interfaces import EventConsumer, EventProducer, Processing
 from shared_contracts.models import ErrorResponse, Prediction, RawEvent
 
 from .broker import InMemoryBroker, create_broker
+from .pii_masker import PIIMasker
 from .validator import IngestionValidator
 
 log = logging.getLogger("ingestion")
@@ -133,6 +134,7 @@ def create_app(
     processing_client = processing or HttpProcessingClient(settings.processing_url)
     event_broker = broker or create_broker(settings)
     validator = IngestionValidator()
+    pii_masker = PIIMasker()
     dispatcher = _ProcessingDispatcher(processing_client)
     pending: dict[str, Future[Prediction]] = {}
 
@@ -209,10 +211,11 @@ def create_app(
             except ValueError as exc:
                 raise HTTPException(422, str(exc)) from exc
             received_at = datetime.now(timezone.utc)
+            masked_payload = pii_masker.mask(request.payload)
             event = RawEvent(
                 source=request.metadata.path,
                 payload={
-                    **request.payload,
+                    **masked_payload,
                     "_http_metadata": request.metadata.model_dump(),
                     "_threat_score": request.threat_score,
                 },
@@ -242,6 +245,9 @@ def create_app(
                 except Exception:
                     log.exception("Unable to write invalid event to the DLQ")
             raise HTTPException(422, reason) from exc
+        event = event.model_copy(
+            update={"payload": pii_masker.mask(event.payload)}
+        )
 
         result: Future[Prediction] = Future()
         pending[event.event_id] = result

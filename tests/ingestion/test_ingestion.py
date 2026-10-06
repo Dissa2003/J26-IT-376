@@ -12,6 +12,7 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from ingestion.broker import InMemoryBroker, RedisStreamBroker, RingBufferBroker, create_broker
 from ingestion.app import create_app
 from ingestion.validator import IngestionValidator
+from ingestion.pii_masker import PIIMasker, REDACTED
 from shared_contracts.config import Settings
 from shared_contracts.interfaces import ProcessingClient
 from shared_contracts.models import Label, Prediction, RawEvent
@@ -42,6 +43,17 @@ class FlakyProcessing(ProcessingClient):
             threshold=0.8,
             model_version="retry-test",
         )
+
+
+class CapturingProcessing(FakeProcessing):
+    """Processing fake that records the event received downstream."""
+
+    def __init__(self) -> None:
+        self.events: list[RawEvent] = []
+
+    def process(self, event: RawEvent) -> Prediction:
+        self.events.append(event)
+        return super().process(event)
 
 
 def test_publish_delivers_raw_event_to_subscriber() -> None:
@@ -270,3 +282,43 @@ def test_ingest_captures_http_interception_payload() -> None:
     assert r.status_code == 202
     assert r.json()["status"] == "accepted"
     assert r.json()["payload_bytes"] > 0
+
+
+def test_pii_masker_redacts_nested_sensitive_values() -> None:
+    """Nested emails, cards, IPs, and credentials are masked in memory."""
+    payload = {
+        "email": "user@example.com",
+        "card": "4111 1111 1111 1111",
+        "ip": "192.168.1.10",
+        "credentials": {"password": "secret", "user": "alice"},
+        "items": [{"token": "abc", "value": 7}],
+    }
+
+    masked = PIIMasker().mask(payload)
+
+    assert masked == {
+        "email": REDACTED,
+        "card": REDACTED,
+        "ip": REDACTED,
+        "credentials": REDACTED,
+        "items": [{"token": REDACTED, "value": 7}],
+    }
+    assert payload["email"] == "user@example.com"
+
+
+def test_interception_forwards_masked_payload() -> None:
+    """PII is masked before the event reaches downstream processing."""
+    processing = CapturingProcessing()
+    client = TestClient(create_app(processing=processing))
+    response = client.post(
+        "/v1/ingest",
+        json={
+            "metadata": {"path": "/login"},
+            "payload": {"email": "user@example.com", "password": "secret"},
+            "threat_score": 0.1,
+        },
+    )
+
+    assert response.status_code == 202
+    assert processing.events[0].payload["email"] == REDACTED
+    assert processing.events[0].payload["password"] == REDACTED
