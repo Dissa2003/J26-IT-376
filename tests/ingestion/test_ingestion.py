@@ -1,13 +1,15 @@
 """Unit tests for broker delivery and the ingestion API."""
 
 from collections.abc import Callable
+import threading
+import time
 from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 import pytest
 from redis.exceptions import ConnectionError as RedisConnectionError
 
-from ingestion.broker import InMemoryBroker, RedisStreamBroker, create_broker
+from ingestion.broker import InMemoryBroker, RedisStreamBroker, RingBufferBroker, create_broker
 from ingestion.app import create_app
 from ingestion.validator import IngestionValidator
 from shared_contracts.config import Settings
@@ -190,6 +192,53 @@ def test_create_broker_uses_memory_in_local_environment() -> None:
     broker = create_broker(Settings(app_env="local"))
 
     assert isinstance(broker, InMemoryBroker)
+
+
+def test_ring_buffer_drains_events_sequentially() -> None:
+    """Buffered events are delivered FIFO by one background worker."""
+    broker = RingBufferBroker(maxlen=8)
+    received: list[str] = []
+    broker.subscribe(lambda event: received.append(event.event_id))
+    events = [RawEvent(event_id=str(index), source="test") for index in range(4)]
+
+    for event in events:
+        broker.publish(event)
+
+    deadline = time.monotonic() + 1.0
+    while len(received) < len(events) and time.monotonic() < deadline:
+        time.sleep(0.001)
+    broker.stop()
+
+    assert received == ["0", "1", "2", "3"]
+    assert broker.evicted_count == 0
+
+
+def test_ring_buffer_evicts_oldest_event_when_full() -> None:
+    """A full circular buffer evicts the oldest event without blocking."""
+    broker = RingBufferBroker(maxlen=2)
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_handler(event: RawEvent) -> None:
+        started.set()
+        release.wait(1.0)
+
+    broker.subscribe(slow_handler)
+    events = [RawEvent(event_id=str(index), source="test") for index in range(4)]
+
+    broker.publish(events[0])
+    assert started.wait(1.0)
+    broker.publish(events[1])
+    broker.publish(events[2])
+    broker.publish(events[3])
+    release.set()
+
+    deadline = time.monotonic() + 1.0
+    while broker.buffered_count and time.monotonic() < deadline:
+        time.sleep(0.001)
+    broker.stop()
+
+    assert broker.evicted_count >= 1
 
 
 def test_create_broker_falls_back_when_redis_is_unavailable(

@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import logging
 import socket
+import threading
+import time
 import uuid
 from collections.abc import Callable
+from collections import deque
 from typing import Any, Protocol
 
 from redis import Redis
@@ -17,6 +20,7 @@ from shared_contracts.models import RawEvent
 
 log = logging.getLogger(__name__)
 EventHandler = Callable[[RawEvent], None]
+DEFAULT_BUFFER_SIZE = 20_000
 
 
 class RedisStreamClient(Protocol):
@@ -58,6 +62,98 @@ class InMemoryBroker(EventProducer, EventConsumer):
     def publish_dlq(self, payload: dict[str, Any], reason: str) -> None:
         """Store a malformed event for local inspection."""
         self.dead_letters.append({"payload": payload, "reason": reason})
+
+
+class RingBufferBroker(InMemoryBroker):
+    """Bounded, lock-free hot-path buffer with one sequential drain worker.
+
+    ``collections.deque`` append and popleft operations are atomic under
+    CPython. The producer therefore performs no explicit locking or blocking
+    work. When the buffer is full, the oldest event is evicted and counted.
+    Configure a Redis broker as ``overflow_broker`` when durable overflow is
+    required.
+    """
+
+    def __init__(
+        self,
+        *,
+        maxlen: int = DEFAULT_BUFFER_SIZE,
+        overflow_broker: EventProducer | None = None,
+        poll_interval: float = 0.001,
+    ) -> None:
+        """Create a bounded buffer and an idle background drain worker."""
+        if maxlen < 1:
+            raise ValueError("maxlen must be positive")
+        if poll_interval <= 0:
+            raise ValueError("poll_interval must be positive")
+        super().__init__()
+        self._buffer: deque[RawEvent] = deque(maxlen=maxlen)
+        self._buffer_maxlen = maxlen
+        self._overflow_broker = overflow_broker
+        self._poll_interval = poll_interval
+        self._wake = threading.Event()
+        self._stopped = threading.Event()
+        self._buffered = 0
+        self._evicted = 0
+        self._worker = threading.Thread(
+            target=self._drain,
+            name="ingestion-ring-buffer",
+            daemon=True,
+        )
+        self._worker.start()
+
+    @property
+    def buffered_count(self) -> int:
+        """Return the approximate number of events awaiting dispatch."""
+        return len(self._buffer)
+
+    @property
+    def evicted_count(self) -> int:
+        """Return the number of events evicted by a full circular buffer."""
+        return self._evicted
+
+    def publish(self, event: RawEvent) -> None:
+        """Enqueue an event without waiting for consumer work."""
+        was_full = len(self._buffer) == self._buffer_maxlen
+        if was_full:
+            evicted = self._buffer[0]
+            self._evicted += 1
+            if self._overflow_broker is not None:
+                try:
+                    self._overflow_broker.publish(evicted)
+                except Exception:
+                    log.exception(
+                        "Unable to spill evicted event %s to overflow broker",
+                        evicted.event_id,
+                    )
+            else:
+                log.warning("Ring buffer full; evicting event %s", evicted.event_id)
+        self._buffer.append(event)
+        self._buffered += 1
+        self._wake.set()
+
+    def stop(self, timeout: float = 1.0) -> None:
+        """Stop the drain worker after already-buffered events are handled."""
+        self._stopped.set()
+        self._wake.set()
+        self._worker.join(timeout)
+
+    def _drain(self) -> None:
+        """Dispatch events sequentially in FIFO order."""
+        while not self._stopped.is_set() or self._buffer:
+            event: RawEvent | None = None
+            try:
+                event = self._buffer.popleft()
+            except IndexError:
+                self._wake.wait(self._poll_interval)
+                self._wake.clear()
+                continue
+            for handler in self._handlers:
+                try:
+                    handler(event)
+                except Exception:
+                    log.exception("Ring buffer handler failed for %s", event.event_id)
+            self._buffered -= 1
 
 
 class RedisStreamBroker(EventProducer, EventConsumer):
@@ -182,7 +278,7 @@ def create_broker(settings: Settings | None = None) -> EventProducer & EventCons
     resolved = settings or get_settings()
     if resolved.app_env.lower() == "local":
         log.info("Using in-memory broker for local environment")
-        return InMemoryBroker()
+        return RingBufferBroker()
 
     try:
         broker = RedisStreamBroker(resolved)
