@@ -13,6 +13,7 @@ from ingestion.broker import InMemoryBroker, RedisStreamBroker, RingBufferBroker
 from ingestion.app import create_app
 from ingestion.validator import IngestionValidator
 from ingestion.pii_masker import PIIMasker, REDACTED
+from ingestion.vector_builder import UnifiedContextVectorBuilder
 from shared_contracts.config import Settings
 from shared_contracts.interfaces import ProcessingClient
 from shared_contracts.models import Label, Prediction, RawEvent
@@ -280,8 +281,25 @@ def test_ingest_captures_http_interception_payload() -> None:
         },
     )
     assert r.status_code == 202
-    assert r.json()["status"] == "accepted"
-    assert r.json()["payload_bytes"] > 0
+    body = r.json()
+    assert body["event_id"]
+    assert body["masked_payload"]["x"] == 1
+    assert body["protobuf_bytes_size"] > 0
+    assert body["unified_context_vector"] == [0.1, 1.0]
+    assert body["pipeline_metrics"]["execution_time_ms"] >= 0
+
+
+def test_vector_builder_serializes_compact_context_envelope() -> None:
+    """The vector starts with the threat score and protobuf output is binary."""
+    builder = UnifiedContextVectorBuilder()
+    payload = {"temperature": 14.2, "nested": {"pressure": 1450}}
+
+    vector = builder.build(payload, 0.95)
+    encoded = builder.serialize("event-1", payload, 0.95, vector)
+
+    assert vector == [0.95, 14.2, 1450.0]
+    assert isinstance(encoded, bytes)
+    assert encoded
 
 
 def test_pii_masker_redacts_nested_sensitive_values() -> None:
@@ -322,3 +340,38 @@ def test_interception_forwards_masked_payload() -> None:
     assert response.status_code == 202
     assert processing.events[0].payload["email"] == REDACTED
     assert processing.events[0].payload["password"] == REDACTED
+
+
+def test_interception_response_has_context_vector_and_sub_10ms_execution() -> None:
+    """The interceptor returns the vector and meets the latency target."""
+    client = TestClient(create_app(processing=FakeProcessing()))
+
+    response = client.post(
+        "/v1/ingest",
+        json={
+            "metadata": {"method": "POST", "path": "/payments"},
+            "payload": {"amount": 149.95, "retry_count": 2},
+            "threat_score": 0.88,
+        },
+    )
+
+    body = response.json()
+    assert response.status_code == 202
+    assert body["unified_context_vector"] == [0.88, 149.95, 2.0]
+    assert body["pipeline_metrics"]["execution_time_ms"] < 10
+
+
+def test_invalid_interception_payload_returns_422() -> None:
+    """Invalid interceptor envelopes are rejected by the API schema."""
+    client = TestClient(create_app(processing=FakeProcessing()))
+
+    response = client.post(
+        "/v1/ingest",
+        json={
+            "metadata": {"path": "/payments"},
+            "payload": {"amount": 10},
+            "threat_score": 2.0,
+        },
+    )
+
+    assert response.status_code == 422

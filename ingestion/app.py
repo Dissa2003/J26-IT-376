@@ -7,7 +7,6 @@ import threading
 import time
 from concurrent.futures import Future, TimeoutError
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from queue import Queue
 from typing import Any
 
@@ -24,6 +23,7 @@ from shared_contracts.models import ErrorResponse, Prediction, RawEvent
 from .broker import InMemoryBroker, create_broker
 from .pii_masker import PIIMasker
 from .validator import IngestionValidator
+from .vector_builder import UnifiedContextVectorBuilder
 
 log = logging.getLogger("ingestion")
 INGESTION_TAG = "Data Ingestion"
@@ -34,6 +34,12 @@ class AcceptedEvent(BaseModel):
 
     status: str = Field(default="accepted", examples=["accepted"])
     event_id: str = Field(description="Identifier retained for asynchronous retry")
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {"status": "accepted", "event_id": "evt-queued-001"}
+        }
+    }
 
 
 class HttpRequestMetadata(BaseModel):
@@ -59,16 +65,51 @@ class InterceptionRequest(BaseModel):
         description="Probabilistic AI threat score y in the range [0, 1].",
     )
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "metadata": {
+                        "method": "POST",
+                        "path": "/orders",
+                        "content_type": "application/json",
+                    },
+                    "payload": {
+                        "email": "customer@example.com",
+                        "password": "do-not-send-me",
+                        "amount": 149.95,
+                    },
+                    "threat_score": 0.88,
+                }
+            ]
+        }
+    }
+
 
 class InterceptionAcknowledgement(BaseModel):
-    """Immediate capture acknowledgement with nanosecond timing metrics."""
+    """Immediate capture acknowledgement with serialized context metadata."""
 
-    status: str = "accepted"
     event_id: str
-    received_at: datetime
-    acknowledged_at: datetime
-    capture_latency_ns: int = Field(ge=0)
-    payload_bytes: int = Field(ge=0)
+    masked_payload: dict[str, Any]
+    protobuf_bytes_size: int = Field(ge=0)
+    unified_context_vector: list[float]
+    pipeline_metrics: dict[str, float]
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "event_id": "evt-001",
+                "masked_payload": {
+                    "email": "[REDACTED_PII]",
+                    "password": "[REDACTED_PII]",
+                    "amount": 149.95,
+                },
+                "protobuf_bytes_size": 128,
+                "unified_context_vector": [0.88, 149.95],
+                "pipeline_metrics": {"execution_time_ms": 1.42},
+            }
+        }
+    }
 
 
 @dataclass
@@ -135,6 +176,7 @@ def create_app(
     event_broker = broker or create_broker(settings)
     validator = IngestionValidator()
     pii_masker = PIIMasker()
+    vector_builder = UnifiedContextVectorBuilder()
     dispatcher = _ProcessingDispatcher(processing_client)
     pending: dict[str, Future[Prediction]] = {}
 
@@ -189,18 +231,94 @@ def create_app(
         status_code=202,
         response_model=Prediction | AcceptedEvent | InterceptionAcknowledgement,
         responses={
+            202: {
+                "description": "Event accepted and captured for downstream processing.",
+                "content": {
+                    "application/json": {
+                        "examples": {
+                            "captured": {
+                                "summary": "Masked event with context vector",
+                                "value": {
+                                    "event_id": "evt-001",
+                                    "masked_payload": {
+                                        "email": "[REDACTED_PII]",
+                                        "amount": 149.95,
+                                    },
+                                    "protobuf_bytes_size": 128,
+                                    "unified_context_vector": [0.88, 149.95],
+                                    "pipeline_metrics": {
+                                        "execution_time_ms": 1.42
+                                    },
+                                },
+                            },
+                            "queued": {
+                                "summary": "Standard event awaiting processing",
+                                "value": {
+                                    "status": "accepted",
+                                    "event_id": "evt-queued-001",
+                                },
+                            },
+                        }
+                    }
+                },
+            },
             422: {
                 "model": ErrorResponse,
                 "description": "The event payload failed ingestion validation.",
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "error": "validation_error",
+                            "detail": "source must be non-empty",
+                        }
+                    }
+                },
             },
             502: {
                 "model": ErrorResponse,
                 "description": "The ingestion broker is unavailable.",
+                "content": {
+                    "application/json": {
+                        "example": {
+                            "error": "bad_gateway",
+                            "detail": "ingestion broker unavailable",
+                        }
+                    }
+                },
             },
         },
     )
     def ingest(
-        payload: dict[str, Any] = Body(..., description="Ingestion request payload."),
+        payload: dict[str, Any] = Body(
+            ...,
+            description=(
+                "RawEvent payload or interceptor envelope. Interceptor payloads "
+                "are synchronously PII-masked before vectorization and publication."
+            ),
+            examples={
+                "interception_with_pii": {
+                    "summary": "Interceptor request containing PII",
+                    "value": {
+                        "metadata": {
+                            "method": "POST",
+                            "path": "/orders",
+                            "content_type": "application/json",
+                        },
+                        "payload": {
+                            "email": "customer@example.com",
+                            "password": "secret-value",
+                            "client_ip": "192.0.2.10",
+                            "amount": 149.95,
+                        },
+                        "threat_score": 0.88,
+                    },
+                },
+                "invalid_event": {
+                    "summary": "Invalid event",
+                    "value": {"source": "", "payload": {"amount": "unknown"}},
+                },
+            },
+        ),
     ) -> Prediction | AcceptedEvent | InterceptionAcknowledgement:
         """Validate, publish, and await processing for standard events."""
         started_ns = time.perf_counter_ns()
@@ -210,8 +328,8 @@ def create_app(
                 request = InterceptionRequest.model_validate(payload)
             except ValueError as exc:
                 raise HTTPException(422, str(exc)) from exc
-            received_at = datetime.now(timezone.utc)
             masked_payload = pii_masker.mask(request.payload)
+            vector = vector_builder.build(masked_payload, request.threat_score)
             event = RawEvent(
                 source=request.metadata.path,
                 payload={
@@ -220,18 +338,27 @@ def create_app(
                     "_threat_score": request.threat_score,
                 },
             )
+            protobuf_bytes = vector_builder.serialize(
+                event.event_id,
+                masked_payload,
+                request.threat_score,
+                vector,
+            )
             try:
                 event_broker.publish(event)
             except (httpx.HTTPError, RedisError, OSError) as exc:
                 log.exception("Unable to publish intercepted event %s", event.event_id)
                 raise HTTPException(502, f"ingestion broker unavailable: {exc}") from exc
-            acknowledged_at = datetime.now(timezone.utc)
             return InterceptionAcknowledgement(
                 event_id=event.event_id,
-                received_at=received_at,
-                acknowledged_at=acknowledged_at,
-                capture_latency_ns=max(0, time.perf_counter_ns() - started_ns),
-                payload_bytes=len(event.model_dump_json()),
+                masked_payload=masked_payload,
+                protobuf_bytes_size=len(protobuf_bytes),
+                unified_context_vector=vector,
+                pipeline_metrics={
+                    "execution_time_ms": (
+                        max(0, time.perf_counter_ns() - started_ns) / 1_000_000
+                    )
+                },
             )
 
         try:
