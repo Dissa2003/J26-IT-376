@@ -1,0 +1,28 @@
+[
+  {
+    "id": 1,
+    "policies": ["Admins can delete UserAccount"],
+    "expected": "SAT"
+  },
+  {
+    "id": 2,
+    "policies": ["Managers can approve Invoice"],
+    "expected": "SAT"
+  },
+  {
+    "id": 3,
+    "policies": [
+      "Admins can delete UserAccount",
+      "Admins cannot delete UserAccount"
+    ],
+    "expected": "UNSAT"
+  },
+  {
+    "id": 4,
+    "policies": [
+      "Users can read UserProfile",
+      "No one can read UserProfile"
+    ],
+    "expected": "UNSAT"
+  }
+]
