@@ -6,7 +6,7 @@ from tokenization_ai.models import FusedInput
 from tokenization_ai.tokenizer import HybridTokenizer
 
 
-def test_tokenize_is_not_implemented_yet() -> None:
+def test_tokenize_is_not_implemented_yet(fused_input: FusedInput) -> None:
     """Placeholder until tokenization is implemented."""
     with pytest.raises(NotImplementedError):
-        HybridTokenizer().tokenize(FusedInput(event_id="e1"))
+        HybridTokenizer().tokenize(fused_input)
