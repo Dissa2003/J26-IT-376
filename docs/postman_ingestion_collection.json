@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "8c1fb1da-0a46-4a6f-9e1e-7bd8b8a1c001",
-    "name": "Dissanayaka Ingestion API",
-    "description": "Postman requests for the FastAPI ingestion service.",
+    "name": "Dissanayaka Ingestion QA",
+    "description": "End-to-end QA requests for validation, PII masking, vector construction, and health checks.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -19,18 +19,13 @@
         "header": [],
         "url": {
           "raw": "{{baseUrl}}/health",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "health"
-          ]
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
         }
-      },
-      "response": []
+      }
     },
     {
-      "name": "Ingest Valid Event",
+      "name": "Ingest Event - PII Masking and Vector",
       "request": {
         "method": "POST",
         "header": [
@@ -42,7 +37,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"source\": \"sensor-01\",\n  \"timestamp\": \"2026-10-05T18:00:00Z\",\n  \"payload\": {\n    \"temperature\": 22.5,\n    \"humidity\": 0.61,\n    \"pressure\": 1013.25\n  }\n}",
+          "raw": "{\n  \"metadata\": {\n    \"method\": \"POST\",\n    \"path\": \"/payments\",\n    \"content_type\": \"application/json\",\n    \"client_ip\": \"192.0.2.10\"\n  },\n  \"payload\": {\n    \"email\": \"customer@example.com\",\n    \"password\": \"sensitive-password\",\n    \"card_number\": \"4111 1111 1111 1111\",\n    \"amount\": 149.95,\n    \"retry_count\": 2\n  },\n  \"threat_score\": 0.88\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -51,19 +46,13 @@
         },
         "url": {
           "raw": "{{baseUrl}}/v1/ingest",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "v1",
-            "ingest"
-          ]
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "ingest"]
         }
-      },
-      "response": []
+      }
     },
     {
-      "name": "Ingest Invalid Event",
+      "name": "Ingest Event - Invalid Threat Score",
       "request": {
         "method": "POST",
         "header": [
@@ -75,7 +64,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"payload\": {\n    \"temperature\": \"not-a-number\"\n  }\n}",
+          "raw": "{\n  \"metadata\": {\n    \"method\": \"POST\",\n    \"path\": \"/payments\"\n  },\n  \"payload\": {\n    \"email\": \"customer@example.com\",\n    \"amount\": 149.95\n  },\n  \"threat_score\": 1.5\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -84,16 +73,37 @@
         },
         "url": {
           "raw": "{{baseUrl}}/v1/ingest",
-          "host": [
-            "{{baseUrl}}"
-          ],
-          "path": [
-            "v1",
-            "ingest"
-          ]
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "ingest"]
         }
-      },
-      "response": []
+      }
+    },
+    {
+      "name": "Ingest Event - Missing Source",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"source\": \"\",\n  \"payload\": {\n    \"email\": \"customer@example.com\",\n    \"api_key\": \"secret-api-key\",\n    \"amount\": 10\n  }\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/ingest",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "ingest"]
+        }
+      }
     }
   ]
 }
