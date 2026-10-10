@@ -4,6 +4,7 @@ from tokenization_ai.models import FusedInput, UnifiedApiContext, VerifiedRule, 
 from tokenization_ai.tokenizer import (
     API_HEADER_NAME,
     API_HEADER_VALUE,
+    API_HEADER_VALUE_MASKED,
     API_KEY,
     API_METHOD,
     API_OBJ_END,
@@ -13,6 +14,7 @@ from tokenization_ai.tokenizer import (
     API_VAL_BOOL,
     API_VAL_FLOAT,
     API_VAL_INT,
+    API_VAL_MASKED_STR,
     API_VAL_NULL,
     API_VAL_STR,
     HybridTokenizer,
@@ -231,3 +233,85 @@ def test_tokenize_handles_empty_payload_and_no_rules(fused_input: FusedInput) ->
     assert API_PAYLOAD_START in result.tokens
     assert API_OBJ_START in result.tokens and API_OBJ_END in result.tokens
     assert RULES_START in result.tokens and RULES_END in result.tokens
+
+
+# -- masked_paths provenance: trusted masking tags (security) ------------
+
+
+def test_tokenize_without_masked_paths_is_unaffected_backward_compatible() -> None:
+    fused = _fused(payload={"email": "[MASKED_PII]"})
+
+    tokens = HybridTokenizer().tokenize(fused).tokens
+
+    value_index = tokens.index("email") + 2
+    assert tokens[value_index - 1] == API_VAL_STR
+    assert tokens[value_index] == "[MASKED_PII]"
+
+
+def test_tokenize_tags_a_genuinely_masked_payload_value_as_trusted() -> None:
+    fused = _fused(payload={"email": "[MASKED_PII]"})
+
+    tokens = HybridTokenizer().tokenize(fused, masked_paths=frozenset({("payload", "email")})).tokens
+
+    value_index = tokens.index("email") + 2
+    assert tokens[value_index - 1] == API_VAL_MASKED_STR
+    assert tokens[value_index] == "[MASKED_PII]"
+
+
+def test_tokenize_leaves_an_attacker_lookalike_payload_value_as_ordinary() -> None:
+    fused = _fused(payload={"nickname": "[MASKED_PII]"})
+
+    # No path reported as masked -- this value was never actually masked.
+    tokens = HybridTokenizer().tokenize(fused, masked_paths=frozenset()).tokens
+
+    value_index = tokens.index("nickname") + 2
+    assert tokens[value_index - 1] == API_VAL_STR
+    assert tokens[value_index] == "[MASKED_PII]"
+
+
+def test_tokenize_tags_a_genuinely_masked_header_value_as_trusted() -> None:
+    fused = _fused(headers={"authorization": "[MASKED_AUTH]"})
+
+    tokens = HybridTokenizer().tokenize(
+        fused, masked_paths=frozenset({("headers", "authorization")})
+    ).tokens
+
+    header_value_index = tokens.index(API_HEADER_VALUE_MASKED) + 1
+    assert tokens[header_value_index] == "[MASKED_AUTH]"
+    assert API_HEADER_VALUE not in tokens
+
+
+def test_tokenize_leaves_an_attacker_lookalike_header_value_as_ordinary() -> None:
+    fused = _fused(headers={"x-note": "[MASKED_AUTH]"})
+
+    tokens = HybridTokenizer().tokenize(fused, masked_paths=frozenset()).tokens
+
+    assert API_HEADER_VALUE_MASKED not in tokens
+    header_value_index = tokens.index(API_HEADER_VALUE) + 1
+    assert tokens[header_value_index] == "[MASKED_AUTH]"
+
+
+def test_tokenize_tags_masked_values_correctly_inside_nested_objects_and_lists() -> None:
+    fused = _fused(
+        payload={
+            "customer": {"email": "[MASKED_PII]"},
+            "cards": [{"card_number": "[MASKED_PII]"}, {"card_number": "not-masked"}],
+        }
+    )
+    masked_paths = frozenset(
+        {
+            ("payload", "customer", "email"),
+            ("payload", "cards", 0, "card_number"),
+        }
+    )
+
+    tokens = HybridTokenizer().tokenize(fused, masked_paths=masked_paths).tokens
+
+    email_value_index = tokens.index("email") + 2
+    assert tokens[email_value_index - 1] == API_VAL_MASKED_STR
+
+    card_number_indices = [i for i, t in enumerate(tokens) if t == "card_number"]
+    first_card_value_index = card_number_indices[0] + 2
+    second_card_value_index = card_number_indices[1] + 2
+    assert tokens[first_card_value_index - 1] == API_VAL_MASKED_STR
+    assert tokens[second_card_value_index - 1] == API_VAL_STR

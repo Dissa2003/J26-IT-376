@@ -175,3 +175,51 @@ def test_normalize_produces_the_same_result_regardless_of_payload_key_order() ->
     assert list(normalized_a.context.payload.items()) == list(
         normalized_b.context.payload.items()
     )
+
+
+# -- normalize_with_provenance: masking-provenance path preservation -----
+
+
+def test_normalize_with_provenance_is_backward_compatible_with_normalize() -> None:
+    fused = _fused(headers={"Authorization": MASKED_AUTH})
+
+    result = Normalizer().normalize_with_provenance(fused)
+
+    assert result.fused == Normalizer().normalize(fused)
+    assert result.masked_paths == frozenset()
+
+
+def test_normalize_with_provenance_remaps_header_case_in_masked_paths() -> None:
+    masked = PrivacyMasker().mask_with_provenance(
+        _fused(headers={"Authorization": "Bearer secret"})
+    )
+
+    result = Normalizer().normalize_with_provenance(masked.fused, masked.masked_paths)
+
+    assert result.fused.context.headers == {"authorization": MASKED_AUTH}
+    assert ("headers", "authorization") in result.masked_paths
+    assert ("headers", "Authorization") not in result.masked_paths
+
+
+def test_normalize_with_provenance_leaves_payload_and_list_paths_unchanged() -> None:
+    masked = PrivacyMasker().mask_with_provenance(
+        _fused(
+            payload={
+                "customer": {"email": "a@b.com"},
+                "cards": [{"card_number": "4111 1111 1111 1111"}],
+            }
+        )
+    )
+
+    result = Normalizer().normalize_with_provenance(masked.fused, masked.masked_paths)
+
+    assert ("payload", "customer", "email") in result.masked_paths
+    assert ("payload", "cards", 0, "card_number") in result.masked_paths
+
+
+def test_normalize_with_provenance_leaves_client_ip_path_unchanged() -> None:
+    masked = PrivacyMasker().mask_with_provenance(_fused(client_ip="203.0.113.5"))
+
+    result = Normalizer().normalize_with_provenance(masked.fused, masked.masked_paths)
+
+    assert ("client_ip",) in result.masked_paths

@@ -4,11 +4,28 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
+from .masking import FieldPath
 from .models import FusedInput
 
 _REPEATED_SLASHES = re.compile(r"/{2,}")
+
+
+@dataclass(frozen=True)
+class NormalizationResult:
+    """A normalized ``FusedInput`` together with its re-keyed masking provenance.
+
+    ``masked_paths`` is the same provenance produced by
+    ``PrivacyMasker.mask_with_provenance``, carried through
+    :meth:`Normalizer.normalize_with_provenance` so it still points at the
+    right fields after normalization -- see that method's docstring for why
+    only header paths ever need re-keying.
+    """
+
+    fused: FusedInput
+    masked_paths: frozenset[FieldPath]
 
 
 class Normalizer:
@@ -36,6 +53,38 @@ class Normalizer:
         )
         return FusedInput(context=normalized_context, rule_info=fused.rule_info)
 
+    def normalize_with_provenance(
+        self, fused: FusedInput, masked_paths: frozenset[FieldPath] = frozenset()
+    ) -> NormalizationResult:
+        """Normalize ``fused`` and re-key ``masked_paths`` to survive normalization.
+
+        Of the transforms normalization applies, only header-name casing can
+        invalidate a field path: a path recorded as
+        ``("headers", "Authorization")`` before normalization must become
+        ``("headers", "authorization")`` after it, to still point at the
+        header's post-normalization key. Payload keys are never renamed by
+        normalization (dict iteration order changes, but a field's name
+        does not), and list order/indices are preserved, so payload- and
+        list-based paths need no re-keying and are passed through as-is.
+
+        Delegates to :meth:`normalize` for the actual normalization, so
+        there is exactly one normalization implementation.
+        """
+        normalized = self.normalize(fused)
+        remapped = {self._remap_path(path) for path in masked_paths}
+        return NormalizationResult(fused=normalized, masked_paths=frozenset(remapped))
+
+    @classmethod
+    def _remap_path(cls, path: FieldPath) -> FieldPath:
+        if len(path) >= 2 and path[0] == "headers":
+            return ("headers", cls._normalize_header_key(str(path[1]))) + tuple(path[2:])
+        return path
+
+    @staticmethod
+    def _normalize_header_key(key: str) -> str:
+        """The exact header-name canonicalization :meth:`_normalize_headers` applies."""
+        return key.strip().lower()
+
     @staticmethod
     def _normalize_method(method: str) -> str:
         """Upper-case the HTTP method and drop surrounding whitespace."""
@@ -52,10 +101,10 @@ class Normalizer:
             collapsed = collapsed.rstrip("/") or "/"
         return collapsed
 
-    @staticmethod
-    def _normalize_headers(headers: Mapping[str, str]) -> dict[str, str]:
+    @classmethod
+    def _normalize_headers(cls, headers: Mapping[str, str]) -> dict[str, str]:
         """Lower-case and trim header names; header values are left exactly as given."""
-        return {key.strip().lower(): value for key, value in headers.items()}
+        return {cls._normalize_header_key(key): value for key, value in headers.items()}
 
     @classmethod
     def _normalize_value(cls, value: Any) -> Any:
