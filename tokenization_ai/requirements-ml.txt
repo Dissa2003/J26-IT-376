@@ -1,0 +1,5 @@
+# Member-4-scoped dependency for tokenization_ai/model.py (Phase 9: the
+# lightweight anomaly detection model). Deliberately kept separate from the
+# project's root requirements.txt, which other members' modules do not need
+# this for. Install with: pip install -r tokenization_ai/requirements-ml.txt
+numpy>=1.26
