@@ -8,7 +8,17 @@ from .model import LightweightAnomalyModel
 from .models import AnomalyPrediction, RuleInfo, TokenSequence, UnifiedContext
 from .normalization import Normalizer
 from .tensorizer import Tensorizer
-from .tokenizer import HybridTokenizer
+from .tokenizer import TOKEN_ROLE_MASKED, HybridTokenizer
+from .tracing import (
+    STAGE_FUSION,
+    STAGE_MASKING,
+    STAGE_MODEL_INFERENCE,
+    STAGE_NORMALIZATION,
+    STAGE_TENSORIZATION,
+    STAGE_TOKENIZATION,
+    PipelineTrace,
+    PipelineTracer,
+)
 
 
 class TokenizationAIService:
@@ -45,6 +55,7 @@ class TokenizationAIService:
         tokenizer: HybridTokenizer,
         tensorizer: Tensorizer,
         model: LightweightAnomalyModel,
+        tracer: PipelineTracer | None = None,
     ) -> None:
         """Wire the pipeline's collaborators, failing fast if either is not ready.
 
@@ -56,6 +67,15 @@ class TokenizationAIService:
         rather than letting an unconfigured service accept requests and
         only fail deep inside ``Vocabulary.encode``/``LightweightAnomalyModel.predict``
         on the first real call.
+
+        ``tracer`` is optional and purely additive: it supplies the
+        :class:`tracing.PipelineTracer` used to start traces via
+        :meth:`predict`'s ``trace`` argument (see that method and
+        ``tracing.py``'s module docstring for the privacy contract on
+        what a trace may record). A caller that never asks for a trace
+        is completely unaffected by this parameter -- if omitted, a
+        private default tracer is created, but nothing is recorded
+        unless a caller explicitly passes a ``trace`` into :meth:`predict`.
         """
         if not tensorizer.vocabulary.is_fitted:
             raise RuntimeError(
@@ -73,8 +93,15 @@ class TokenizationAIService:
         self.tokenizer = tokenizer
         self.tensorizer = tensorizer
         self.model = model
+        self.tracer = tracer if tracer is not None else PipelineTracer()
 
-    def predict(self, context: UnifiedContext, rule_info: RuleInfo) -> AnomalyPrediction:
+    def predict(
+        self,
+        context: UnifiedContext,
+        rule_info: RuleInfo,
+        *,
+        trace: PipelineTrace | None = None,
+    ) -> AnomalyPrediction:
         """Return the anomaly prediction for a single event.
 
         Runs the full trusted pipeline: ``InputFusion.fuse ->
@@ -97,24 +124,75 @@ class TokenizationAIService:
         sequence), ``RuntimeError`` (model or vocabulary not ready; should
         not occur given the constructor check, but never silently
         swallowed if it somehow does).
+
+        ``trace`` is optional and purely additive (see :meth:`__init__`'s
+        ``tracer`` docstring): when ``None`` (the default), this method's
+        behavior, return value, and error propagation are byte-for-byte
+        identical to a build of this method with no tracing support at
+        all -- every timing call is skipped, not merely unused. Pass a
+        trace started from ``self.tracer.start(context.event_id)`` to
+        additionally record each stage's timing and a safe structural
+        summary (counts only -- never raw field values) into it,
+        including on failure, before the original exception is re-raised.
         """
-        sequence = self._tokenize(context, rule_info)
-        model_input = self.tensorizer.tensorize(sequence)
-        score = self.model.predict(model_input)
+        sequence = self._tokenize(context, rule_info, trace=trace)
+        tokens_before_tensorize = len(sequence.tokens)
+        model_input = self.tracer.run_stage(
+            trace,
+            STAGE_TENSORIZATION,
+            lambda: self.tensorizer.tensorize(sequence),
+            summary_fn=lambda _result: {
+                "token_count": tokens_before_tensorize,
+                "truncated": tokens_before_tensorize > self.tensorizer.max_length,
+            },
+        )
+        score = self.tracer.run_stage(
+            trace, STAGE_MODEL_INFERENCE, lambda: self.model.predict(model_input)
+        )
         return AnomalyPrediction(
             event_id=context.event_id, score=score, model_version=self.model.model_version
         )
 
-    def _tokenize(self, context: UnifiedContext, rule_info: RuleInfo) -> TokenSequence:
+    def _tokenize(
+        self,
+        context: UnifiedContext,
+        rule_info: RuleInfo,
+        *,
+        trace: PipelineTrace | None = None,
+    ) -> TokenSequence:
         """Run fusion through tokenization, preserving masking provenance throughout.
 
         Factored out from :meth:`predict` so the trusted-provenance chain
         (and its resulting token roles) can be verified directly in tests,
-        independent of tensorization and model inference.
+        independent of tensorization and model inference. ``trace`` is
+        optional and purely additive -- see :meth:`predict`'s docstring.
         """
-        fused = self.fusion.fuse(context, rule_info)
-        mask_result = self.masker.mask_with_provenance(fused)
-        norm_result = self.normalizer.normalize_with_provenance(
-            mask_result.fused, mask_result.masked_paths
+        fused = self.tracer.run_stage(
+            trace,
+            STAGE_FUSION,
+            lambda: self.fusion.fuse(context, rule_info),
+            summary_fn=lambda result: {"rule_count": len(result.rule_info.rules)},
         )
-        return self.tokenizer.tokenize(norm_result.fused, norm_result.masked_paths)
+        mask_result = self.tracer.run_stage(
+            trace,
+            STAGE_MASKING,
+            lambda: self.masker.mask_with_provenance(fused),
+            summary_fn=lambda result: {"masked_field_count": len(result.masked_paths)},
+        )
+        norm_result = self.tracer.run_stage(
+            trace,
+            STAGE_NORMALIZATION,
+            lambda: self.normalizer.normalize_with_provenance(
+                mask_result.fused, mask_result.masked_paths
+            ),
+            summary_fn=lambda result: {"masked_field_count": len(result.masked_paths)},
+        )
+        return self.tracer.run_stage(
+            trace,
+            STAGE_TOKENIZATION,
+            lambda: self.tokenizer.tokenize(norm_result.fused, norm_result.masked_paths),
+            summary_fn=lambda sequence: {
+                "token_count": len(sequence.tokens),
+                "masked_token_count": sequence.roles.count(TOKEN_ROLE_MASKED),
+            },
+        )
