@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+import urllib.parse
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -50,6 +51,10 @@ _AUTH_HEADER_KEYS = {
 }
 
 # Payload/header field names (normalized) that hold credentials or secrets.
+# "pwd" is listed as its own exact entry (not a substring/suffix rule) because
+# it is WordPress's actual wp-login.php form field name for a password --
+# confirmed to otherwise pass through unmasked when real SR-BH 2020 rows
+# (sourced from a WordPress honeypot) are run through this pipeline.
 _SECRET_KEYS = {
     "access_token",
     "api_key",
@@ -58,6 +63,7 @@ _SECRET_KEYS = {
     "credentials",
     "password",
     "passwd",
+    "pwd",
     "pin",
     "private_key",
     "refresh_token",
@@ -124,6 +130,10 @@ class PrivacyMasker:
         )
         masked_paths = set(header_paths) | set(payload_paths)
 
+        masked_path, path_was_masked = self._mask_path(context.path)
+        if path_was_masked:
+            masked_paths.add(("path",))
+
         masked_client_ip = context.client_ip
         if context.client_ip:
             masked_client_ip = MASKED_IP
@@ -131,6 +141,7 @@ class PrivacyMasker:
 
         masked_context = context.model_copy(
             update={
+                "path": masked_path,
                 "headers": masked_headers,
                 "payload": masked_payload,
                 "client_ip": masked_client_ip,
@@ -138,6 +149,56 @@ class PrivacyMasker:
         )
         masked_fused = FusedInput(context=masked_context, rule_info=fused.rule_info)
         return MaskingResult(fused=masked_fused, masked_paths=frozenset(masked_paths))
+
+    @classmethod
+    def _mask_path(cls, path: str) -> tuple[str, bool]:
+        """Mask sensitive query-string parameter values in ``path``, if any.
+
+        ``UnifiedApiContext.path`` is a single string that may carry a query
+        string (e.g. ``"/reset?token=abc123"``); the tokenizer only ever
+        splits it on ``"/"`` and emits each segment as an ordinary literal
+        (see ``tokenizer.py``'s ``_path_segments``) -- it has no concept of a
+        "masked path segment" the way headers/payload values do. Left
+        unhandled, a sensitive query parameter (``?token=``, ``?password=``,
+        ``?pwd=``, ...) would reach tokenization in cleartext regardless of
+        key name, even one already covered by ``_SECRET_KEYS`` -- confirmed
+        before this fix via a focused test, not assumed.
+
+        This masks query-parameter *values* by the same key/value
+        classification rules used for headers and payload fields
+        (:meth:`_classify_key` then :meth:`_classify_value`), entirely as a
+        string rewrite of ``path`` -- it does not introduce a new token role
+        or change how the tokenizer processes paths; a masked query value is
+        still just an ordinary literal token afterward, the same as any
+        other path segment, only with its sensitive content already gone.
+
+        A ``path`` with no ``"?"`` is returned completely unchanged (the
+        overwhelming majority of requests), so this can never affect a
+        request that has no query string at all.
+        """
+        if "?" not in path:
+            return path, False
+
+        base, _, query = path.partition("?")
+        if not query:
+            return path, False
+
+        pairs = urllib.parse.parse_qsl(query, keep_blank_values=True)
+        masked_pairs: list[tuple[str, str]] = []
+        any_masked = False
+        for key, value in pairs:
+            placeholder = cls._classify_key(key)
+            if placeholder is None and isinstance(value, str):
+                placeholder = cls._classify_value(value)
+            if placeholder is not None:
+                masked_pairs.append((key, placeholder))
+                any_masked = True
+            else:
+                masked_pairs.append((key, value))
+
+        if not any_masked:
+            return path, False
+        return f"{base}?{urllib.parse.urlencode(masked_pairs)}", True
 
     @classmethod
     def _mask_headers(cls, headers: Mapping[str, str]) -> tuple[dict[str, str], set[FieldPath]]:

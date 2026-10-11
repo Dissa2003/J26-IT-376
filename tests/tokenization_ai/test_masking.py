@@ -253,3 +253,112 @@ def test_mask_with_provenance_never_stores_sensitive_values_in_masked_paths() ->
     flattened = " ".join(str(part) for path in result.masked_paths for part in path)
     assert "customer@example.com" not in flattened
     assert "203.0.113.5" not in flattened
+
+
+# -- Phase 13C: WordPress "pwd" field (exact-key, not substring) --------------------
+
+
+def test_mask_with_provenance_marks_wordpress_pwd_field_as_masked() -> None:
+    fused = _fused(payload={"pwd": "do-not-send-me"})
+
+    result = PrivacyMasker().mask_with_provenance(fused)
+
+    assert result.fused.context.payload["pwd"] == MASKED_SECRET
+    assert ("payload", "pwd") in result.masked_paths
+
+
+def test_mask_with_provenance_pwd_key_match_is_exact_not_substring() -> None:
+    # "pwd" must match only the exact key "pwd" -- a broader substring/prefix
+    # rule would risk masking unrelated field names that merely contain it.
+    fused = _fused(payload={"pwd_hint": "remember your pet's name", "update": "2024-01-01"})
+
+    result = PrivacyMasker().mask_with_provenance(fused)
+
+    assert result.fused.context.payload["pwd_hint"] == "remember your pet's name"
+    assert result.fused.context.payload["update"] == "2024-01-01"
+    assert result.masked_paths == frozenset()
+
+
+# -- Phase 13C: query-string masking (confirmed gap -- not assumed safe) ------------
+
+
+def test_mask_with_provenance_masks_a_sensitive_query_string_parameter() -> None:
+    import urllib.parse
+
+    fused = _fused(path="/reset?token=abc123&id=42")
+
+    result = PrivacyMasker().mask_with_provenance(fused)
+
+    masked_path = result.fused.context.path
+    base, _, query = masked_path.partition("?")
+    params = dict(urllib.parse.parse_qsl(query))
+    assert base == "/reset"
+    assert params == {"token": MASKED_SECRET, "id": "42"}
+    assert "abc123" not in masked_path
+    assert ("path",) in result.masked_paths
+
+
+def test_mask_with_provenance_masks_wordpress_pwd_in_a_query_string() -> None:
+    fused = _fused(path="/wp-login.php?pwd=do-not-send-me&redirect_to=%2Fadmin")
+
+    result = PrivacyMasker().mask_with_provenance(fused)
+
+    assert "do-not-send-me" not in result.fused.context.path
+    assert ("path",) in result.masked_paths
+
+
+def test_mask_with_provenance_masks_query_value_by_pattern_even_with_an_unrelated_key() -> None:
+    # An email-shaped value must still be masked by its own value pattern,
+    # the same rule already used for headers/payload values.
+    fused = _fused(path="/subscribe?contact=alice@example.com")
+
+    result = PrivacyMasker().mask_with_provenance(fused)
+
+    assert "alice@example.com" not in result.fused.context.path
+    assert ("path",) in result.masked_paths
+
+
+def test_mask_with_provenance_leaves_a_path_with_no_query_string_unchanged() -> None:
+    fused = _fused(path="/orders/123")
+
+    result = PrivacyMasker().mask_with_provenance(fused)
+
+    assert result.fused.context.path == "/orders/123"
+    assert ("path",) not in result.masked_paths
+
+
+def test_mask_with_provenance_leaves_a_non_sensitive_query_string_unchanged() -> None:
+    fused = _fused(path="/orders?page=2&sort=asc")
+
+    result = PrivacyMasker().mask_with_provenance(fused)
+
+    assert result.fused.context.path == "/orders?page=2&sort=asc"
+    assert ("path",) not in result.masked_paths
+
+
+def test_mask_with_provenance_query_masking_does_not_mutate_the_original_input() -> None:
+    fused = _fused(path="/reset?token=abc123")
+    before_path = fused.context.path
+
+    PrivacyMasker().mask_with_provenance(fused)
+
+    assert fused.context.path == before_path
+
+
+def test_mask_with_provenance_query_masking_is_deterministic() -> None:
+    fused = _fused(path="/reset?token=abc123&id=42")
+
+    first = PrivacyMasker().mask_with_provenance(fused)
+    second = PrivacyMasker().mask_with_provenance(fused)
+
+    assert first.fused.context.path == second.fused.context.path
+    assert first.masked_paths == second.masked_paths
+
+
+def test_mask_with_provenance_query_masking_never_stores_the_raw_value_in_masked_paths() -> None:
+    fused = _fused(path="/reset?token=very-sensitive-value")
+
+    result = PrivacyMasker().mask_with_provenance(fused)
+
+    flattened = " ".join(str(part) for path in result.masked_paths for part in path)
+    assert "very-sensitive-value" not in flattened
