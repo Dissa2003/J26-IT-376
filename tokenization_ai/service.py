@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from .fusion import InputFusion
-from .masking import PrivacyMasker
+from .masking import FieldPath, PrivacyMasker
 from .model import LightweightAnomalyModel
-from .models import AnomalyPrediction, RuleInfo, TokenSequence, UnifiedContext
-from .normalization import Normalizer
+from .models import (
+    AnomalyPrediction,
+    FusedInput,
+    ModelInput,
+    RuleInfo,
+    TokenSequence,
+    UnifiedContext,
+)
+from .normalization import NormalizationResult, Normalizer
 from .tensorizer import Tensorizer
 from .tokenizer import TOKEN_ROLE_MASKED, HybridTokenizer
 from .tracing import (
@@ -19,6 +28,23 @@ from .tracing import (
     PipelineTrace,
     PipelineTracer,
 )
+
+
+@dataclass(frozen=True)
+class PipelineAnalysis:
+    """A prediction together with the intermediates that produced it.
+
+    ``normalized`` is the post-masking, post-normalization record (no raw
+    sensitive values -- the masker has already replaced them) and
+    ``masked_paths`` is the trusted provenance of which locations were
+    genuinely masked. Returned by :meth:`TokenizationAIService.analyze`.
+    """
+
+    prediction: AnomalyPrediction
+    normalized: FusedInput
+    masked_paths: frozenset[FieldPath]
+    sequence: TokenSequence
+    model_input: ModelInput
 
 
 class TokenizationAIService:
@@ -135,7 +161,25 @@ class TokenizationAIService:
         summary (counts only -- never raw field values) into it,
         including on failure, before the original exception is re-raised.
         """
-        sequence = self._tokenize(context, rule_info, trace=trace)
+        return self.analyze(context, rule_info, trace=trace).prediction
+
+    def analyze(
+        self,
+        context: UnifiedContext,
+        rule_info: RuleInfo,
+        *,
+        trace: PipelineTrace | None = None,
+    ) -> PipelineAnalysis:
+        """Run the full pipeline and return the prediction with its intermediates.
+
+        Exactly the same stages, ordering, tracing and error propagation as
+        :meth:`predict` (which delegates here); the only difference is that
+        the post-masking/normalization record, the authoritative masking
+        provenance, the token sequence, and the model input are returned
+        alongside the prediction so an inspection layer (see ``app.py``)
+        can show them without re-running or re-implementing any stage.
+        """
+        norm_result, sequence = self._front(context, rule_info, trace=trace)
         tokens_before_tensorize = len(sequence.tokens)
         model_input = self.tracer.run_stage(
             trace,
@@ -149,8 +193,14 @@ class TokenizationAIService:
         score = self.tracer.run_stage(
             trace, STAGE_MODEL_INFERENCE, lambda: self.model.predict(model_input)
         )
-        return AnomalyPrediction(
-            event_id=context.event_id, score=score, model_version=self.model.model_version
+        return PipelineAnalysis(
+            prediction=AnomalyPrediction(
+                event_id=context.event_id, score=score, model_version=self.model.model_version
+            ),
+            normalized=norm_result.fused,
+            masked_paths=norm_result.masked_paths,
+            sequence=sequence,
+            model_input=model_input,
         )
 
     def _tokenize(
@@ -167,6 +217,16 @@ class TokenizationAIService:
         independent of tensorization and model inference. ``trace`` is
         optional and purely additive -- see :meth:`predict`'s docstring.
         """
+        return self._front(context, rule_info, trace=trace)[1]
+
+    def _front(
+        self,
+        context: UnifiedContext,
+        rule_info: RuleInfo,
+        *,
+        trace: PipelineTrace | None = None,
+    ) -> tuple[NormalizationResult, TokenSequence]:
+        """Fusion through tokenization; also returns the normalized record + provenance."""
         fused = self.tracer.run_stage(
             trace,
             STAGE_FUSION,
@@ -187,7 +247,7 @@ class TokenizationAIService:
             ),
             summary_fn=lambda result: {"masked_field_count": len(result.masked_paths)},
         )
-        return self.tracer.run_stage(
+        sequence = self.tracer.run_stage(
             trace,
             STAGE_TOKENIZATION,
             lambda: self.tokenizer.tokenize(norm_result.fused, norm_result.masked_paths),
@@ -196,3 +256,4 @@ class TokenizationAIService:
                 "masked_token_count": sequence.roles.count(TOKEN_ROLE_MASKED),
             },
         )
+        return norm_result, sequence
