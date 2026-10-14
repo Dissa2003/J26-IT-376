@@ -10,9 +10,10 @@ Research ID **J-26-IT-376** · LogiShield: Neuro-Symbolic AI Verification for AP
 > components, and every reported measurement is from **synthetic** data on a single machine.
 > See [Limitations](#9-scientific-limitations) and [INTEGRATION_STATUS.md](INTEGRATION_STATUS.md).
 
-*Documentation was verified against the repository at commit `de07872` (branch
-`feature/member4-tokenization-ai`). Counts and numbers below come from the stated source
-files or from the evidence reports named in §8; nothing here was re-measured when writing it.*
+*Documentation was last verified against the repository at commit `ea50a49` (branch
+`feature/member4-tokenization-ai`; the masking hardening of audit finding D3 is included).
+Counts and numbers below come from the stated source files or from the evidence reports named
+in §8; nothing here was re-measured when writing it.*
 
 ---
 
@@ -112,8 +113,9 @@ threshold**, and the request-only vs rule-fused **baseline comparison**.
   whole-word suffix, so `token_count`, `session_timeout` and `sort_key` are left alone.
   **Anything not on these lists is not masked** (for example a secret under an arbitrary
   field name, or a secret or personal value inside a URL path segment). Do not use real
-  credentials. The list was extended after the PP1 privacy audit (finding D3); the
-  extension was **not** part of the frozen KPI 1–3 / KPI 4 evaluation runs (see §9).
+  credentials. The list was extended after the PP1 privacy audit (finding D3). That extension
+  was **not** part of the original KPI 1–3 / KPI 4 runs; KPI 4 was re-measured on the
+  hardened code (§8), and KPI 1–3 were only re-run for reproducibility (§9.7).
 - **Roles are authoritative.** `tokenizer.py` assigns `control` / `literal_api` /
   `literal_rule` / `masked` at the moment each token is emitted; the vocabulary and tensorizer
   read them rather than infer them. Member 1's `[REDACTED_PII]` marker is **not** recognized as
@@ -239,18 +241,18 @@ normal login scored higher than attack-like requests; do not describe the score 
 
 **Likely viva questions:** why path-based provenance instead of text matching? What happens to
 a secret under an unrecognized key? Why no embeddings? How is truncation kept safe for rules?
-What does 0.32 ms include and exclude? What would KPI 5 need?
+What do 0.34 ms (current code; 0.32 ms before the D3 masking fix) include and exclude? What would KPI 5 need?
 
 ## 8. Tests and research evidence
 
 **Tests** (from the repository root):
 
 ```powershell
-.venv\Scripts\python.exe -m pytest tests/tokenization_ai -q     # 419 passed at de07872
-.venv\Scripts\python.exe -m pytest -q                           # 445 passed at de07872 (full repository)
+.venv\Scripts\python.exe -m pytest tests/tokenization_ai -q     # 560 passed at ea50a49
+.venv\Scripts\python.exe -m pytest -q                           # 586 passed at ea50a49 (full repository)
 ```
 
-(Counts are those observed at `de07872`; one pre-existing Starlette/httpx deprecation warning
+(Counts are those observed at `ea50a49`; one pre-existing Starlette/httpx deprecation warning
 appears.) Unit and framework tests establish behaviour, not research KPI attainment.
 
 **Reproducing the evaluation** (writes reports to the directory you give; never overwrite
@@ -271,21 +273,45 @@ original evidence — use an empty directory):
 | 1 Input alignment | ≥ 90% | **31 / 31** valid synthetic events (Wilson 95%: 89.0–100%); 5 / 5 invalid events rejected, reported separately | `evaluation/PROTOCOL.md` §4 |
 | 2 Token mapping | ≥ 90% | **31 / 31** sequences matched; 3719 / 3719 token positions; masking provenance 31 / 31 | same |
 | 3 Tensor correctness | ≥ 95% | **30 / 30** tensors (Wilson 88.7–100%); 1 / 1 capacity rejection as specified | same |
-| 4 Average prediction time | ≤ 5 ms | pre-registered **B1 mean 0.3200 ms** (worst batch mean 0.3371 ms; 5 batches × 1000 = 5000 calls) on one machine and synthetic workload | `evaluation/LATENCY_PROTOCOL.md` |
+| 4 Average prediction time | ≤ 5 ms | **Current code (`ea50a49`, post-D3): pre-registered B1 mean 0.3413 ms** (worst batch mean 0.3481 ms; 5 batches × 1000 = 5000 calls). Historical pre-D3 baseline: 0.3200 ms (worst batch 0.3371 ms). Both on one machine and a synthetic workload; target met in both | `evaluation/LATENCY_PROTOCOL.md` |
 | 5 Downstream usability | ≥ 90% | **Pending genuine Member 3 integration — not measured** | [INTEGRATION_STATUS.md](INTEGRATION_STATUS.md) |
 
-KPI 4 detail (same run): B2 (adapters + pipeline) mixed mean 0.333 ms; **B3 (real HTTP on
-loopback, client and server in one process) mixed mean 2.77 ms**, large-payload mean 4.46 ms
-with p95 5.27 ms. The 0.32 ms figure is the in-process pipeline only and is **end-to-end
-prediction time, not isolated model inference** (model scoring stage ≈ 0.075 ms mean in the
-informational stage breakdown).
+**KPI 4 in detail.** The same frozen latency protocol and harness were run twice:
+
+| Pooled mean, S6 mixed workload (ms) | Pre-D3 (original) | Post-D3 (current code) |
+|---|---|---|
+| **B1** in-process pipeline (primary KPI) | **0.3200** | **0.3413** (+0.0213, ≈ +6.7%) |
+| B1T same, with tracer | 0.3393 | 0.3605 |
+| B2 adapters + pipeline | 0.3326 | 0.3580 |
+| B3 real HTTP, loopback | 2.7696 | 2.7007 |
+| B3 large payload S4: mean / p95 | 4.4607 / 5.2659 | 4.5444 / 5.1237 |
+| Masking stage mean (informational) | 0.0896 | 0.1145 |
+
+- **What B1 is:** the in-process **end-to-end pipeline time** (fusion, masking,
+  normalization, tokenization, tensorization and model scoring, no tracing). It is **not**
+  isolated model inference (the model-scoring stage alone is ≈ 0.075 ms mean in the
+  informational stage breakdown) and it is **not** deployed or real-world latency: it excludes
+  adapters, JSON, HTTP and the privacy projection.
+- **The increase** is consistent with the extra key normalization and matching added to
+  `masking.py`, but it comes from single runs on one non-isolated machine, so small
+  differences cannot be attributed precisely; B3 values moved in both directions, i.e.
+  run-to-run noise.
+- **HTTP tail latency:** B3 includes the client, JSON and the privacy projection, and client
+  and server share one process. Its mixed-workload mean is under 5 ms (p95 4.46 ms, p99
+  4.89 ms post-D3), but the large-payload stratum exceeds 5 ms at p95 (5.12 ms) and a single
+  37 ms outlier occurred. These are reported as measured; the pre-registered primary result
+  remains the B1 mean.
+- **Scope:** synthetic workload of ≤ 128 tokens after truncation, one machine (Windows 10,
+  8 logical CPUs, "Ultimate Performance" power scheme). No production-SLA, throughput or
+  concurrency claim is made.
 
 **Evidence locations (outside the repository, on the author's machine):**
 
 | Evidence | Path |
 |---|---|
 | KPI 1–3 pre-run manifest, report (JSON/MD), run logs | `C:\Users\kavin\Downloads\LogiShield_PP1_Coding_Evidence\KPI_Evaluation\` (`PRE_RUN_MANIFEST.json`, `kpi_report.json`, `kpi_report.md`) |
-| KPI 4 manifest, report, raw per-call samples | same folder (`LATENCY_PRE_RUN_MANIFEST.json`, `latency_report.json`, `latency_report.md`, `latency_raw_samples.json.gz`) |
+| KPI 4 **original (pre-D3)** benchmark: the historical baseline, produced by the code before the masking fix (`masking.py` sha256 `d23ae1f9…`) | same folder (`LATENCY_PRE_RUN_MANIFEST.json`, `latency_report.json`, `latency_report.md`, `latency_raw_samples.json.gz`) |
+| KPI 4 **post-D3** re-evaluation of the current code at `ea50a49` (`masking.py` sha256 `8eb0f66a…`): same protocol and harness, new directory, nothing overwritten | `C:\Users\kavin\Downloads\LogiShield_PP1_Coding_Evidence\KPI_Evaluation\Post_D3_Latency\` (`POST_D3_TRACEABILITY_PRE_RUN.json`, `LATENCY_PRE_RUN_MANIFEST.json`, `latency_report.json`, `latency_report.md`, `latency_raw_samples.json.gz`, `README_post_D3_comparison.txt`, `terminal_*.txt`) |
 | Browser interaction log and screenshots | `C:\Users\kavin\Downloads\LogiShield_PP1_Coding_Evidence\` (`browser_interaction_log.txt`, `screenshot_*.png`) |
 | Frozen protocols and fixtures (in repo) | `tokenization_ai/evaluation/PROTOCOL.md`, `LATENCY_PROTOCOL.md`, `fixtures/` — **do not edit**; a change needs a new protocol version |
 
@@ -313,16 +339,18 @@ informational stage breakdown).
 7. **Masking is a blocklist, not a guarantee** (§4). The audit's D3 gaps were fixed in
    `masking.py` and covered by `tests/tokenization_ai/test_masking_hardening.py`, but
    unlisted field names, secrets in URL path segments, and free text remain unmasked.
-   Evidence versioning: the KPI 1–3 and KPI 4 reports in the evidence folder were produced by
-   the earlier `masking.py` (recorded in the KPI report as source hash `d23ae1f9…`). A
-   later re-run of the KPI 1–3 evaluation on the unchanged frozen fixtures reproduced the
-   identical results hash (`f353779d…`), but that confirms only that those 31 cases are
-   unaffected; it is not a measurement of the new masking rules. The KPI 4 latency
-   measurement predates the change and was not repeated. The Member 1 header exposure is
-   noted in INTEGRATION_STATUS.
+   Evidence versioning: the original KPI 1–3 and KPI 4 reports were produced by the earlier
+   `masking.py` (source hash `d23ae1f9…`). Re-running the KPI 1–3 evaluation on the
+   unchanged frozen fixtures reproduced the identical results hash (`f353779d…`), which
+   confirms only that those 31 cases are unaffected; it is not a measurement of the new
+   masking rules. KPI 4 **was** re-measured on the hardened code (§8, 0.3413 ms). The
+   Member 1 header exposure is noted in INTEGRATION_STATUS.
 8. **Latency** is one machine (Windows 10, 8 logical CPUs, Windows "Ultimate Performance"
    power scheme), Python-level timing, GC disabled in timed loops, synthetic payloads of ≤ 128
-   tokens after truncation; not a throughput, concurrency or production-SLA result.
+   tokens after truncation; not a throughput, concurrency or production-SLA result. The
+   post-D3 figure (0.3413 ms) is one protocol-conformant run; the pre-D3 baseline (0.3200 ms)
+   was a separate run, so the ≈ +6.7% difference is indicative, not a controlled estimate of
+   the masking cost.
 9. **Score semantics.** The score is uncalibrated and is not a probability of attack.
 10. **Integration.** No Member 2 or Member 3 integration exists; KPI 5 is unmeasured.
 
