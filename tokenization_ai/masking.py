@@ -40,6 +40,9 @@ class MaskingResult:
     masked_paths: frozenset[FieldPath]
 
 # Header names (normalized) that carry authentication material outright.
+# These also mask a *payload or query* field of the same name, as
+# ``MASKED_AUTH`` (see ``_classify_key``): the same credential is just as
+# sensitive in a JSON body as in a header.
 _AUTH_HEADER_KEYS = {
     "authorization",
     "proxy_authorization",
@@ -48,7 +51,26 @@ _AUTH_HEADER_KEYS = {
     "x_api_key",
     "x_auth_token",
     "x_csrf_token",
+    "x_csrf",
+    "x_session_id",
+    "x_session",
+    "x_auth",
+    "x_apikey",
+    "apikey",
 }
+
+# Value-shaped credentials, detected under any key (see ``_classify_value``).
+# Deliberately narrow: only the unambiguous ``Bearer <token>`` form and a
+# three-part base64url JWT. ``Basic ...`` / ``Digest ...`` are NOT matched by
+# value because ordinary prose ("Basic information ...") would collide.
+_BEARER_VALUE = re.compile(r"^Bearer\s+[A-Za-z0-9._~+/=-]{8,}$", re.IGNORECASE)
+_JWT_VALUE = re.compile(r"^eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]*$")
+
+# Key names are normalized with: strip, camelCase -> snake_case, casefold,
+# then "-", "." and whitespace -> "_". ``accessToken``, ``Access-Token`` and
+# ``ACCESS_TOKEN`` therefore all become ``access_token``.
+_CAMEL_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+_KEY_SEPARATORS = re.compile(r"[-.\s]")
 
 # Payload/header field names (normalized) that hold credentials or secrets.
 # "pwd" is listed as its own exact entry (not a substring/suffix rule) because
@@ -70,7 +92,42 @@ _SECRET_KEYS = {
     "secret",
     "token",
     "otp",
+    # Added after the PP1 privacy audit (D3). Exact names only: broader
+    # suffix rules such as "*_key" would also catch sort_key / primary_key.
+    "secret_key",
+    "secretkey",
+    "secret_access_key",
+    "access_key",
+    "signing_key",
+    "encryption_key",
+    "apikey",
+    "session",
+    "session_id",
+    "sessionid",
+    "jwt",
+    "bearer",
+    "passphrase",
+    "passcode",
+    "csrf",
+    "xsrf",
 }
+
+# Suffixes (after normalization) that mark a credential. ``_token`` and
+# ``_secret`` pre-date the audit; the rest were added with it. Each is a
+# *whole-word* suffix, so ``token_count`` and ``session_timeout`` are unaffected.
+_SECRET_SUFFIXES = (
+    "_token",
+    "_secret",
+    "_password",
+    "_passwd",
+    "_api_key",
+    "_apikey",
+    "_secret_key",
+    "_private_key",
+    "_access_key",
+    "_session_id",
+    "_sessionid",
+)
 
 # Payload/header field names (normalized) that hold PII rather than secrets.
 _PII_KEYS = {
@@ -89,6 +146,33 @@ _PII_KEYS = {
     "account_number",
     "client_ip",
     "ip_address",
+    # Added after the PP1 privacy audit (D3): exact names only.
+    "national_id",
+    "national_identity_number",
+    "nic",
+    "nic_number",
+    "passport",
+    "passport_number",
+    "tax_id",
+    "drivers_license",
+    "driving_license",
+    "date_of_birth",
+    "dob",
+    "birth_date",
+    "birthdate",
+    "address",
+    "street_address",
+    "home_address",
+    "billing_address",
+    "shipping_address",
+    "mailing_address",
+    "postal_address",
+    "residential_address",
+    "email_address",
+    "first_name",
+    "last_name",
+    "full_name",
+    "surname",
 }
 
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -273,14 +357,30 @@ class PrivacyMasker:
 
     @staticmethod
     def _normalize_key(key: str) -> str:
-        """Normalize a field name for case- and separator-insensitive matching."""
-        return key.casefold().replace("-", "_").replace(" ", "_")
+        """Normalize a field name for case-, separator- and camelCase-insensitive matching.
+
+        Surrounding whitespace is stripped first: masking runs *before*
+        normalization, which later trims header names, so an un-stripped
+        ``" Authorization "`` would otherwise escape masking and then be
+        tokenized as ``authorization`` with its raw value.
+        """
+        spaced = _CAMEL_BOUNDARY.sub("_", key.strip())
+        return _KEY_SEPARATORS.sub("_", spaced.casefold())
 
     @classmethod
     def _classify_key(cls, key: str) -> str | None:
-        """Return the placeholder for a field name known to be sensitive, if any."""
+        """Return the placeholder for a field name known to be sensitive, if any.
+
+        Authentication-header names (``authorization``, ``x-api-key``,
+        ``x-session-id``, ...) are labelled ``MASKED_AUTH`` wherever they
+        appear. Names that end in ``_token`` keep their pre-audit label
+        (``MASKED_SECRET``) so existing behaviour is unchanged. Then secret
+        keys, then PII keys.
+        """
         normalized = cls._normalize_key(key)
-        if normalized in _SECRET_KEYS or normalized.endswith("_token") or normalized.endswith("_secret"):
+        if normalized in _AUTH_HEADER_KEYS and not normalized.endswith("_token"):
+            return MASKED_AUTH
+        if normalized in _SECRET_KEYS or normalized.endswith(_SECRET_SUFFIXES):
             return MASKED_SECRET
         if normalized in _PII_KEYS or normalized.endswith("_email") or normalized.endswith("_phone"):
             return MASKED_PII
@@ -288,7 +388,7 @@ class PrivacyMasker:
 
     @staticmethod
     def _classify_value(value: str) -> str | None:
-        """Detect email, payment-card, and IP-address string values.
+        """Detect email, payment-card, bearer/JWT and IP-address string values.
 
         Phone numbers are masked by field name only (see ``_PII_KEYS``): their
         digit formatting is too close to dates, ids, and other benign fields
@@ -296,6 +396,8 @@ class PrivacyMasker:
         """
         if _EMAIL.fullmatch(value) or _CARD.fullmatch(value):
             return MASKED_PII
+        if _BEARER_VALUE.fullmatch(value) or _JWT_VALUE.fullmatch(value):
+            return MASKED_AUTH
         try:
             ipaddress.ip_address(value)
         except ValueError:

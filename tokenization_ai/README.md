@@ -101,13 +101,19 @@ threshold**, and the request-only vs rule-fused **baseline comparison**.
 
 ## 4. Privacy masking, normalization and token roles
 
-- **Masking is heuristic.** It recognizes sensitive key names (e.g. `password`, `token`,
-  `api_key`, `secret`, `email`, `phone`, `card`, `ssn`, `client_ip`), authentication header
-  names (`authorization`, `cookie`, `x-api-key`, …), email/payment-card/IP-shaped *values*,
-  and sensitive query-string parameters in the path. **Unrecognized field names are not
-  masked** — for example, a payload key such as `authorization`, `secret_key`, `apikey`,
-  `session`, `jwt` or `address` currently passes through (checked with synthetic values in
-  the final audit; this is a known gap, listed in §9). Do not use real credentials.
+- **Masking is a heuristic, name- and shape-based blocklist.** It recognizes sensitive key
+  names (e.g. `password`, `token`, `api_key`, `secret_key`, `session`, `jwt`, `email`,
+  `phone`, `card`, `ssn`, `national_id`, `date_of_birth`, `address`, `first_name`,
+  `client_ip`), authentication names (`authorization`, `cookie`, `x-api-key`,
+  `x-session-id`, …) in headers, payloads and query strings, email / payment-card / IP /
+  `Bearer …` / JWT-shaped *values*, and sensitive query-string parameters in the path.
+  Key matching ignores case, `-`/`_`/`.`/space differences, surrounding whitespace and
+  camelCase (`accessToken`, `Secret-Key`, `dateOfBirth`). Names are matched exactly or by a
+  whole-word suffix, so `token_count`, `session_timeout` and `sort_key` are left alone.
+  **Anything not on these lists is not masked** (for example a secret under an arbitrary
+  field name, or a secret or personal value inside a URL path segment). Do not use real
+  credentials. The list was extended after the PP1 privacy audit (finding D3); the
+  extension was **not** part of the frozen KPI 1–3 / KPI 4 evaluation runs (see §9).
 - **Roles are authoritative.** `tokenizer.py` assigns `control` / `literal_api` /
   `literal_rule` / `masked` at the moment each token is emitted; the vocabulary and tensorizer
   read them rather than infer them. Member 1's `[REDACTED_PII]` marker is **not** recognized as
@@ -304,7 +310,16 @@ informational stage breakdown).
    (`dataset_adapters.py`) has been tested on synthetic rows only; no dataset was obtained.
 6. **Mock rules.** `MOCK-*` rule fixtures stand in for verified rules. Formal-verification
    correctness is not evaluated here.
-7. **Masking recall gaps** (§4) and the Member 1 header exposure noted in INTEGRATION_STATUS.
+7. **Masking is a blocklist, not a guarantee** (§4). The audit's D3 gaps were fixed in
+   `masking.py` and covered by `tests/tokenization_ai/test_masking_hardening.py`, but
+   unlisted field names, secrets in URL path segments, and free text remain unmasked.
+   Evidence versioning: the KPI 1–3 and KPI 4 reports in the evidence folder were produced by
+   the earlier `masking.py` (recorded in the KPI report as source hash `d23ae1f9…`). A
+   later re-run of the KPI 1–3 evaluation on the unchanged frozen fixtures reproduced the
+   identical results hash (`f353779d…`), but that confirms only that those 31 cases are
+   unaffected; it is not a measurement of the new masking rules. The KPI 4 latency
+   measurement predates the change and was not repeated. The Member 1 header exposure is
+   noted in INTEGRATION_STATUS.
 8. **Latency** is one machine (Windows 10, 8 logical CPUs, Windows "Ultimate Performance"
    power scheme), Python-level timing, GC disabled in timed loops, synthetic payloads of ≤ 128
    tokens after truncation; not a throughput, concurrency or production-SLA result.
