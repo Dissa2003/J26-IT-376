@@ -24,7 +24,7 @@ export function gauge(value) {
     }));
   }
   [["20", "0"], ["180", "1"]].forEach((t) => {
-    const label = svg("text", { x: t[0], y: 111, "text-anchor": "middle", fill: "#6a82ad", "font-size": 10 });
+    const label = svg("text", { x: t[0], y: 111, "text-anchor": "middle", fill: "#738cb8", "font-size": 10 });
     label.textContent = t[1];
     root.appendChild(label);
   });
