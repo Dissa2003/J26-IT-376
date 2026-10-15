@@ -138,3 +138,25 @@ export function field(labelText, control) {
   wrap.appendChild(control);
   return wrap;
 }
+
+/* "HH:MM:SS" in the dashboard's local clock, or "unknown". */
+export function fmtTime(iso) {
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? "unknown" : d.toLocaleTimeString([], { hour12: false });
+}
+
+/* KPI tile: returns { root, value, sub }. tone: blue | green | red | purple | pink. */
+export function kpi(tone, iconName, label) {
+  const root = el("div", "kpi kpi-" + tone);
+  const iconBox = el("div", "kpi-icon");
+  iconBox.appendChild(icon(iconName, 28));
+  const body = el("div", "kpi-body");
+  const value = el("p", "kpi-value", "–");
+  const sub = el("p", "kpi-sub", "");
+  body.appendChild(el("p", "kpi-label", label));
+  body.appendChild(value);
+  body.appendChild(sub);
+  root.appendChild(iconBox);
+  root.appendChild(body);
+  return { root, value, sub };
+}

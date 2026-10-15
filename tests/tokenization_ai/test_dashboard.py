@@ -157,10 +157,11 @@ def test_navigation_has_every_required_page_and_a_placeholder_settings():
     ):
         assert f'label: "{label}"' in routes
     assert routes.count('kind: "anomaly"') == 1
-    # Phase 2 made Logs & Traces and System Components functional.
+    # Phase 2 made Logs & Traces and System Components functional; Phase 3 the Dashboard overview.
     assert routes.count('kind: "logs"') == 1
     assert routes.count('kind: "components"') == 1
-    assert routes.count('kind: "pending"') == 6
+    assert routes.count('kind: "overview"') == 1
+    assert routes.count('kind: "pending"') == 5
 
 
 def test_pending_pages_show_no_data_and_say_so():

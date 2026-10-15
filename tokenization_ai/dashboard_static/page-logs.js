@@ -5,10 +5,10 @@
  * responses. It makes no request of its own. These are session-local
  * analysis traces, not persisted gateway logs and not distributed tracing. */
 
-import { el, clear, icon, card, kv, badge, emptyNote, fmtMs, button, field } from "./ui.js";
+import { el, clear, icon, card, kv, badge, emptyNote, fmtMs, fmtTime, button, field } from "./ui.js";
 import { session } from "./session.js";
 
-const STAGE_INFO = {
+export const STAGE_INFO = {
   fusion: ["Input fusion", "merge", "Join API context and rule information by event id"],
   masking: ["Privacy masking", "lock", "Replace sensitive values with placeholders and record the masked paths"],
   normalization: ["Normalization", "filter", "Canonical method, path, header names and key order"],
@@ -30,10 +30,7 @@ const view = { scenario: "all", rule: "all", masked: "all", query: "", newestFir
 let ui = null;
 let unsubscribe = null;
 
-function observedTime(iso) {
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? "unknown" : d.toLocaleTimeString([], { hour12: false });
-}
+const observedTime = fmtTime;
 
 function matches(entry) {
   if (view.scenario !== "all" && entry.scenarioId !== view.scenario) { return false; }

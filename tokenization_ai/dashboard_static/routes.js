@@ -1,34 +1,14 @@
-/* Route table. "anomaly" is the one functional page in Phase 1; every other
- * page is an honest pending state that says what is required before it can
+/* Route table. Dashboard, Anomaly Detection, Logs & Traces and System Components
+ * are functional; every other page is an honest pending state that says what is required before it can
  * show real data. No numbers, rows or events are invented here. */
 
-export const DEFAULT_ROUTE = "anomaly";
+export const DEFAULT_ROUTE = "dashboard";
 
 export const ROUTES = [
   {
-    id: "dashboard", label: "Dashboard", icon: "home", kind: "pending",
-    title: "Dashboard",
-    subtitle: "Consolidated monitoring overview across all LogiShield modules.",
-    owner: "All modules",
-    shows: [
-      "System-wide request and anomaly trend",
-      "Pipeline and component health summary",
-      "Recent requests with their downstream verdicts"
-    ],
-    requires: [
-      "Aggregated data from Member 1 (ingestion), Member 2 (verification) and Member 3 (runtime verification)",
-      "An agreed cross-member data contract and a way to collect it",
-      "Stored history: the Member 4 service is stateless and keeps none"
-    ],
-    status: [
-      "Member 4 analysis is functional; see Anomaly Detection.",
-      "No other module is connected to this dashboard."
-    ],
-    placeholders: [
-      { title: "API request & anomaly trend", icon: "traffic", needs: "Needs stored traffic history" },
-      { title: "Processing pipeline status", icon: "layers", needs: "Needs Member 1–3 status feeds" },
-      { title: "Recent API requests", icon: "list", needs: "Needs a request log with verdicts" }
-    ]
+    id: "dashboard", label: "Dashboard", icon: "home", kind: "overview",
+    title: "LogiShield Dashboard",
+    subtitle: "Member 4 Research Prototype Overview"
   },
   {
     id: "traffic", label: "API Traffic", icon: "traffic", kind: "pending",

@@ -7,6 +7,7 @@ import { ROUTES, DEFAULT_ROUTE, routeById } from "./routes.js";
 import * as anomaly from "./page-anomaly.js";
 import * as logs from "./page-logs.js";
 import * as components from "./page-components.js";
+import * as overview from "./page-overview.js";
 import { mountPending } from "./page-pending.js";
 
 let activeUnmount = null;
@@ -44,7 +45,7 @@ function render() {
   const view = document.getElementById("view");
   clear(view);
 
-  const pages = { anomaly: anomaly, logs: logs, components: components };
+  const pages = { overview: overview, anomaly: anomaly, logs: logs, components: components };
   if (pages[route.kind]) {
     pages[route.kind].mount(view, route);
     activeUnmount = pages[route.kind].unmount;
@@ -56,7 +57,7 @@ function render() {
     if (link.getAttribute("data-route") === route.id) { link.setAttribute("aria-current", "page"); }
     else { link.removeAttribute("aria-current"); }
   });
-  document.title = route.title + " · LogiShield";
+  document.title = route.title.indexOf("LogiShield") === 0 ? route.title : route.title + " · LogiShield";
   view.scrollTop = 0;
   window.scrollTo(0, 0);
 }

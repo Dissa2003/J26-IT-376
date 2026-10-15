@@ -10,7 +10,7 @@ import { el, clear, svg, icon, card, badge, emptyNote, fmtMs, button } from "./u
 import { shell } from "./shell.js";
 import { session } from "./session.js";
 
-const COMPONENTS = [
+export const COMPONENTS = [
   {
     order: 1, name: "Data Processing", member: "Member 1", icon: "database", module: "ingestion/",
     role: "Ingress interception, buffering and serialization, data masking and context dispatching.",

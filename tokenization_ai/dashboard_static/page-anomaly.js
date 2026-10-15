@@ -5,7 +5,7 @@
  * is shown as an uncalibrated model output, never as a verdict. The in-memory
  * session list keeps response summaries only, never the request. */
 
-import { el, clear, icon, card, kv, badge, emptyNote, fmtMs } from "./ui.js";
+import { el, clear, icon, card, kv, badge, emptyNote, fmtMs, kpi } from "./ui.js";
 import { gauge, donut } from "./charts.js";
 import * as api from "./api.js";
 import { shell } from "./shell.js";
@@ -65,21 +65,6 @@ function stageOf(data, name) {
 function stageMs(data, name) {
   const stage = stageOf(data, name);
   return stage ? fmtMs(stage.elapsed_ms) + " ms" : "not recorded";
-}
-
-function kpi(tone, iconName, label) {
-  const root = el("div", "kpi kpi-" + tone);
-  const iconBox = el("div", "kpi-icon");
-  iconBox.appendChild(icon(iconName, 28));
-  const body = el("div", "kpi-body");
-  const value = el("p", "kpi-value", "–");
-  const sub = el("p", "kpi-sub", "");
-  body.appendChild(el("p", "kpi-label", label));
-  body.appendChild(value);
-  body.appendChild(sub);
-  root.appendChild(iconBox);
-  root.appendChild(body);
-  return { root, value, sub };
 }
 
 /* ---------- build (static structure, built once per mount) ---------- */
