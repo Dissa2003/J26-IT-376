@@ -68,6 +68,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from shared_contracts.models import ErrorResponse
 
 from .adapters import InputContractError, to_unified_api_context, to_verified_rule_info
+from .dashboard import install_dashboard
 from .demo import _build_demo_service
 from .masking import MASKED_AUTH, MASKED_IP, MASKED_PII, MASKED_SECRET
 from .metrics import runtime_metrics_from_trace
@@ -458,6 +459,7 @@ def create_app(
 
         return _build_response(request.rule_source, rule_info, result, trace, note, service)
 
+    install_dashboard(app)  # additive: GET /dashboard only; /demo and /v1/analyze unchanged
     return app
 
 
