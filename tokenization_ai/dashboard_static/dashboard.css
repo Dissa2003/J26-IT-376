@@ -519,3 +519,29 @@ a { color: var(--blue-2); }
 @media (max-width: 760px) {
   .proc-strip { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ---- phase 4: reports ---- */
+.section-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 6px 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.section-title { font-size: 20px; font-weight: 700; }
+.section-gap { height: 22px; }
+.export-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.export-row .btn { height: 40px; padding: 0 18px; }
+
+.iv-wrap { padding: 2px 0; }
+.iv-chart { display: block; width: 100%; max-width: 440px; height: auto; }
+.iv-bar { fill: rgba(34, 211, 238, 0.35); stroke: #22d3ee; stroke-width: 1; }
+.iv-point { fill: #eaf1ff; stroke: #1f6bff; stroke-width: 3; }
+.iv-target { stroke: #f5a524; stroke-width: 2; stroke-dasharray: 4 3; }
+.iv-worst { stroke: #eaf1ff; stroke-width: 2; }
+.rb-track { fill: rgba(3, 9, 24, 0.8); stroke: #14305f; stroke-width: 1; }
+.verdict { margin-top: 2px; }
+.verdict .badge { height: auto; min-height: 22px; padding: 4px 10px; white-space: normal; line-height: 1.4; text-transform: none;
+  letter-spacing: 0; font-size: 12px; text-align: left; }
+
+.ev-details { border: 1px solid var(--line); border-radius: 8px; background: rgba(8, 20, 48, 0.55); padding: 0 12px; }
+.ev-details > summary { cursor: pointer; padding: 9px 0; font-size: 13px; font-weight: 600; color: var(--blue-2); }
+.ev-details[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+.ev-details .limits { margin-bottom: 8px; }
+.refs { display: flex; flex-direction: column; gap: 4px; padding-bottom: 10px; }
+.refs li { font: 12px Consolas, Menlo, monospace; color: #9fb5de; overflow-wrap: anywhere; }
+.ev-card .kv { grid-template-columns: minmax(70px, max-content) minmax(0, 1fr); }

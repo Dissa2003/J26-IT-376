@@ -100,3 +100,45 @@ export function barChart(items, ariaLabel) {
   });
   return root;
 }
+
+function label(parent, className, x, y, text, anchor) {
+  const t = svg("text", { class: className, x: x, y: y, "text-anchor": anchor || "middle" });
+  t.textContent = text;
+  parent.appendChild(t);
+}
+
+/* Point estimate with its Wilson interval against a target, on a 80-100 % axis.
+ * Draws only the numbers it is given. */
+export function intervalChart(item) {
+  const min = 80;
+  const max = 100;
+  const x = (v) => 24 + ((Math.max(min, Math.min(max, v)) - min) / (max - min)) * 312;
+  const root = svg("svg", { class: "iv-chart", viewBox: "0 0 360 76", role: "img",
+    "aria-label": "Point estimate " + item.point + " percent, 95 percent interval " + item.low + " to " + item.high +
+      " percent, target " + item.target + " percent" });
+  root.appendChild(svg("line", { class: "bc-grid", x1: x(min), x2: x(max), y1: 44, y2: 44 }));
+  [80, 85, 90, 95, 100].forEach((v) => {
+    root.appendChild(svg("line", { class: "bc-grid", x1: x(v), x2: x(v), y1: 40, y2: 48 }));
+    label(root, "bc-axis", x(v), 64, v + "%");
+  });
+  root.appendChild(svg("rect", { class: "iv-bar", x: x(item.low), y: 36, width: Math.max(2, x(item.high) - x(item.low)), height: 16, rx: 4 }));
+  root.appendChild(svg("line", { class: "iv-target", x1: x(item.target), x2: x(item.target), y1: 18, y2: 52 }));
+  label(root, "bc-lab", x(item.target), 13, "target " + item.target + "%");
+  root.appendChild(svg("circle", { class: "iv-point", cx: x(item.point), cy: 44, r: 6 }));
+  return root;
+}
+
+/* Mean (bar) and worst batch mean (tick) against a millisecond target. */
+export function rangeBar(item) {
+  const x = (v) => 24 + (Math.max(0, Math.min(item.max, v)) / item.max) * 312;
+  const root = svg("svg", { class: "iv-chart", viewBox: "0 0 360 76", role: "img",
+    "aria-label": "Mean " + item.mean + " ms, worst batch mean " + item.worst + " ms, target " + item.target + " ms" });
+  root.appendChild(svg("rect", { class: "rb-track", x: x(0), y: 34, width: x(item.max) - x(0), height: 16, rx: 4 }));
+  root.appendChild(svg("rect", { class: "bc-bar", x: x(0), y: 34, width: Math.max(3, x(item.mean) - x(0)), height: 16, rx: 4 }));
+  root.appendChild(svg("line", { class: "iv-worst", x1: x(item.worst), x2: x(item.worst), y1: 28, y2: 56 }));
+  root.appendChild(svg("line", { class: "iv-target", x1: x(item.target), x2: x(item.target), y1: 18, y2: 56 }));
+  label(root, "bc-lab", x(item.target), 13, "target " + item.target + " ms", "end");
+  label(root, "bc-axis", x(0), 70, "0 ms", "start");
+  label(root, "bc-axis", x(item.max), 70, item.max + " ms", "end");
+  return root;
+}

@@ -8,6 +8,7 @@ import * as anomaly from "./page-anomaly.js";
 import * as logs from "./page-logs.js";
 import * as components from "./page-components.js";
 import * as overview from "./page-overview.js";
+import * as reports from "./page-reports.js";
 import { mountPending } from "./page-pending.js";
 
 let activeUnmount = null;
@@ -45,7 +46,7 @@ function render() {
   const view = document.getElementById("view");
   clear(view);
 
-  const pages = { overview: overview, anomaly: anomaly, logs: logs, components: components };
+  const pages = { overview: overview, anomaly: anomaly, logs: logs, components: components, reports: reports };
   if (pages[route.kind]) {
     pages[route.kind].mount(view, route);
     activeUnmount = pages[route.kind].unmount;

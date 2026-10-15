@@ -87,24 +87,9 @@ export const ROUTES = [
     subtitle: "Architecture and integration status of the LogiShield modules. Only Member 4 has a live status."
   },
   {
-    id: "reports", label: "Reports", icon: "reports", kind: "pending",
+    id: "reports", label: "Reports", icon: "reports", kind: "reports",
     title: "Reports",
-    subtitle: "Security analytics and exportable reports (planned).",
-    owner: "All modules",
-    shows: ["Trend and comparison reports", "Threat and component summaries", "Exportable report output"],
-    requires: [
-      "Stored analysis and decision history to report on",
-      "Integrated data from Members 1–3"
-    ],
-    status: [
-      "The Member 4 KPI 1–4 evaluation evidence lives in research artefacts and the README, not in this dashboard.",
-      "KPI 5 is not measured and is not reported here."
-    ],
-    placeholders: [
-      { title: "Request & threat trend", icon: "traffic", needs: "Needs stored history" },
-      { title: "Component performance", icon: "components", needs: "Needs module feeds" },
-      { title: "Recent incidents", icon: "list", needs: "Needs integrated decisions" }
-    ]
+    subtitle: "Current-session analytics and documented Member 4 research evaluation evidence."
   },
   {
     id: "settings", label: "Settings", icon: "settings", kind: "pending", tag: "Soon", separated: true,
