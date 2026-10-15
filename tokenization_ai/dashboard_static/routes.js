@@ -97,44 +97,14 @@ export const ROUTES = [
     ]
   },
   {
-    id: "logs", label: "Logs & Traces", icon: "logs", kind: "pending",
+    id: "logs", label: "Logs & Traces", icon: "logs", kind: "logs",
     title: "Logs & Traces",
-    subtitle: "Searchable logs and per-request traces across components (planned).",
-    owner: "All modules",
-    shows: ["Searchable log events", "End-to-end trace timeline", "Per-request component flow"],
-    requires: [
-      "Persisted logs and trace ids from each module",
-      "A cross-module correlation id convention"
-    ],
-    status: [
-      "Member 4 returns per-stage timings with each analysis (see Anomaly Detection) but stores no logs.",
-      "Trace and timing summaries contain counts and durations only, never raw values."
-    ],
-    placeholders: [
-      { title: "Log events", icon: "logs", needs: "Needs persisted logs" },
-      { title: "Trace timeline", icon: "history", needs: "Needs cross-module traces" },
-      { title: "Component event flow", icon: "components", needs: "Needs cross-module traces" }
-    ]
+    subtitle: "Member 4 Session Traces: the analyses run in this dashboard session, with per-stage timing and provenance."
   },
   {
-    id: "components", label: "System Components", icon: "components", kind: "pending",
+    id: "components", label: "System Components", icon: "components", kind: "components",
     title: "System Components",
-    subtitle: "Architecture, health and performance of LogiShield modules (planned).",
-    owner: "All modules",
-    shows: ["Health of each module", "Component architecture and data flow", "Inter-component events"],
-    requires: [
-      "Health endpoints from all modules and a way to collect them in one place",
-      "Member 4 added to the shared deployment configuration (it currently runs standalone on 127.0.0.1:8004)"
-    ],
-    status: [
-      "Only the Member 4 service is observable here; its readiness chip is in the page header.",
-      "Health, CPU, throughput and uptime for other modules are not available."
-    ],
-    placeholders: [
-      { title: "Component health", icon: "components", needs: "Needs health feeds from Members 1–3" },
-      { title: "Architecture & data flow", icon: "layers", needs: "Needs agreed contracts" },
-      { title: "Inter-component events", icon: "list", needs: "Needs an event feed" }
-    ]
+    subtitle: "Architecture and integration status of the LogiShield modules. Only Member 4 has a live status."
   },
   {
     id: "reports", label: "Reports", icon: "reports", kind: "pending",

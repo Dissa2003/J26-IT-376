@@ -157,7 +157,10 @@ def test_navigation_has_every_required_page_and_a_placeholder_settings():
     ):
         assert f'label: "{label}"' in routes
     assert routes.count('kind: "anomaly"') == 1
-    assert routes.count('kind: "pending"') == 8
+    # Phase 2 made Logs & Traces and System Components functional.
+    assert routes.count('kind: "logs"') == 1
+    assert routes.count('kind: "components"') == 1
+    assert routes.count('kind: "pending"') == 6
 
 
 def test_pending_pages_show_no_data_and_say_so():
@@ -213,12 +216,11 @@ def test_no_fabricated_figures_or_verdict_vocabulary_in_the_client():
         assert forbidden not in text, forbidden
 
 
-def test_session_history_stores_response_summaries_never_the_request():
+def test_session_history_comes_from_the_shared_allowlisted_store():
     js = _read("page-anomaly.js")
-    block = js[js.index("state.history.unshift({"):]
-    block = block[: block.index("});")]
-    assert "request" not in block
-    assert "HISTORY_LIMIT" in js
+    assert "session.add(d, scenario)" in js  # only the response and the scenario id/title go in
+    assert "state.history" not in js
+    assert "HISTORY_ROWS" in js
 
 
 def test_scenario_change_clears_the_previous_result():

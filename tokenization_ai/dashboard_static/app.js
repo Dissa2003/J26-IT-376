@@ -5,6 +5,8 @@ import { el, clear, icon, hydrateIcons } from "./ui.js";
 import { shell, healthLabel } from "./shell.js";
 import { ROUTES, DEFAULT_ROUTE, routeById } from "./routes.js";
 import * as anomaly from "./page-anomaly.js";
+import * as logs from "./page-logs.js";
+import * as components from "./page-components.js";
 import { mountPending } from "./page-pending.js";
 
 let activeUnmount = null;
@@ -42,9 +44,10 @@ function render() {
   const view = document.getElementById("view");
   clear(view);
 
-  if (route.kind === "anomaly") {
-    anomaly.mount(view, route);
-    activeUnmount = anomaly.unmount;
+  const pages = { anomaly: anomaly, logs: logs, components: components };
+  if (pages[route.kind]) {
+    pages[route.kind].mount(view, route);
+    activeUnmount = pages[route.kind].unmount;
   } else {
     mountPending(view, route);
   }

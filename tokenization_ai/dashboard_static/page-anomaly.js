@@ -9,6 +9,7 @@ import { el, clear, icon, card, kv, badge, emptyNote, fmtMs } from "./ui.js";
 import { gauge, donut } from "./charts.js";
 import * as api from "./api.js";
 import { shell } from "./shell.js";
+import { session, valueAtPath } from "./session.js";
 
 const PIPELINE = [
   ["fusion", "Input fusion", "merge"],
@@ -35,7 +36,7 @@ const LIMITS = [
   "Stage timings are single-request, in-process measurements from this run. They are not the KPI 4 benchmark or HTTP latency."
 ];
 
-const HISTORY_LIMIT = 8;
+const HISTORY_ROWS = 8;
 
 const state = {
   scenarios: [],
@@ -45,9 +46,7 @@ const state = {
   renderedId: null,
   busy: false,
   result: null,
-  error: null,
-  history: [],
-  runs: 0
+  error: null
 };
 
 let ui = null;
@@ -66,17 +65,6 @@ function stageOf(data, name) {
 function stageMs(data, name) {
   const stage = stageOf(data, name);
   return stage ? fmtMs(stage.elapsed_ms) + " ms" : "not recorded";
-}
-
-/* Read a value from the returned (already projected) representation by the
- * dotted field path the backend reported. Display only. */
-function valueAtPath(rep, dotted) {
-  let cur = rep;
-  const parts = dotted.split(".");
-  for (let i = 0; i < parts.length; i += 1) {
-    if (cur !== null && typeof cur === "object" && parts[i] in cur) { cur = cur[parts[i]]; } else { return null; }
-  }
-  return typeof cur === "string" ? cur : null;
 }
 
 function kpi(tone, iconName, label) {
@@ -203,11 +191,11 @@ function build(root, route) {
   ui.contextBadgeHost = context.head;
   const tensor = card({ title: "Tensor preparation", icon: "grid" });
   ui.tensorBody = tensor.body;
-  const session = card({ title: "This session", icon: "history", badge: badge("In memory", "info") });
-  ui.historyBody = session.body;
+  const sessionCard = card({ title: "This session", icon: "history", badge: badge("In memory", "info") });
+  ui.historyBody = sessionCard.body;
   low.appendChild(context.root);
   low.appendChild(tensor.root);
-  low.appendChild(session.root);
+  low.appendChild(sessionCard.root);
   root.appendChild(low);
 
   // Row: provenance | limitations.
@@ -545,7 +533,8 @@ function paintHistory() {
   clear(body);
   body.appendChild(el("p", "card-note",
     "Summaries of analyses run on this page since it loaded. Held in memory only; the request is never stored."));
-  if (!state.history.length) {
+  const entries = session.list().slice(0, HISTORY_ROWS);
+  if (!entries.length) {
     body.appendChild(emptyNote("No analyses yet."));
     return;
   }
@@ -559,14 +548,14 @@ function paintHistory() {
     headRow.appendChild(th);
   });
   const tbody = table.createTBody();
-  state.history.forEach((entry, index) => {
+  entries.forEach((entry, index) => {
     const row = tbody.insertRow();
     if (index === 0) { row.className = "is-current"; }
-    row.insertCell().textContent = String(entry.n);
+    row.insertCell().textContent = String(entry.seq);
     const nameCell = row.insertCell();
     nameCell.className = "cap";
-    nameCell.textContent = entry.title;
-    [entry.score.toFixed(4), String(entry.tokens)].forEach((v) => {
+    nameCell.textContent = entry.scenarioId;
+    [entry.score.toFixed(4), String(entry.tokens.total)].forEach((v) => {
       const cell = row.insertCell();
       cell.className = "num";
       cell.textContent = v;
@@ -576,6 +565,9 @@ function paintHistory() {
   body.appendChild(wrap);
   body.appendChild(el("p", "card-note",
     "Scores are uncalibrated outputs of a model fitted on these two synthetic fixtures; the comparison is not evidence of detection accuracy."));
+  const link = el("a", "card-link", "Open full session traces in Logs & Traces");
+  link.href = "#/logs";
+  body.appendChild(link);
 }
 
 function paintProvenance(data) {
@@ -647,16 +639,7 @@ async function analyze() {
     state.result = d;
     state.renderedId = scenario.id;
     state.error = null;
-    state.runs += 1;
-    state.history.unshift({
-      n: state.runs,
-      title: scenario.id,
-      score: d.prediction.score,
-      tokens: d.tokens.total,
-      masked: d.masking.masked_field_count,
-      totalMs: d.timings.total_elapsed_ms
-    });
-    state.history.length = Math.min(state.history.length, HISTORY_LIMIT);
+    session.add(d, scenario);
   } else {
     state.result = null;
     state.renderedId = null;

@@ -30,7 +30,10 @@ DASHBOARD_ASSETS: dict[str, str] = {
     "ui.js": "text/javascript; charset=utf-8",
     "charts.js": "text/javascript; charset=utf-8",
     "routes.js": "text/javascript; charset=utf-8",
+    "session.js": "text/javascript; charset=utf-8",
     "page-anomaly.js": "text/javascript; charset=utf-8",
+    "page-logs.js": "text/javascript; charset=utf-8",
+    "page-components.js": "text/javascript; charset=utf-8",
     "page-pending.js": "text/javascript; charset=utf-8",
     "logo.svg": "image/svg+xml",
 }

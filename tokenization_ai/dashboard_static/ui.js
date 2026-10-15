@@ -59,7 +59,14 @@ const ICONS = {
   history: [["path", { d: "M4 12a8 8 0 1 0 2.5-5.8L4 8.5" }], ["path", { d: "M4 4v4.5h4.5M12 8v4l3 2" }]],
   list: [["path", { d: "M9 6h11M9 12h11M9 18h11M4.5 6h.1M4.5 12h.1M4.5 18h.1" }]],
   file: [["path", { d: "M6 3h9l4 4v14H6z" }], ["path", { d: "M15 3v4h4" }]],
-  warn: [["circle", { cx: 12, cy: 12, r: 9 }], ["path", { d: "M12 7.5v5.5M12 16.3v.2" }]]
+  warn: [["circle", { cx: 12, cy: 12, r: 9 }], ["path", { d: "M12 7.5v5.5M12 16.3v.2" }]],
+  globe: [["circle", { cx: 12, cy: 12, r: 9 }], ["ellipse", { cx: 12, cy: 12, rx: 4, ry: 9 }], ["path", { d: "M3 12h18" }]],
+  cpu: [["rect", { x: 7, y: 7, width: 10, height: 10, rx: 1.5 }], ["path", { d: "M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3" }]],
+  rules: [["path", { d: "M6 3h9l4 4v14H6z" }], ["path", { d: "M15 3v4h4M9 14l2 2 4-4" }]],
+  arrowDown: [["path", { d: "M12 4v15M6 13l6 6 6-6" }]],
+  refresh: [["path", { d: "M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7" }]],
+  trash: [["path", { d: "M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" }]],
+  sort: [["path", { d: "M7 4v16M3 16l4 4 4-4M17 20V4M13 8l4-4 4 4" }]]
 };
 
 export function icon(name, size) {
@@ -113,3 +120,21 @@ export function kv(rows) {
 }
 
 export function emptyNote(text) { return el("p", "empty-note", text); }
+
+/* A button with an optional leading icon. */
+export function button(label, className, onClick, iconName) {
+  const node = el("button", className || "btn-ghost");
+  node.type = "button";
+  if (iconName) { node.appendChild(icon(iconName, 16)); }
+  node.appendChild(el("span", null, label));
+  if (onClick) { node.addEventListener("click", onClick); }
+  return node;
+}
+
+/* A labelled form control wrapper: <label><span>text</span>control</label>. */
+export function field(labelText, control) {
+  const wrap = el("label", "field");
+  wrap.appendChild(el("span", "field-label", labelText));
+  wrap.appendChild(control);
+  return wrap;
+}
