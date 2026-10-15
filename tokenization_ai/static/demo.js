@@ -16,6 +16,7 @@
 
   var scenarios = [];
   var selectedId = null;
+  var renderedId = null;
   var busy = false;
 
   var $ = function (id) { return document.getElementById(id); };
@@ -71,6 +72,14 @@
 
   function selectScenario(id) {
     if (busy) { return; }
+    if (renderedId !== null && renderedId !== id) {
+      // Do not leave the previous scenario's result under the new request.
+      $("stages").hidden = true;
+      $("evidence").hidden = true;
+      $("error-box").hidden = true;
+      $("empty").hidden = false;
+      renderedId = null;
+    }
     selectedId = id;
     renderScenarios();
     var scenario = currentScenario();
@@ -281,6 +290,7 @@
         return;
       }
       render(result.payload);
+      renderedId = scenario.id;
       setStatus("ok", "Analysis complete. These values came from the Member 4 service.");
     }).catch(function (error) {
       var timedOut = error && error.name === "AbortError";

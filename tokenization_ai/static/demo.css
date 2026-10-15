@@ -137,11 +137,12 @@ button:focus-visible, .scenario:focus-visible, pre:focus-visible, a:focus-visibl
 .caveat { margin: 10px 0 0; padding: 8px 10px; background: var(--orange-soft); border-radius: 8px; font-size: 13px; color: #5a3000; }
 
 #evidence { margin-top: 20px; }
-.two { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.two { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); }
 .table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .table th, .table td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); }
 .table th { color: var(--muted); font-weight: 600; }
 .table td.num-cell { font-variant-numeric: tabular-nums; }
+.table td:first-child, .table td.num-cell { overflow-wrap: normal; word-break: normal; white-space: nowrap; }
 
 .list { margin: 0 0 8px; padding-left: 18px; font-size: 14px; }
 .list li { margin-bottom: 4px; }

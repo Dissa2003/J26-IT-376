@@ -17,7 +17,7 @@
     {
       "id": "suspicious",
       "title": "Suspicious API request",
-      "description": "A login attempt carrying a credential, an Authorization header and an injection-style query string, paired with a MOCK verified-rule fixture.",
+      "description": "A login attempt carrying a credential, an Authorization header and an injection-style payload value, paired with a MOCK verified-rule fixture.",
       "request": {
         "context": {
           "event_id": "demo-suspicious-1",
