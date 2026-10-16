@@ -5,3 +5,7 @@ httpx>=0.27
 redis>=5.0
 protobuf>=5.0
 pytest>=8.0
+
+# Policy Verification Engine Dependencies
+z3-solver>=4.12.0
+pymongo>=4.0.0

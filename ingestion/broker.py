@@ -17,6 +17,11 @@ from redis.exceptions import RedisError, ResponseError
 from shared_contracts.config import Settings, get_settings
 from shared_contracts.interfaces import EventConsumer, EventProducer
 from shared_contracts.models import RawEvent
+from .vector_builder import (
+    HIGH_THREAT_THRESHOLD,
+    LOW_THREAT_THRESHOLD,
+    extract_threat_score,
+)
 
 log = logging.getLogger(__name__)
 EventHandler = Callable[[RawEvent], None]
@@ -65,13 +70,12 @@ class InMemoryBroker(EventProducer, EventConsumer):
 
 
 class RingBufferBroker(InMemoryBroker):
-    """Bounded, lock-free hot-path buffer with one sequential drain worker.
+    """Bounded, lock-free hot-path buffer using threat-weighted eviction.
 
     ``collections.deque`` append and popleft operations are atomic under
-    CPython. The producer therefore performs no explicit locking or blocking
-    work. When the buffer is full, the oldest event is evicted and counted.
-    Configure a Redis broker as ``overflow_broker`` when durable overflow is
-    required.
+    CPython. The producer therefore performs no explicit locking. TWDE routes
+    low-threat arrivals to overflow first and protects high-threat arrivals by
+    evicting the oldest low-threat buffered event when possible.
     """
 
     def __init__(
@@ -80,17 +84,25 @@ class RingBufferBroker(InMemoryBroker):
         maxlen: int = DEFAULT_BUFFER_SIZE,
         overflow_broker: EventProducer | None = None,
         poll_interval: float = 0.001,
+        high_threat_threshold: float = HIGH_THREAT_THRESHOLD,
+        low_threat_threshold: float = LOW_THREAT_THRESHOLD,
     ) -> None:
         """Create a bounded buffer and an idle background drain worker."""
         if maxlen < 1:
             raise ValueError("maxlen must be positive")
         if poll_interval <= 0:
             raise ValueError("poll_interval must be positive")
+        if not 0.0 <= low_threat_threshold < high_threat_threshold <= 1.0:
+            raise ValueError(
+                "threat thresholds must satisfy 0 <= low < high <= 1"
+            )
         super().__init__()
         self._buffer: deque[RawEvent] = deque(maxlen=maxlen)
         self._buffer_maxlen = maxlen
         self._overflow_broker = overflow_broker
         self._poll_interval = poll_interval
+        self._high_threat_threshold = high_threat_threshold
+        self._low_threat_threshold = low_threat_threshold
         self._wake = threading.Event()
         self._stopped = threading.Event()
         self._buffered = 0
@@ -109,28 +121,50 @@ class RingBufferBroker(InMemoryBroker):
 
     @property
     def evicted_count(self) -> int:
-        """Return the number of events evicted by a full circular buffer."""
+        """Return the number of buffered events routed out by TWDE."""
         return self._evicted
 
     def publish(self, event: RawEvent) -> None:
-        """Enqueue an event without waiting for consumer work."""
+        """Apply TWDE and enqueue an event without acquiring a producer lock."""
+        incoming_score = extract_threat_score(event.payload)
         was_full = len(self._buffer) == self._buffer_maxlen
         if was_full:
-            evicted = self._buffer[0]
+            if incoming_score < self._low_threat_threshold:
+                self._spill(event)
+                return
+            evicted_index = self._find_eviction_index()
+            evicted = self._buffer[evicted_index]
+            del self._buffer[evicted_index]
             self._evicted += 1
-            if self._overflow_broker is not None:
-                try:
-                    self._overflow_broker.publish(evicted)
-                except Exception:
-                    log.exception(
-                        "Unable to spill evicted event %s to overflow broker",
-                        evicted.event_id,
-                    )
-            else:
-                log.warning("Ring buffer full; evicting event %s", evicted.event_id)
+            self._buffered -= 1
+            self._spill(evicted)
         self._buffer.append(event)
         self._buffered += 1
         self._wake.set()
+
+    def _find_eviction_index(self) -> int:
+        """Choose the oldest low-threat event, protecting high-threat entries."""
+        medium_index: int | None = None
+        for index, buffered in enumerate(self._buffer):
+            score = extract_threat_score(buffered.payload)
+            if score < self._low_threat_threshold:
+                return index
+            if score < self._high_threat_threshold and medium_index is None:
+                medium_index = index
+        return 0 if medium_index is None else medium_index
+
+    def _spill(self, event: RawEvent) -> None:
+        """Send an evicted event to overflow without blocking on local state."""
+        if self._overflow_broker is None:
+            log.warning("Ring buffer full; dropping event %s", event.event_id)
+            return
+        try:
+            self._overflow_broker.publish(event)
+        except Exception:
+            log.exception(
+                "Unable to spill event %s to overflow broker",
+                event.event_id,
+            )
 
     def stop(self, timeout: float = 1.0) -> None:
         """Stop the drain worker after already-buffered events are handled."""
@@ -154,7 +188,6 @@ class RingBufferBroker(InMemoryBroker):
                 except Exception:
                     log.exception("Ring buffer handler failed for %s", event.event_id)
             self._buffered -= 1
-
 
 class RedisStreamBroker(EventProducer, EventConsumer):
     """Reliable event broker backed by a Redis Stream consumer group."""
@@ -278,7 +311,7 @@ def create_broker(settings: Settings | None = None) -> EventProducer & EventCons
     resolved = settings or get_settings()
     if resolved.app_env.lower() == "local":
         log.info("Using in-memory broker for local environment")
-        return RingBufferBroker()
+        return InMemoryBroker()
 
     try:
         broker = RedisStreamBroker(resolved)
