@@ -3,21 +3,9 @@ uvicorn[standard]>=0.30
 pydantic>=2.7
 httpx>=0.27
 redis>=5.0
-<<<<<<< Updated upstream
-pytest>=8.0
-
-# Policy Verification Engine Dependencies
-fastapi>=0.100.0
-uvicorn>=0.22.0
-pydantic>=2.0.0
-z3-solver>=4.12.0
-pymongo>=4.0.0
-pytest>=7.0.0
-=======
 protobuf>=5.0
 pytest>=8.0
 
 # Policy Verification Engine Dependencies
 z3-solver>=4.12.0
 pymongo>=4.0.0
->>>>>>> Stashed changes

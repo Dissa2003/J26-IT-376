@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import logging
 import socket
+import threading
+import time
 import uuid
 from collections.abc import Callable
+from collections import deque
 from typing import Any, Protocol
 
 from redis import Redis
@@ -22,6 +25,7 @@ from .vector_builder import (
 
 log = logging.getLogger(__name__)
 EventHandler = Callable[[RawEvent], None]
+DEFAULT_BUFFER_SIZE = 20_000
 
 
 class RedisStreamClient(Protocol):
@@ -65,8 +69,6 @@ class InMemoryBroker(EventProducer, EventConsumer):
         self.dead_letters.append({"payload": payload, "reason": reason})
 
 
-<<<<<<< Updated upstream
-=======
 class RingBufferBroker(InMemoryBroker):
     """Bounded, lock-free hot-path buffer using threat-weighted eviction.
 
@@ -187,8 +189,6 @@ class RingBufferBroker(InMemoryBroker):
                     log.exception("Ring buffer handler failed for %s", event.event_id)
             self._buffered -= 1
 
-
->>>>>>> Stashed changes
 class RedisStreamBroker(EventProducer, EventConsumer):
     """Reliable event broker backed by a Redis Stream consumer group."""
 

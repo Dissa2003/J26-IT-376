@@ -1,17 +1,22 @@
 """Unit tests for broker delivery and the ingestion API."""
 
 from collections.abc import Callable
+import threading
+import time
 from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 import pytest
 from redis.exceptions import ConnectionError as RedisConnectionError
 
-from ingestion.broker import InMemoryBroker, RedisStreamBroker, create_broker
+from ingestion.broker import (
+    InMemoryBroker,
+    RedisStreamBroker,
+    RingBufferBroker,
+    create_broker,
+)
 from ingestion.app import create_app
 from ingestion.validator import IngestionValidator
-<<<<<<< Updated upstream
-=======
 from ingestion.pii_masker import PIIMasker, REDACTED
 from ingestion.vector_builder import (
     HIGH_THREAT_THRESHOLD,
@@ -19,7 +24,6 @@ from ingestion.vector_builder import (
     UnifiedContextVectorBuilder,
     extract_threat_score,
 )
->>>>>>> Stashed changes
 from shared_contracts.config import Settings
 from shared_contracts.interfaces import ProcessingClient
 from shared_contracts.models import Label, Prediction, RawEvent
@@ -202,8 +206,6 @@ def test_create_broker_uses_memory_in_local_environment() -> None:
     assert isinstance(broker, InMemoryBroker)
 
 
-<<<<<<< Updated upstream
-=======
 def test_ring_buffer_drains_events_sequentially() -> None:
     """Buffered events are delivered FIFO by one background worker."""
     broker = RingBufferBroker(maxlen=8)
@@ -351,8 +353,6 @@ def test_twde_publish_hot_path_avoids_lock_contention() -> None:
     finally:
         broker.stop()
 
-
->>>>>>> Stashed changes
 def test_create_broker_falls_back_when_redis_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
