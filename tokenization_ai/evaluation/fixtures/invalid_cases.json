@@ -1,0 +1,52 @@
+{
+  "protocol_version": "1.0.0",
+  "group": "invalid_cases",
+  "note": "Each case violates a different input contract rule. Expected outcome for every case: the input is rejected with InputContractError. Reported separately from KPI 1 alignment.",
+  "cases": [
+    {
+      "id": "I1-event-id-mismatch",
+      "contract_rule": "context.event_id must equal rule_info.event_id",
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-i1-a", "metadata": {"method": "GET", "path": "/x"}, "payload": {}},
+        "rule_info": {"event_id": "eval-i1-b", "rules": []}
+      }
+    },
+    {
+      "id": "I2-missing-path",
+      "contract_rule": "HTTP metadata must provide method and path",
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-i2", "metadata": {"method": "GET"}, "payload": {}},
+        "rule_info": null
+      }
+    },
+    {
+      "id": "I3-payload-not-a-mapping",
+      "contract_rule": "event payload must be a mapping",
+      "input": {
+        "format": "raw_event",
+        "context": {"event_id": "eval-i3", "payload": "not-a-mapping"},
+        "rule_info": null
+      }
+    },
+    {
+      "id": "I4-rule-without-rule-id",
+      "contract_rule": "every verified rule needs a rule_id",
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-i4", "metadata": {"method": "GET", "path": "/x"}, "payload": {}},
+        "rule_info": {"event_id": "eval-i4", "rules": [{"severity": "high"}]}
+      }
+    },
+    {
+      "id": "I5-threat-score-out-of-range",
+      "contract_rule": "threat_score must be within [0, 1]",
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-i5", "metadata": {"method": "GET", "path": "/x"}, "payload": {}, "threat_score": 1.5},
+        "rule_info": null
+      }
+    }
+  ]
+}

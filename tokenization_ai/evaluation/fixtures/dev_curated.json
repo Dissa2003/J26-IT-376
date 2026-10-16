@@ -1,0 +1,37 @@
+{
+  "protocol_version": "1.0.0",
+  "group": "dev_curated",
+  "note": "Used ONLY to fit the evaluation vocabulary. Never scored. Hand-written expectations.",
+  "cases": [
+    {
+      "id": "D01-orders",
+      "input": {"format": "envelope", "context": {"event_id": "dev-d01", "metadata": {"method": "GET", "path": "/orders/9"}, "payload": {"amount": 5, "currency": "EUR"}}, "rule_info": null},
+      "expect": {"tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:GET","C:[API:PATH_START]","C:[API:PATH_SEG]","A:orders","C:[API:PATH_SEG]","A:9","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:KEY]","A:amount","C:[API:VAL_INT]","A:5","C:[API:KEY]","A:currency","C:[API:VAL_STR]","A:EUR","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULES_END]","C:[SEQ_END]"]}
+    },
+    {
+      "id": "D02-login-with-rule",
+      "input": {"format": "envelope", "context": {"event_id": "dev-d02", "metadata": {"method": "POST", "path": "/login", "headers": {"Authorization": "Bearer dev-token"}}, "payload": {"username": "user1", "password": "dev-pw"}}, "rule_info": {"event_id": "dev-d02", "rules": [{"rule_id": "MOCK-R-AUTH", "severity": "medium"}]}},
+      "expect": {"tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:POST","C:[API:PATH_START]","C:[API:PATH_SEG]","A:login","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADER_NAME]","A:authorization","C:[API:HEADER_VALUE_MASKED]","M:[MASKED_AUTH]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:KEY]","A:password","C:[API:VAL_MASKED_STR]","M:[MASKED_SECRET]","C:[API:KEY]","A:username","C:[API:VAL_STR]","A:user1","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULE_START]","C:[RULE:ID]","R:MOCK-R-AUTH","C:[RULE:ATTRS_START]","C:[RULE:OBJ_START]","C:[RULE:KEY]","R:severity","C:[RULE:VAL_STR]","R:medium","C:[RULE:OBJ_END]","C:[RULE:ATTRS_END]","C:[RULE_END]","C:[RULES_END]","C:[SEQ_END]"]}
+    },
+    {
+      "id": "D03-products-header",
+      "input": {"format": "envelope", "context": {"event_id": "dev-d03", "metadata": {"method": "GET", "path": "/products/7", "headers": {"Accept": "application/json"}}, "payload": {}}, "rule_info": null},
+      "expect": {"tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:GET","C:[API:PATH_START]","C:[API:PATH_SEG]","A:products","C:[API:PATH_SEG]","A:7","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADER_NAME]","A:accept","C:[API:HEADER_VALUE]","A:application/json","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULES_END]","C:[SEQ_END]"]}
+    },
+    {
+      "id": "D04-order-with-list",
+      "input": {"format": "envelope", "context": {"event_id": "dev-d04", "metadata": {"method": "POST", "path": "/orders"}, "payload": {"items": [{"sku": "A1", "qty": 2}], "currency": "USD"}}, "rule_info": null},
+      "expect": {"tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:POST","C:[API:PATH_START]","C:[API:PATH_SEG]","A:orders","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:KEY]","A:currency","C:[API:VAL_STR]","A:USD","C:[API:KEY]","A:items","C:[API:LIST_START]","C:[API:OBJ_START]","C:[API:KEY]","A:qty","C:[API:VAL_INT]","A:2","C:[API:KEY]","A:sku","C:[API:VAL_STR]","A:A1","C:[API:OBJ_END]","C:[API:LIST_END]","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULES_END]","C:[SEQ_END]"]}
+    },
+    {
+      "id": "D05-profile",
+      "input": {"format": "envelope", "context": {"event_id": "dev-d05", "metadata": {"method": "PUT", "path": "/users/5/profile"}, "payload": {"profile": {"name": "Dev User", "age": 41, "active": true}}}, "rule_info": null},
+      "expect": {"tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:PUT","C:[API:PATH_START]","C:[API:PATH_SEG]","A:users","C:[API:PATH_SEG]","A:5","C:[API:PATH_SEG]","A:profile","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:KEY]","A:profile","C:[API:OBJ_START]","C:[API:KEY]","A:active","C:[API:VAL_BOOL]","A:true","C:[API:KEY]","A:age","C:[API:VAL_INT]","A:41","C:[API:KEY]","A:name","C:[API:VAL_STR]","A:Dev User","C:[API:OBJ_END]","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULES_END]","C:[SEQ_END]"]}
+    },
+    {
+      "id": "D06-delete-with-rule",
+      "input": {"format": "envelope", "context": {"event_id": "dev-d06", "metadata": {"method": "DELETE", "path": "/orders/9"}, "payload": {}}, "rule_info": {"event_id": "dev-d06", "rules": [{"rule_id": "MOCK-R-SQLI", "severity": "high"}]}},
+      "expect": {"tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:DELETE","C:[API:PATH_START]","C:[API:PATH_SEG]","A:orders","C:[API:PATH_SEG]","A:9","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULE_START]","C:[RULE:ID]","R:MOCK-R-SQLI","C:[RULE:ATTRS_START]","C:[RULE:OBJ_START]","C:[RULE:KEY]","R:severity","C:[RULE:VAL_STR]","R:high","C:[RULE:OBJ_END]","C:[RULE:ATTRS_END]","C:[RULE_END]","C:[RULES_END]","C:[SEQ_END]"]}
+    }
+  ]
+}

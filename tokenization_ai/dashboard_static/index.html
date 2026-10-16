@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LogiShield Dashboard</title>
+<meta name="description" content="LogiShield dashboard for the Member 4 tokenization and lightweight AI prediction component (PP1 working prototype).">
+<link rel="icon" type="image/svg+xml" href="/dashboard/assets/logo.svg">
+<link rel="stylesheet" href="/dashboard/assets/dashboard.css">
+</head>
+<body>
+<a class="skip" href="#view">Skip to content</a>
+
+<div class="app">
+  <aside class="sidebar" aria-label="Primary">
+    <a class="brand" href="#/dashboard" aria-label="LogiShield" title="LogiShield">
+      <img class="brand-mark" src="/dashboard/assets/logo.svg" alt="" width="44" height="50">
+      <span class="brand-text">
+        <span class="brand-name">LogiShield</span>
+        <span class="brand-sub">Neuro-Symbolic Verification for API Gateways</span>
+      </span>
+    </a>
+
+    <nav id="nav" class="nav" aria-label="Dashboard sections"></nav>
+
+    <div class="side-foot">
+      <p class="side-foot-title">Member 4 &middot; PP1 working prototype</p>
+      <p class="side-foot-text">Tokenization &amp; lightweight AI prediction. Other modules are not connected.</p>
+      <a class="side-link" href="/demo">Open original demo</a>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="search" role="search">
+        <span class="search-icon" data-icon="search" data-size="18"></span>
+        <input type="search" disabled aria-label="Search (not available in this phase)" placeholder="Search is not available in this phase">
+      </div>
+      <div class="top-chips">
+        <button type="button" id="health-chip" class="health-chip" title="Re-check the Member 4 service (GET /health)">
+          <span class="dot dot-idle" id="health-dot"></span>
+          <span id="health-text">Checking service&hellip;</span>
+        </button>
+        <span class="chip chip-amber">Synthetic data only</span>
+        <span class="chip chip-muted">No sample data shown</span>
+      </div>
+    </header>
+
+    <main id="view" class="view" tabindex="-1"></main>
+  </div>
+</div>
+
+<noscript><p class="noscript">This dashboard needs JavaScript. The original page remains available at <a href="/demo">/demo</a>.</p></noscript>
+<script type="module" src="/dashboard/assets/app.js"></script>
+</body>
+</html>

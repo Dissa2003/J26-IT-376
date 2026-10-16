@@ -1,0 +1,4052 @@
+{
+ "protocol_version": "1.0.0",
+ "group": "dev_generated",
+ "seed": 1101,
+ "note": "Used ONLY to fit the evaluation vocabulary. Never scored.",
+ "cases": [
+  {
+   "id": "dev-g-01",
+   "group": "dev_generated",
+   "description": "seeded case with 2 top-level payload fields",
+   "input": {
+    "format": "envelope",
+    "context": {
+     "event_id": "dev-g-01",
+     "metadata": {
+      "method": "POST",
+      "path": "/v1/products/3580",
+      "headers": {
+       "user-agent": "demo-agent/1.0"
+      }
+     },
+     "payload": {
+      "fld_76": {
+       "fld_28": false,
+       "fld_37": [
+        5034,
+        "tundra"
+       ]
+      },
+      "fld_92": null
+     }
+    },
+    "rule_info": {
+     "event_id": "dev-g-01",
+     "rules": [
+      {
+       "rule_id": "MOCK-G-01-0",
+       "severity": "high",
+       "limit": 55
+      }
+     ]
+    }
+   },
+   "expect": {
+    "fused": {
+     "event_id": "dev-g-01",
+     "method": "POST",
+     "path": "/v1/products/3580",
+     "headers": {
+      "user-agent": "demo-agent/1.0"
+     },
+     "payload": {
+      "fld_76": {
+       "fld_28": false,
+       "fld_37": [
+        5034,
+        "tundra"
+       ]
+      },
+      "fld_92": null
+     },
+     "content_type": null,
+     "client_ip": null,
+     "threat_score": null,
+     "rules": [
+      {
+       "rule_id": "MOCK-G-01-0",
+       "attributes": {
+        "severity": "high",
+        "limit": 55
+       }
+      }
+     ]
+    },
+    "tokens": [
+     "C:[SEQ_START]",
+     "C:[API:METHOD]",
+     "A:POST",
+     "C:[API:PATH_START]",
+     "C:[API:PATH_SEG]",
+     "A:v1",
+     "C:[API:PATH_SEG]",
+     "A:products",
+     "C:[API:PATH_SEG]",
+     "A:3580",
+     "C:[API:PATH_END]",
+     "C:[API:HEADERS_START]",
+     "C:[API:HEADER_NAME]",
+     "A:user-agent",
+     "C:[API:HEADER_VALUE]",
+     "A:demo-agent/1.0",
+     "C:[API:HEADERS_END]",
+     "C:[API:PAYLOAD_START]",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_76",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_28",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:KEY]",
+     "A:fld_37",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_INT]",
+     "A:5034",
+     "C:[API:VAL_STR]",
+     "A:tundra",
+     "C:[API:LIST_END]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_92",
+     "C:[API:VAL_NULL]",
+     "C:[API:OBJ_END]",
+     "C:[API:PAYLOAD_END]",
+     "C:[RULES_START]",
+     "C:[RULE_START]",
+     "C:[RULE:ID]",
+     "R:MOCK-G-01-0",
+     "C:[RULE:ATTRS_START]",
+     "C:[RULE:OBJ_START]",
+     "C:[RULE:KEY]",
+     "R:limit",
+     "C:[RULE:VAL_INT]",
+     "R:55",
+     "C:[RULE:KEY]",
+     "R:severity",
+     "C:[RULE:VAL_STR]",
+     "R:high",
+     "C:[RULE:OBJ_END]",
+     "C:[RULE:ATTRS_END]",
+     "C:[RULE_END]",
+     "C:[RULES_END]",
+     "C:[SEQ_END]"
+    ],
+    "masked_paths": [],
+    "tensor": "ok"
+   }
+  },
+  {
+   "id": "dev-g-02",
+   "group": "dev_generated",
+   "description": "seeded case with 3 top-level payload fields",
+   "input": {
+    "format": "envelope",
+    "context": {
+     "event_id": "dev-g-02",
+     "metadata": {
+      "method": "DELETE",
+      "path": "/reports/users/orders/5646",
+      "headers": {
+       "accept": "application/json",
+       "user-agent": "demo-agent/2.0",
+       "content-type": "application/json"
+      }
+     },
+     "payload": {
+      "fld_17": {
+       "fld_46": [
+        14.78,
+        false,
+        null
+       ],
+       "fld_69": true,
+       "fld_39": null
+      },
+      "fld_06": {
+       "fld_78": "xenon",
+       "fld_48": [
+        5733,
+        "raven",
+        true
+       ]
+      },
+      "fld_02": {
+       "fld_60": [
+        "bravo",
+        "cedar",
+        true
+       ],
+       "fld_63": "delta",
+       "fld_74": [
+        true,
+        98.69,
+        false
+       ]
+      },
+      "password": "pw-394"
+     }
+    },
+    "rule_info": null
+   },
+   "expect": {
+    "fused": {
+     "event_id": "dev-g-02",
+     "method": "DELETE",
+     "path": "/reports/users/orders/5646",
+     "headers": {
+      "accept": "application/json",
+      "user-agent": "demo-agent/2.0",
+      "content-type": "application/json"
+     },
+     "payload": {
+      "fld_17": {
+       "fld_46": [
+        14.78,
+        false,
+        null
+       ],
+       "fld_69": true,
+       "fld_39": null
+      },
+      "fld_06": {
+       "fld_78": "xenon",
+       "fld_48": [
+        5733,
+        "raven",
+        true
+       ]
+      },
+      "fld_02": {
+       "fld_60": [
+        "bravo",
+        "cedar",
+        true
+       ],
+       "fld_63": "delta",
+       "fld_74": [
+        true,
+        98.69,
+        false
+       ]
+      },
+      "password": "pw-394"
+     },
+     "content_type": null,
+     "client_ip": null,
+     "threat_score": null,
+     "rules": []
+    },
+    "tokens": [
+     "C:[SEQ_START]",
+     "C:[API:METHOD]",
+     "A:DELETE",
+     "C:[API:PATH_START]",
+     "C:[API:PATH_SEG]",
+     "A:reports",
+     "C:[API:PATH_SEG]",
+     "A:users",
+     "C:[API:PATH_SEG]",
+     "A:orders",
+     "C:[API:PATH_SEG]",
+     "A:5646",
+     "C:[API:PATH_END]",
+     "C:[API:HEADERS_START]",
+     "C:[API:HEADER_NAME]",
+     "A:accept",
+     "C:[API:HEADER_VALUE]",
+     "A:application/json",
+     "C:[API:HEADER_NAME]",
+     "A:content-type",
+     "C:[API:HEADER_VALUE]",
+     "A:application/json",
+     "C:[API:HEADER_NAME]",
+     "A:user-agent",
+     "C:[API:HEADER_VALUE]",
+     "A:demo-agent/2.0",
+     "C:[API:HEADERS_END]",
+     "C:[API:PAYLOAD_START]",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_02",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_60",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_STR]",
+     "A:bravo",
+     "C:[API:VAL_STR]",
+     "A:cedar",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_63",
+     "C:[API:VAL_STR]",
+     "A:delta",
+     "C:[API:KEY]",
+     "A:fld_74",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:VAL_FLOAT]",
+     "A:98.69",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:LIST_END]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_06",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_48",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_INT]",
+     "A:5733",
+     "C:[API:VAL_STR]",
+     "A:raven",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_78",
+     "C:[API:VAL_STR]",
+     "A:xenon",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_17",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_39",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_46",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_FLOAT]",
+     "A:14.78",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:VAL_NULL]",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_69",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:password",
+     "C:[API:VAL_MASKED_STR]",
+     "M:[MASKED_SECRET]",
+     "C:[API:OBJ_END]",
+     "C:[API:PAYLOAD_END]",
+     "C:[RULES_START]",
+     "C:[RULES_END]",
+     "C:[SEQ_END]"
+    ],
+    "masked_paths": [
+     [
+      "payload",
+      "password"
+     ]
+    ],
+    "tensor": "ok"
+   }
+  },
+  {
+   "id": "dev-g-03",
+   "group": "dev_generated",
+   "description": "seeded case with 4 top-level payload fields",
+   "input": {
+    "format": "envelope",
+    "context": {
+     "event_id": "dev-g-03",
+     "metadata": {
+      "method": "GET",
+      "path": "/orders/users/search/7691",
+      "headers": {}
+     },
+     "payload": {
+      "fld_88": {
+       "fld_58": 24.2,
+       "fld_83": "amber",
+       "fld_02": 23.7
+      },
+      "fld_13": {
+       "fld_58": 0.13,
+       "fld_49": null
+      },
+      "fld_76": 9.61,
+      "fld_05": {
+       "fld_74": "pebble",
+       "fld_23": [
+        true,
+        null
+       ],
+       "fld_49": {
+        "fld_89": null,
+        "fld_35": 7914
+       }
+      }
+     }
+    },
+    "rule_info": null
+   },
+   "expect": {
+    "fused": {
+     "event_id": "dev-g-03",
+     "method": "GET",
+     "path": "/orders/users/search/7691",
+     "headers": {},
+     "payload": {
+      "fld_88": {
+       "fld_58": 24.2,
+       "fld_83": "amber",
+       "fld_02": 23.7
+      },
+      "fld_13": {
+       "fld_58": 0.13,
+       "fld_49": null
+      },
+      "fld_76": 9.61,
+      "fld_05": {
+       "fld_74": "pebble",
+       "fld_23": [
+        true,
+        null
+       ],
+       "fld_49": {
+        "fld_89": null,
+        "fld_35": 7914
+       }
+      }
+     },
+     "content_type": null,
+     "client_ip": null,
+     "threat_score": null,
+     "rules": []
+    },
+    "tokens": [
+     "C:[SEQ_START]",
+     "C:[API:METHOD]",
+     "A:GET",
+     "C:[API:PATH_START]",
+     "C:[API:PATH_SEG]",
+     "A:orders",
+     "C:[API:PATH_SEG]",
+     "A:users",
+     "C:[API:PATH_SEG]",
+     "A:search",
+     "C:[API:PATH_SEG]",
+     "A:7691",
+     "C:[API:PATH_END]",
+     "C:[API:HEADERS_START]",
+     "C:[API:HEADERS_END]",
+     "C:[API:PAYLOAD_START]",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_05",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_23",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:VAL_NULL]",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_49",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_35",
+     "C:[API:VAL_INT]",
+     "A:7914",
+     "C:[API:KEY]",
+     "A:fld_89",
+     "C:[API:VAL_NULL]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_74",
+     "C:[API:VAL_STR]",
+     "A:pebble",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_13",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_49",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_58",
+     "C:[API:VAL_FLOAT]",
+     "A:0.13",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_76",
+     "C:[API:VAL_FLOAT]",
+     "A:9.61",
+     "C:[API:KEY]",
+     "A:fld_88",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_02",
+     "C:[API:VAL_FLOAT]",
+     "A:23.7",
+     "C:[API:KEY]",
+     "A:fld_58",
+     "C:[API:VAL_FLOAT]",
+     "A:24.2",
+     "C:[API:KEY]",
+     "A:fld_83",
+     "C:[API:VAL_STR]",
+     "A:amber",
+     "C:[API:OBJ_END]",
+     "C:[API:OBJ_END]",
+     "C:[API:PAYLOAD_END]",
+     "C:[RULES_START]",
+     "C:[RULES_END]",
+     "C:[SEQ_END]"
+    ],
+    "masked_paths": [],
+    "tensor": "ok"
+   }
+  },
+  {
+   "id": "dev-g-04",
+   "group": "dev_generated",
+   "description": "seeded case with 6 top-level payload fields",
+   "input": {
+    "format": "envelope",
+    "context": {
+     "event_id": "dev-g-04",
+     "metadata": {
+      "method": "DELETE",
+      "path": "/v1",
+      "headers": {
+       "content-type": "application/json"
+      }
+     },
+     "payload": {
+      "fld_01": [
+       false,
+       5825
+      ],
+      "fld_50": 25.9,
+      "fld_22": "zephyr",
+      "fld_56": {
+       "fld_19": "harbor",
+       "fld_14": {
+        "fld_06": null,
+        "fld_45": "raven"
+       }
+      },
+      "fld_47": null,
+      "fld_58": {
+       "fld_15": 3935,
+       "fld_51": null,
+       "fld_90": [
+        "willow",
+        82.96
+       ]
+      },
+      "password": "pw-821"
+     }
+    },
+    "rule_info": {
+     "event_id": "dev-g-04",
+     "rules": [
+      {
+       "rule_id": "MOCK-G-04-0",
+       "severity": "low"
+      },
+      {
+       "rule_id": "MOCK-G-04-1",
+       "severity": "medium"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "fused": {
+     "event_id": "dev-g-04",
+     "method": "DELETE",
+     "path": "/v1",
+     "headers": {
+      "content-type": "application/json"
+     },
+     "payload": {
+      "fld_01": [
+       false,
+       5825
+      ],
+      "fld_50": 25.9,
+      "fld_22": "zephyr",
+      "fld_56": {
+       "fld_19": "harbor",
+       "fld_14": {
+        "fld_06": null,
+        "fld_45": "raven"
+       }
+      },
+      "fld_47": null,
+      "fld_58": {
+       "fld_15": 3935,
+       "fld_51": null,
+       "fld_90": [
+        "willow",
+        82.96
+       ]
+      },
+      "password": "pw-821"
+     },
+     "content_type": null,
+     "client_ip": null,
+     "threat_score": null,
+     "rules": [
+      {
+       "rule_id": "MOCK-G-04-0",
+       "attributes": {
+        "severity": "low"
+       }
+      },
+      {
+       "rule_id": "MOCK-G-04-1",
+       "attributes": {
+        "severity": "medium"
+       }
+      }
+     ]
+    },
+    "tokens": [
+     "C:[SEQ_START]",
+     "C:[API:METHOD]",
+     "A:DELETE",
+     "C:[API:PATH_START]",
+     "C:[API:PATH_SEG]",
+     "A:v1",
+     "C:[API:PATH_END]",
+     "C:[API:HEADERS_START]",
+     "C:[API:HEADER_NAME]",
+     "A:content-type",
+     "C:[API:HEADER_VALUE]",
+     "A:application/json",
+     "C:[API:HEADERS_END]",
+     "C:[API:PAYLOAD_START]",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_01",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:VAL_INT]",
+     "A:5825",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_22",
+     "C:[API:VAL_STR]",
+     "A:zephyr",
+     "C:[API:KEY]",
+     "A:fld_47",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_50",
+     "C:[API:VAL_FLOAT]",
+     "A:25.9",
+     "C:[API:KEY]",
+     "A:fld_56",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_14",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_06",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_45",
+     "C:[API:VAL_STR]",
+     "A:raven",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_19",
+     "C:[API:VAL_STR]",
+     "A:harbor",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_58",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_15",
+     "C:[API:VAL_INT]",
+     "A:3935",
+     "C:[API:KEY]",
+     "A:fld_51",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_90",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_STR]",
+     "A:willow",
+     "C:[API:VAL_FLOAT]",
+     "A:82.96",
+     "C:[API:LIST_END]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:password",
+     "C:[API:VAL_MASKED_STR]",
+     "M:[MASKED_SECRET]",
+     "C:[API:OBJ_END]",
+     "C:[API:PAYLOAD_END]",
+     "C:[RULES_START]",
+     "C:[RULE_START]",
+     "C:[RULE:ID]",
+     "R:MOCK-G-04-0",
+     "C:[RULE:ATTRS_START]",
+     "C:[RULE:OBJ_START]",
+     "C:[RULE:KEY]",
+     "R:severity",
+     "C:[RULE:VAL_STR]",
+     "R:low",
+     "C:[RULE:OBJ_END]",
+     "C:[RULE:ATTRS_END]",
+     "C:[RULE_END]",
+     "C:[RULE_START]",
+     "C:[RULE:ID]",
+     "R:MOCK-G-04-1",
+     "C:[RULE:ATTRS_START]",
+     "C:[RULE:OBJ_START]",
+     "C:[RULE:KEY]",
+     "R:severity",
+     "C:[RULE:VAL_STR]",
+     "R:medium",
+     "C:[RULE:OBJ_END]",
+     "C:[RULE:ATTRS_END]",
+     "C:[RULE_END]",
+     "C:[RULES_END]",
+     "C:[SEQ_END]"
+    ],
+    "masked_paths": [
+     [
+      "payload",
+      "password"
+     ]
+    ],
+    "tensor": "ok"
+   }
+  },
+  {
+   "id": "dev-g-05",
+   "group": "dev_generated",
+   "description": "seeded case with 8 top-level payload fields",
+   "input": {
+    "format": "envelope",
+    "context": {
+     "event_id": "dev-g-05",
+     "metadata": {
+      "method": "PUT",
+      "path": "/inventory/users/users/5731",
+      "headers": {
+       "user-agent": "demo-agent/1.0",
+       "accept": "text/plain",
+       "authorization": "Bearer syn-342"
+      }
+     },
+     "payload": {
+      "fld_10": 5135,
+      "fld_87": [
+       false,
+       null
+      ],
+      "fld_00": [
+       22.38,
+       true,
+       true
+      ],
+      "fld_96": "raven",
+      "fld_85": {
+       "fld_52": {
+        "fld_04": null,
+        "fld_12": false,
+        "fld_51": 92.32
+       },
+       "fld_39": 6156
+      },
+      "fld_91": {
+       "fld_83": [
+        "dune",
+        6355,
+        36.98
+       ],
+       "fld_70": 58.73
+      },
+      "fld_12": 9668,
+      "fld_76": 4281
+     }
+    },
+    "rule_info": null
+   },
+   "expect": {
+    "fused": {
+     "event_id": "dev-g-05",
+     "method": "PUT",
+     "path": "/inventory/users/users/5731",
+     "headers": {
+      "user-agent": "demo-agent/1.0",
+      "accept": "text/plain",
+      "authorization": "Bearer syn-342"
+     },
+     "payload": {
+      "fld_10": 5135,
+      "fld_87": [
+       false,
+       null
+      ],
+      "fld_00": [
+       22.38,
+       true,
+       true
+      ],
+      "fld_96": "raven",
+      "fld_85": {
+       "fld_52": {
+        "fld_04": null,
+        "fld_12": false,
+        "fld_51": 92.32
+       },
+       "fld_39": 6156
+      },
+      "fld_91": {
+       "fld_83": [
+        "dune",
+        6355,
+        36.98
+       ],
+       "fld_70": 58.73
+      },
+      "fld_12": 9668,
+      "fld_76": 4281
+     },
+     "content_type": null,
+     "client_ip": null,
+     "threat_score": null,
+     "rules": []
+    },
+    "tokens": [
+     "C:[SEQ_START]",
+     "C:[API:METHOD]",
+     "A:PUT",
+     "C:[API:PATH_START]",
+     "C:[API:PATH_SEG]",
+     "A:inventory",
+     "C:[API:PATH_SEG]",
+     "A:users",
+     "C:[API:PATH_SEG]",
+     "A:users",
+     "C:[API:PATH_SEG]",
+     "A:5731",
+     "C:[API:PATH_END]",
+     "C:[API:HEADERS_START]",
+     "C:[API:HEADER_NAME]",
+     "A:accept",
+     "C:[API:HEADER_VALUE]",
+     "A:text/plain",
+     "C:[API:HEADER_NAME]",
+     "A:authorization",
+     "C:[API:HEADER_VALUE_MASKED]",
+     "M:[MASKED_AUTH]",
+     "C:[API:HEADER_NAME]",
+     "A:user-agent",
+     "C:[API:HEADER_VALUE]",
+     "A:demo-agent/1.0",
+     "C:[API:HEADERS_END]",
+     "C:[API:PAYLOAD_START]",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_00",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_FLOAT]",
+     "A:22.38",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_10",
+     "C:[API:VAL_INT]",
+     "A:5135",
+     "C:[API:KEY]",
+     "A:fld_12",
+     "C:[API:VAL_INT]",
+     "A:9668",
+     "C:[API:KEY]",
+     "A:fld_76",
+     "C:[API:VAL_INT]",
+     "A:4281",
+     "C:[API:KEY]",
+     "A:fld_85",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_39",
+     "C:[API:VAL_INT]",
+     "A:6156",
+     "C:[API:KEY]",
+     "A:fld_52",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_04",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_12",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:KEY]",
+     "A:fld_51",
+     "C:[API:VAL_FLOAT]",
+     "A:92.32",
+     "C:[API:OBJ_END]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_87",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:VAL_NULL]",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_91",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_70",
+     "C:[API:VAL_FLOAT]",
+     "A:58.73",
+     "C:[API:KEY]",
+     "A:fld_83",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_STR]",
+     "A:dune",
+     "C:[API:VAL_INT]",
+     "A:6355",
+     "C:[API:VAL_FLOAT]",
+     "A:36.98",
+     "C:[API:LIST_END]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_96",
+     "C:[API:VAL_STR]",
+     "A:raven",
+     "C:[API:OBJ_END]",
+     "C:[API:PAYLOAD_END]",
+     "C:[RULES_START]",
+     "C:[RULES_END]",
+     "C:[SEQ_END]"
+    ],
+    "masked_paths": [
+     [
+      "headers",
+      "authorization"
+     ]
+    ],
+    "tensor": "ok"
+   }
+  },
+  {
+   "id": "dev-g-06",
+   "group": "dev_generated",
+   "description": "seeded case with 10 top-level payload fields",
+   "input": {
+    "format": "envelope",
+    "context": {
+     "event_id": "dev-g-06",
+     "metadata": {
+      "method": "PUT",
+      "path": "/inventory/items/2228",
+      "headers": {
+       "user-agent": "demo-agent/2.0",
+       "accept": "application/json"
+      }
+     },
+     "payload": {
+      "fld_74": {
+       "fld_21": {
+        "fld_53": null,
+        "fld_81": "cobalt",
+        "fld_25": 2332
+       },
+       "fld_47": {
+        "fld_00": false,
+        "fld_36": "grove",
+        "fld_80": 13.21
+       },
+       "fld_71": "elm"
+      },
+      "fld_90": 3722,
+      "fld_64": null,
+      "fld_16": [
+       9058,
+       42.97
+      ],
+      "fld_46": {
+       "fld_81": "birch",
+       "fld_01": [
+        935,
+        false
+       ]
+      },
+      "fld_95": null,
+      "fld_62": true,
+      "fld_51": false,
+      "fld_89": 986,
+      "fld_03": [
+       50.11,
+       8816
+      ]
+     }
+    },
+    "rule_info": null
+   },
+   "expect": {
+    "fused": {
+     "event_id": "dev-g-06",
+     "method": "PUT",
+     "path": "/inventory/items/2228",
+     "headers": {
+      "user-agent": "demo-agent/2.0",
+      "accept": "application/json"
+     },
+     "payload": {
+      "fld_74": {
+       "fld_21": {
+        "fld_53": null,
+        "fld_81": "cobalt",
+        "fld_25": 2332
+       },
+       "fld_47": {
+        "fld_00": false,
+        "fld_36": "grove",
+        "fld_80": 13.21
+       },
+       "fld_71": "elm"
+      },
+      "fld_90": 3722,
+      "fld_64": null,
+      "fld_16": [
+       9058,
+       42.97
+      ],
+      "fld_46": {
+       "fld_81": "birch",
+       "fld_01": [
+        935,
+        false
+       ]
+      },
+      "fld_95": null,
+      "fld_62": true,
+      "fld_51": false,
+      "fld_89": 986,
+      "fld_03": [
+       50.11,
+       8816
+      ]
+     },
+     "content_type": null,
+     "client_ip": null,
+     "threat_score": null,
+     "rules": []
+    },
+    "tokens": [
+     "C:[SEQ_START]",
+     "C:[API:METHOD]",
+     "A:PUT",
+     "C:[API:PATH_START]",
+     "C:[API:PATH_SEG]",
+     "A:inventory",
+     "C:[API:PATH_SEG]",
+     "A:items",
+     "C:[API:PATH_SEG]",
+     "A:2228",
+     "C:[API:PATH_END]",
+     "C:[API:HEADERS_START]",
+     "C:[API:HEADER_NAME]",
+     "A:accept",
+     "C:[API:HEADER_VALUE]",
+     "A:application/json",
+     "C:[API:HEADER_NAME]",
+     "A:user-agent",
+     "C:[API:HEADER_VALUE]",
+     "A:demo-agent/2.0",
+     "C:[API:HEADERS_END]",
+     "C:[API:PAYLOAD_START]",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_03",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_FLOAT]",
+     "A:50.11",
+     "C:[API:VAL_INT]",
+     "A:8816",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_16",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_INT]",
+     "A:9058",
+     "C:[API:VAL_FLOAT]",
+     "A:42.97",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_46",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_01",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_INT]",
+     "A:935",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_81",
+     "C:[API:VAL_STR]",
+     "A:birch",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_51",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:KEY]",
+     "A:fld_62",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:KEY]",
+     "A:fld_64",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_74",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_21",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_25",
+     "C:[API:VAL_INT]",
+     "A:2332",
+     "C:[API:KEY]",
+     "A:fld_53",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_81",
+     "C:[API:VAL_STR]",
+     "A:cobalt",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_47",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_00",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:KEY]",
+     "A:fld_36",
+     "C:[API:VAL_STR]",
+     "A:grove",
+     "C:[API:KEY]",
+     "A:fld_80",
+     "C:[API:VAL_FLOAT]",
+     "A:13.21",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_71",
+     "C:[API:VAL_STR]",
+     "A:elm",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_89",
+     "C:[API:VAL_INT]",
+     "A:986",
+     "C:[API:KEY]",
+     "A:fld_90",
+     "C:[API:VAL_INT]",
+     "A:3722",
+     "C:[API:KEY]",
+     "A:fld_95",
+     "C:[API:VAL_NULL]",
+     "C:[API:OBJ_END]",
+     "C:[API:PAYLOAD_END]",
+     "C:[RULES_START]",
+     "C:[RULES_END]",
+     "C:[SEQ_END]"
+    ],
+    "masked_paths": [],
+    "tensor": "ok"
+   }
+  },
+  {
+   "id": "dev-g-07",
+   "group": "dev_generated",
+   "description": "seeded case with 12 top-level payload fields",
+   "input": {
+    "format": "envelope",
+    "context": {
+     "event_id": "dev-g-07",
+     "metadata": {
+      "method": "PUT",
+      "path": "/search/products",
+      "headers": {
+       "content-type": "application/json",
+       "user-agent": "demo-agent/2.0",
+       "authorization": "Bearer syn-393"
+      }
+     },
+     "payload": {
+      "fld_18": {
+       "fld_30": true,
+       "fld_12": {
+        "fld_69": "pebble",
+        "fld_93": null,
+        "fld_61": false
+       },
+       "fld_55": "orchid"
+      },
+      "fld_15": "tundra",
+      "fld_92": {
+       "fld_22": 68.53,
+       "fld_88": 6376
+      },
+      "fld_64": 71.59,
+      "fld_27": {
+       "fld_53": "raven",
+       "fld_69": "garnet",
+       "fld_47": true
+      },
+      "fld_55": {
+       "fld_94": "orchid",
+       "fld_53": [
+        "meadow",
+        "cobalt"
+       ],
+       "fld_26": "lotus"
+      },
+      "fld_44": [
+       true,
+       "yarrow",
+       false
+      ],
+      "fld_49": 99.71,
+      "fld_91": 93.72,
+      "fld_42": [
+       3374,
+       false
+      ],
+      "fld_94": [
+       false,
+       68.26,
+       6203
+      ],
+      "fld_56": true,
+      "password": "pw-969"
+     }
+    },
+    "rule_info": {
+     "event_id": "dev-g-07",
+     "rules": [
+      {
+       "rule_id": "MOCK-G-07-0",
+       "severity": "low",
+       "limit": 45
+      },
+      {
+       "rule_id": "MOCK-G-07-1",
+       "severity": "low",
+       "limit": 26
+      }
+     ]
+    }
+   },
+   "expect": {
+    "fused": {
+     "event_id": "dev-g-07",
+     "method": "PUT",
+     "path": "/search/products",
+     "headers": {
+      "content-type": "application/json",
+      "user-agent": "demo-agent/2.0",
+      "authorization": "Bearer syn-393"
+     },
+     "payload": {
+      "fld_18": {
+       "fld_30": true,
+       "fld_12": {
+        "fld_69": "pebble",
+        "fld_93": null,
+        "fld_61": false
+       },
+       "fld_55": "orchid"
+      },
+      "fld_15": "tundra",
+      "fld_92": {
+       "fld_22": 68.53,
+       "fld_88": 6376
+      },
+      "fld_64": 71.59,
+      "fld_27": {
+       "fld_53": "raven",
+       "fld_69": "garnet",
+       "fld_47": true
+      },
+      "fld_55": {
+       "fld_94": "orchid",
+       "fld_53": [
+        "meadow",
+        "cobalt"
+       ],
+       "fld_26": "lotus"
+      },
+      "fld_44": [
+       true,
+       "yarrow",
+       false
+      ],
+      "fld_49": 99.71,
+      "fld_91": 93.72,
+      "fld_42": [
+       3374,
+       false
+      ],
+      "fld_94": [
+       false,
+       68.26,
+       6203
+      ],
+      "fld_56": true,
+      "password": "pw-969"
+     },
+     "content_type": null,
+     "client_ip": null,
+     "threat_score": null,
+     "rules": [
+      {
+       "rule_id": "MOCK-G-07-0",
+       "attributes": {
+        "severity": "low",
+        "limit": 45
+       }
+      },
+      {
+       "rule_id": "MOCK-G-07-1",
+       "attributes": {
+        "severity": "low",
+        "limit": 26
+       }
+      }
+     ]
+    },
+    "tokens": [
+     "C:[SEQ_START]",
+     "C:[API:METHOD]",
+     "A:PUT",
+     "C:[API:PATH_START]",
+     "C:[API:PATH_SEG]",
+     "A:search",
+     "C:[API:PATH_SEG]",
+     "A:products",
+     "C:[API:PATH_END]",
+     "C:[API:HEADERS_START]",
+     "C:[API:HEADER_NAME]",
+     "A:authorization",
+     "C:[API:HEADER_VALUE_MASKED]",
+     "M:[MASKED_AUTH]",
+     "C:[API:HEADER_NAME]",
+     "A:content-type",
+     "C:[API:HEADER_VALUE]",
+     "A:application/json",
+     "C:[API:HEADER_NAME]",
+     "A:user-agent",
+     "C:[API:HEADER_VALUE]",
+     "A:demo-agent/2.0",
+     "C:[API:HEADERS_END]",
+     "C:[API:PAYLOAD_START]",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_15",
+     "C:[API:VAL_STR]",
+     "A:tundra",
+     "C:[API:KEY]",
+     "A:fld_18",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_12",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_61",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:KEY]",
+     "A:fld_69",
+     "C:[API:VAL_STR]",
+     "A:pebble",
+     "C:[API:KEY]",
+     "A:fld_93",
+     "C:[API:VAL_NULL]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_30",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:KEY]",
+     "A:fld_55",
+     "C:[API:VAL_STR]",
+     "A:orchid",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_27",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_47",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:KEY]",
+     "A:fld_53",
+     "C:[API:VAL_STR]",
+     "A:raven",
+     "C:[API:KEY]",
+     "A:fld_69",
+     "C:[API:VAL_STR]",
+     "A:garnet",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_42",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_INT]",
+     "A:3374",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_44",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:VAL_STR]",
+     "A:yarrow",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_49",
+     "C:[API:VAL_FLOAT]",
+     "A:99.71",
+     "C:[API:KEY]",
+     "A:fld_55",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_26",
+     "C:[API:VAL_STR]",
+     "A:lotus",
+     "C:[API:KEY]",
+     "A:fld_53",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_STR]",
+     "A:meadow",
+     "C:[API:VAL_STR]",
+     "A:cobalt",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_94",
+     "C:[API:VAL_STR]",
+     "A:orchid",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_56",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:KEY]",
+     "A:fld_64",
+     "C:[API:VAL_FLOAT]",
+     "A:71.59",
+     "C:[API:KEY]",
+     "A:fld_91",
+     "C:[API:VAL_FLOAT]",
+     "A:93.72",
+     "C:[API:KEY]",
+     "A:fld_92",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_22",
+     "C:[API:VAL_FLOAT]",
+     "A:68.53",
+     "C:[API:KEY]",
+     "A:fld_88",
+     "C:[API:VAL_INT]",
+     "A:6376",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_94",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:VAL_FLOAT]",
+     "A:68.26",
+     "C:[API:VAL_INT]",
+     "A:6203",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:password",
+     "C:[API:VAL_MASKED_STR]",
+     "M:[MASKED_SECRET]",
+     "C:[API:OBJ_END]",
+     "C:[API:PAYLOAD_END]",
+     "C:[RULES_START]",
+     "C:[RULE_START]",
+     "C:[RULE:ID]",
+     "R:MOCK-G-07-0",
+     "C:[RULE:ATTRS_START]",
+     "C:[RULE:OBJ_START]",
+     "C:[RULE:KEY]",
+     "R:limit",
+     "C:[RULE:VAL_INT]",
+     "R:45",
+     "C:[RULE:KEY]",
+     "R:severity",
+     "C:[RULE:VAL_STR]",
+     "R:low",
+     "C:[RULE:OBJ_END]",
+     "C:[RULE:ATTRS_END]",
+     "C:[RULE_END]",
+     "C:[RULE_START]",
+     "C:[RULE:ID]",
+     "R:MOCK-G-07-1",
+     "C:[RULE:ATTRS_START]",
+     "C:[RULE:OBJ_START]",
+     "C:[RULE:KEY]",
+     "R:limit",
+     "C:[RULE:VAL_INT]",
+     "R:26",
+     "C:[RULE:KEY]",
+     "R:severity",
+     "C:[RULE:VAL_STR]",
+     "R:low",
+     "C:[RULE:OBJ_END]",
+     "C:[RULE:ATTRS_END]",
+     "C:[RULE_END]",
+     "C:[RULES_END]",
+     "C:[SEQ_END]"
+    ],
+    "masked_paths": [
+     [
+      "headers",
+      "authorization"
+     ],
+     [
+      "payload",
+      "password"
+     ]
+    ],
+    "tensor": "ok"
+   }
+  },
+  {
+   "id": "dev-g-08",
+   "group": "dev_generated",
+   "description": "seeded case with 15 top-level payload fields",
+   "input": {
+    "format": "envelope",
+    "context": {
+     "event_id": "dev-g-08",
+     "metadata": {
+      "method": "POST",
+      "path": "/orders/inventory/1748",
+      "headers": {
+       "accept": "text/plain",
+       "content-type": "application/json",
+       "user-agent": "demo-agent/1.0",
+       "authorization": "Bearer syn-587"
+      }
+     },
+     "payload": {
+      "fld_60": {
+       "fld_76": "raven",
+       "fld_67": 2370
+      },
+      "fld_54": [
+       null,
+       false
+      ],
+      "fld_22": [
+       null,
+       "pebble",
+       null
+      ],
+      "fld_44": "birch",
+      "fld_70": 1799,
+      "fld_85": null,
+      "fld_82": "kestrel",
+      "fld_26": {
+       "fld_52": 3871,
+       "fld_26": "saffron",
+       "fld_47": 77.15
+      },
+      "fld_52": 5689,
+      "fld_41": 7952,
+      "fld_33": null,
+      "fld_55": false,
+      "fld_14": {
+       "fld_59": {
+        "fld_06": null,
+        "fld_89": false,
+        "fld_69": true
+       },
+       "fld_49": [
+        true,
+        54.73
+       ]
+      },
+      "fld_61": 43.15,
+      "fld_10": 4.03,
+      "password": "pw-347"
+     }
+    },
+    "rule_info": {
+     "event_id": "dev-g-08",
+     "rules": [
+      {
+       "rule_id": "MOCK-G-08-0",
+       "severity": "low",
+       "limit": 80
+      }
+     ]
+    }
+   },
+   "expect": {
+    "fused": {
+     "event_id": "dev-g-08",
+     "method": "POST",
+     "path": "/orders/inventory/1748",
+     "headers": {
+      "accept": "text/plain",
+      "content-type": "application/json",
+      "user-agent": "demo-agent/1.0",
+      "authorization": "Bearer syn-587"
+     },
+     "payload": {
+      "fld_60": {
+       "fld_76": "raven",
+       "fld_67": 2370
+      },
+      "fld_54": [
+       null,
+       false
+      ],
+      "fld_22": [
+       null,
+       "pebble",
+       null
+      ],
+      "fld_44": "birch",
+      "fld_70": 1799,
+      "fld_85": null,
+      "fld_82": "kestrel",
+      "fld_26": {
+       "fld_52": 3871,
+       "fld_26": "saffron",
+       "fld_47": 77.15
+      },
+      "fld_52": 5689,
+      "fld_41": 7952,
+      "fld_33": null,
+      "fld_55": false,
+      "fld_14": {
+       "fld_59": {
+        "fld_06": null,
+        "fld_89": false,
+        "fld_69": true
+       },
+       "fld_49": [
+        true,
+        54.73
+       ]
+      },
+      "fld_61": 43.15,
+      "fld_10": 4.03,
+      "password": "pw-347"
+     },
+     "content_type": null,
+     "client_ip": null,
+     "threat_score": null,
+     "rules": [
+      {
+       "rule_id": "MOCK-G-08-0",
+       "attributes": {
+        "severity": "low",
+        "limit": 80
+       }
+      }
+     ]
+    },
+    "tokens": [
+     "C:[SEQ_START]",
+     "C:[API:METHOD]",
+     "A:POST",
+     "C:[API:PATH_START]",
+     "C:[API:PATH_SEG]",
+     "A:orders",
+     "C:[API:PATH_SEG]",
+     "A:inventory",
+     "C:[API:PATH_SEG]",
+     "A:1748",
+     "C:[API:PATH_END]",
+     "C:[API:HEADERS_START]",
+     "C:[API:HEADER_NAME]",
+     "A:accept",
+     "C:[API:HEADER_VALUE]",
+     "A:text/plain",
+     "C:[API:HEADER_NAME]",
+     "A:authorization",
+     "C:[API:HEADER_VALUE_MASKED]",
+     "M:[MASKED_AUTH]",
+     "C:[API:HEADER_NAME]",
+     "A:content-type",
+     "C:[API:HEADER_VALUE]",
+     "A:application/json",
+     "C:[API:HEADER_NAME]",
+     "A:user-agent",
+     "C:[API:HEADER_VALUE]",
+     "A:demo-agent/1.0",
+     "C:[API:HEADERS_END]",
+     "C:[API:PAYLOAD_START]",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_10",
+     "C:[API:VAL_FLOAT]",
+     "A:4.03",
+     "C:[API:KEY]",
+     "A:fld_14",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_49",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:VAL_FLOAT]",
+     "A:54.73",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_59",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_06",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_69",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:KEY]",
+     "A:fld_89",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:OBJ_END]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_22",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_NULL]",
+     "C:[API:VAL_STR]",
+     "A:pebble",
+     "C:[API:VAL_NULL]",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_26",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_26",
+     "C:[API:VAL_STR]",
+     "A:saffron",
+     "C:[API:KEY]",
+     "A:fld_47",
+     "C:[API:VAL_FLOAT]",
+     "A:77.15",
+     "C:[API:KEY]",
+     "A:fld_52",
+     "C:[API:VAL_INT]",
+     "A:3871",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_33",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_41",
+     "C:[API:VAL_INT]",
+     "A:7952",
+     "C:[API:KEY]",
+     "A:fld_44",
+     "C:[API:VAL_STR]",
+     "A:birch",
+     "C:[API:KEY]",
+     "A:fld_52",
+     "C:[API:VAL_INT]",
+     "A:5689",
+     "C:[API:KEY]",
+     "A:fld_54",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_NULL]",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_55",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:KEY]",
+     "A:fld_60",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_67",
+     "C:[API:VAL_INT]",
+     "A:2370",
+     "C:[API:KEY]",
+     "A:fld_76",
+     "C:[API:VAL_STR]",
+     "A:raven",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_61",
+     "C:[API:VAL_FLOAT]",
+     "A:43.15",
+     "C:[API:KEY]",
+     "A:fld_70",
+     "C:[API:VAL_INT]",
+     "A:1799",
+     "C:[API:KEY]",
+     "A:fld_82",
+     "C:[API:VAL_STR]",
+     "A:kestrel",
+     "C:[API:KEY]",
+     "A:fld_85",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:password",
+     "C:[API:VAL_MASKED_STR]",
+     "M:[MASKED_SECRET]",
+     "C:[API:OBJ_END]",
+     "C:[API:PAYLOAD_END]",
+     "C:[RULES_START]",
+     "C:[RULE_START]",
+     "C:[RULE:ID]",
+     "R:MOCK-G-08-0",
+     "C:[RULE:ATTRS_START]",
+     "C:[RULE:OBJ_START]",
+     "C:[RULE:KEY]",
+     "R:limit",
+     "C:[RULE:VAL_INT]",
+     "R:80",
+     "C:[RULE:KEY]",
+     "R:severity",
+     "C:[RULE:VAL_STR]",
+     "R:low",
+     "C:[RULE:OBJ_END]",
+     "C:[RULE:ATTRS_END]",
+     "C:[RULE_END]",
+     "C:[RULES_END]",
+     "C:[SEQ_END]"
+    ],
+    "masked_paths": [
+     [
+      "headers",
+      "authorization"
+     ],
+     [
+      "payload",
+      "password"
+     ]
+    ],
+    "tensor": "ok"
+   }
+  },
+  {
+   "id": "dev-g-09",
+   "group": "dev_generated",
+   "description": "seeded case with 20 top-level payload fields",
+   "input": {
+    "format": "envelope",
+    "context": {
+     "event_id": "dev-g-09",
+     "metadata": {
+      "method": "POST",
+      "path": "/v1/inventory/reports/5437",
+      "headers": {
+       "user-agent": "demo-agent/2.0"
+      }
+     },
+     "payload": {
+      "fld_76": [
+       false,
+       true,
+       "pebble"
+      ],
+      "fld_11": 8702,
+      "fld_37": 290,
+      "fld_31": {
+       "fld_87": "ember",
+       "fld_68": "umber"
+      },
+      "fld_56": [
+       null,
+       97.88,
+       3081
+      ],
+      "fld_57": "island",
+      "fld_10": null,
+      "fld_92": {
+       "fld_64": false,
+       "fld_34": 89.17,
+       "fld_62": [
+        false,
+        46.43,
+        87.18
+       ]
+      },
+      "fld_62": [
+       "cobalt",
+       4735,
+       true
+      ],
+      "fld_01": 48.42,
+      "fld_79": 253,
+      "fld_29": "harbor",
+      "fld_18": {
+       "fld_87": false,
+       "fld_17": {
+        "fld_72": null,
+        "fld_97": true
+       },
+       "fld_41": 49.99
+      },
+      "fld_93": null,
+      "fld_91": 5101,
+      "fld_07": "dune",
+      "fld_98": [
+       6745,
+       null,
+       true
+      ],
+      "fld_64": {
+       "fld_27": 20.47,
+       "fld_10": {
+        "fld_98": "nectar",
+        "fld_82": null,
+        "fld_54": false
+       },
+       "fld_68": true
+      },
+      "fld_72": {
+       "fld_31": {
+        "fld_14": 50.94,
+        "fld_90": 1261
+       },
+       "fld_37": 28.76
+      },
+      "fld_60": 6439,
+      "password": "pw-928"
+     }
+    },
+    "rule_info": null
+   },
+   "expect": {
+    "fused": {
+     "event_id": "dev-g-09",
+     "method": "POST",
+     "path": "/v1/inventory/reports/5437",
+     "headers": {
+      "user-agent": "demo-agent/2.0"
+     },
+     "payload": {
+      "fld_76": [
+       false,
+       true,
+       "pebble"
+      ],
+      "fld_11": 8702,
+      "fld_37": 290,
+      "fld_31": {
+       "fld_87": "ember",
+       "fld_68": "umber"
+      },
+      "fld_56": [
+       null,
+       97.88,
+       3081
+      ],
+      "fld_57": "island",
+      "fld_10": null,
+      "fld_92": {
+       "fld_64": false,
+       "fld_34": 89.17,
+       "fld_62": [
+        false,
+        46.43,
+        87.18
+       ]
+      },
+      "fld_62": [
+       "cobalt",
+       4735,
+       true
+      ],
+      "fld_01": 48.42,
+      "fld_79": 253,
+      "fld_29": "harbor",
+      "fld_18": {
+       "fld_87": false,
+       "fld_17": {
+        "fld_72": null,
+        "fld_97": true
+       },
+       "fld_41": 49.99
+      },
+      "fld_93": null,
+      "fld_91": 5101,
+      "fld_07": "dune",
+      "fld_98": [
+       6745,
+       null,
+       true
+      ],
+      "fld_64": {
+       "fld_27": 20.47,
+       "fld_10": {
+        "fld_98": "nectar",
+        "fld_82": null,
+        "fld_54": false
+       },
+       "fld_68": true
+      },
+      "fld_72": {
+       "fld_31": {
+        "fld_14": 50.94,
+        "fld_90": 1261
+       },
+       "fld_37": 28.76
+      },
+      "fld_60": 6439,
+      "password": "pw-928"
+     },
+     "content_type": null,
+     "client_ip": null,
+     "threat_score": null,
+     "rules": []
+    },
+    "tokens": [
+     "C:[SEQ_START]",
+     "C:[API:METHOD]",
+     "A:POST",
+     "C:[API:PATH_START]",
+     "C:[API:PATH_SEG]",
+     "A:v1",
+     "C:[API:PATH_SEG]",
+     "A:inventory",
+     "C:[API:PATH_SEG]",
+     "A:reports",
+     "C:[API:PATH_SEG]",
+     "A:5437",
+     "C:[API:PATH_END]",
+     "C:[API:HEADERS_START]",
+     "C:[API:HEADER_NAME]",
+     "A:user-agent",
+     "C:[API:HEADER_VALUE]",
+     "A:demo-agent/2.0",
+     "C:[API:HEADERS_END]",
+     "C:[API:PAYLOAD_START]",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_01",
+     "C:[API:VAL_FLOAT]",
+     "A:48.42",
+     "C:[API:KEY]",
+     "A:fld_07",
+     "C:[API:VAL_STR]",
+     "A:dune",
+     "C:[API:KEY]",
+     "A:fld_10",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_11",
+     "C:[API:VAL_INT]",
+     "A:8702",
+     "C:[API:KEY]",
+     "A:fld_18",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_17",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_72",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_97",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_41",
+     "C:[API:VAL_FLOAT]",
+     "A:49.99",
+     "C:[API:KEY]",
+     "A:fld_87",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_29",
+     "C:[API:VAL_STR]",
+     "A:harbor",
+     "C:[API:KEY]",
+     "A:fld_31",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_68",
+     "C:[API:VAL_STR]",
+     "A:umber",
+     "C:[API:KEY]",
+     "A:fld_87",
+     "C:[API:VAL_STR]",
+     "A:ember",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_37",
+     "C:[API:VAL_INT]",
+     "A:290",
+     "C:[API:KEY]",
+     "A:fld_56",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_NULL]",
+     "C:[API:VAL_FLOAT]",
+     "A:97.88",
+     "C:[API:VAL_INT]",
+     "A:3081",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_57",
+     "C:[API:VAL_STR]",
+     "A:island",
+     "C:[API:KEY]",
+     "A:fld_60",
+     "C:[API:VAL_INT]",
+     "A:6439",
+     "C:[API:KEY]",
+     "A:fld_62",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_STR]",
+     "A:cobalt",
+     "C:[API:VAL_INT]",
+     "A:4735",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_64",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_10",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_54",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:KEY]",
+     "A:fld_82",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_98",
+     "C:[API:VAL_STR]",
+     "A:nectar",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_27",
+     "C:[API:VAL_FLOAT]",
+     "A:20.47",
+     "C:[API:KEY]",
+     "A:fld_68",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_72",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_31",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_14",
+     "C:[API:VAL_FLOAT]",
+     "A:50.94",
+     "C:[API:KEY]",
+     "A:fld_90",
+     "C:[API:VAL_INT]",
+     "A:1261",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_37",
+     "C:[API:VAL_FLOAT]",
+     "A:28.76",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_76",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:VAL_STR]",
+     "A:pebble",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_79",
+     "C:[API:VAL_INT]",
+     "A:253",
+     "C:[API:KEY]",
+     "A:fld_91",
+     "C:[API:VAL_INT]",
+     "A:5101",
+     "C:[API:KEY]",
+     "A:fld_92",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_34",
+     "C:[API:VAL_FLOAT]",
+     "A:89.17",
+     "C:[API:KEY]",
+     "A:fld_62",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:VAL_FLOAT]",
+     "A:46.43",
+     "C:[API:VAL_FLOAT]",
+     "A:87.18",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_64",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_93",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_98",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_INT]",
+     "A:6745",
+     "C:[API:VAL_NULL]",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:password",
+     "C:[API:VAL_MASKED_STR]",
+     "M:[MASKED_SECRET]",
+     "C:[API:OBJ_END]",
+     "C:[API:PAYLOAD_END]",
+     "C:[RULES_START]",
+     "C:[RULES_END]",
+     "C:[SEQ_END]"
+    ],
+    "masked_paths": [
+     [
+      "payload",
+      "password"
+     ]
+    ],
+    "tensor": "ok"
+   }
+  },
+  {
+   "id": "dev-g-10",
+   "group": "dev_generated",
+   "description": "seeded case with 25 top-level payload fields",
+   "input": {
+    "format": "envelope",
+    "context": {
+     "event_id": "dev-g-10",
+     "metadata": {
+      "method": "POST",
+      "path": "/items/reports/reports",
+      "headers": {
+       "authorization": "Bearer syn-486"
+      }
+     },
+     "payload": {
+      "fld_04": "falcon",
+      "fld_63": 2393,
+      "fld_85": {
+       "fld_32": 6691,
+       "fld_47": "kelp"
+      },
+      "fld_11": "yarrow",
+      "fld_69": 94.63,
+      "fld_38": 98.02,
+      "fld_61": "iris",
+      "fld_96": {
+       "fld_95": null,
+       "fld_41": 1.01,
+       "fld_35": 9134
+      },
+      "fld_92": "zephyr",
+      "fld_45": "umber",
+      "fld_56": {
+       "fld_98": null,
+       "fld_56": 2102,
+       "fld_65": 41.46
+      },
+      "fld_72": {
+       "fld_63": "umber",
+       "fld_79": 29.26
+      },
+      "fld_13": "umber",
+      "fld_80": [
+       null,
+       null,
+       false
+      ],
+      "fld_27": [
+       40.78,
+       1861,
+       true
+      ],
+      "fld_88": false,
+      "fld_59": true,
+      "fld_41": {
+       "fld_31": [
+        null,
+        93.45
+       ],
+       "fld_73": true
+      },
+      "fld_24": [
+       6219,
+       null,
+       true
+      ],
+      "fld_95": [
+       false,
+       24.05
+      ],
+      "fld_03": [
+       98.79,
+       "pebble"
+      ],
+      "fld_68": [
+       false,
+       null,
+       5555
+      ],
+      "fld_22": "nimbus",
+      "fld_10": [
+       82.4,
+       "iris"
+      ],
+      "fld_20": [
+       "lotus",
+       4974
+      ],
+      "password": "pw-625"
+     }
+    },
+    "rule_info": {
+     "event_id": "dev-g-10",
+     "rules": [
+      {
+       "rule_id": "MOCK-G-10-0",
+       "severity": "high",
+       "limit": 37
+      }
+     ]
+    }
+   },
+   "expect": {
+    "fused": {
+     "event_id": "dev-g-10",
+     "method": "POST",
+     "path": "/items/reports/reports",
+     "headers": {
+      "authorization": "Bearer syn-486"
+     },
+     "payload": {
+      "fld_04": "falcon",
+      "fld_63": 2393,
+      "fld_85": {
+       "fld_32": 6691,
+       "fld_47": "kelp"
+      },
+      "fld_11": "yarrow",
+      "fld_69": 94.63,
+      "fld_38": 98.02,
+      "fld_61": "iris",
+      "fld_96": {
+       "fld_95": null,
+       "fld_41": 1.01,
+       "fld_35": 9134
+      },
+      "fld_92": "zephyr",
+      "fld_45": "umber",
+      "fld_56": {
+       "fld_98": null,
+       "fld_56": 2102,
+       "fld_65": 41.46
+      },
+      "fld_72": {
+       "fld_63": "umber",
+       "fld_79": 29.26
+      },
+      "fld_13": "umber",
+      "fld_80": [
+       null,
+       null,
+       false
+      ],
+      "fld_27": [
+       40.78,
+       1861,
+       true
+      ],
+      "fld_88": false,
+      "fld_59": true,
+      "fld_41": {
+       "fld_31": [
+        null,
+        93.45
+       ],
+       "fld_73": true
+      },
+      "fld_24": [
+       6219,
+       null,
+       true
+      ],
+      "fld_95": [
+       false,
+       24.05
+      ],
+      "fld_03": [
+       98.79,
+       "pebble"
+      ],
+      "fld_68": [
+       false,
+       null,
+       5555
+      ],
+      "fld_22": "nimbus",
+      "fld_10": [
+       82.4,
+       "iris"
+      ],
+      "fld_20": [
+       "lotus",
+       4974
+      ],
+      "password": "pw-625"
+     },
+     "content_type": null,
+     "client_ip": null,
+     "threat_score": null,
+     "rules": [
+      {
+       "rule_id": "MOCK-G-10-0",
+       "attributes": {
+        "severity": "high",
+        "limit": 37
+       }
+      }
+     ]
+    },
+    "tokens": [
+     "C:[SEQ_START]",
+     "C:[API:METHOD]",
+     "A:POST",
+     "C:[API:PATH_START]",
+     "C:[API:PATH_SEG]",
+     "A:items",
+     "C:[API:PATH_SEG]",
+     "A:reports",
+     "C:[API:PATH_SEG]",
+     "A:reports",
+     "C:[API:PATH_END]",
+     "C:[API:HEADERS_START]",
+     "C:[API:HEADER_NAME]",
+     "A:authorization",
+     "C:[API:HEADER_VALUE_MASKED]",
+     "M:[MASKED_AUTH]",
+     "C:[API:HEADERS_END]",
+     "C:[API:PAYLOAD_START]",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_03",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_FLOAT]",
+     "A:98.79",
+     "C:[API:VAL_STR]",
+     "A:pebble",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_04",
+     "C:[API:VAL_STR]",
+     "A:falcon",
+     "C:[API:KEY]",
+     "A:fld_10",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_FLOAT]",
+     "A:82.4",
+     "C:[API:VAL_STR]",
+     "A:iris",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_11",
+     "C:[API:VAL_STR]",
+     "A:yarrow",
+     "C:[API:KEY]",
+     "A:fld_13",
+     "C:[API:VAL_STR]",
+     "A:umber",
+     "C:[API:KEY]",
+     "A:fld_20",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_STR]",
+     "A:lotus",
+     "C:[API:VAL_INT]",
+     "A:4974",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_22",
+     "C:[API:VAL_STR]",
+     "A:nimbus",
+     "C:[API:KEY]",
+     "A:fld_24",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_INT]",
+     "A:6219",
+     "C:[API:VAL_NULL]",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_27",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_FLOAT]",
+     "A:40.78",
+     "C:[API:VAL_INT]",
+     "A:1861",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_38",
+     "C:[API:VAL_FLOAT]",
+     "A:98.02",
+     "C:[API:KEY]",
+     "A:fld_41",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_31",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_NULL]",
+     "C:[API:VAL_FLOAT]",
+     "A:93.45",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_73",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_45",
+     "C:[API:VAL_STR]",
+     "A:umber",
+     "C:[API:KEY]",
+     "A:fld_56",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_56",
+     "C:[API:VAL_INT]",
+     "A:2102",
+     "C:[API:KEY]",
+     "A:fld_65",
+     "C:[API:VAL_FLOAT]",
+     "A:41.46",
+     "C:[API:KEY]",
+     "A:fld_98",
+     "C:[API:VAL_NULL]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_59",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:KEY]",
+     "A:fld_61",
+     "C:[API:VAL_STR]",
+     "A:iris",
+     "C:[API:KEY]",
+     "A:fld_63",
+     "C:[API:VAL_INT]",
+     "A:2393",
+     "C:[API:KEY]",
+     "A:fld_68",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:VAL_NULL]",
+     "C:[API:VAL_INT]",
+     "A:5555",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_69",
+     "C:[API:VAL_FLOAT]",
+     "A:94.63",
+     "C:[API:KEY]",
+     "A:fld_72",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_63",
+     "C:[API:VAL_STR]",
+     "A:umber",
+     "C:[API:KEY]",
+     "A:fld_79",
+     "C:[API:VAL_FLOAT]",
+     "A:29.26",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_80",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_NULL]",
+     "C:[API:VAL_NULL]",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_85",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_32",
+     "C:[API:VAL_INT]",
+     "A:6691",
+     "C:[API:KEY]",
+     "A:fld_47",
+     "C:[API:VAL_STR]",
+     "A:kelp",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_88",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:KEY]",
+     "A:fld_92",
+     "C:[API:VAL_STR]",
+     "A:zephyr",
+     "C:[API:KEY]",
+     "A:fld_95",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:VAL_FLOAT]",
+     "A:24.05",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_96",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_35",
+     "C:[API:VAL_INT]",
+     "A:9134",
+     "C:[API:KEY]",
+     "A:fld_41",
+     "C:[API:VAL_FLOAT]",
+     "A:1.01",
+     "C:[API:KEY]",
+     "A:fld_95",
+     "C:[API:VAL_NULL]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:password",
+     "C:[API:VAL_MASKED_STR]",
+     "M:[MASKED_SECRET]",
+     "C:[API:OBJ_END]",
+     "C:[API:PAYLOAD_END]",
+     "C:[RULES_START]",
+     "C:[RULE_START]",
+     "C:[RULE:ID]",
+     "R:MOCK-G-10-0",
+     "C:[RULE:ATTRS_START]",
+     "C:[RULE:OBJ_START]",
+     "C:[RULE:KEY]",
+     "R:limit",
+     "C:[RULE:VAL_INT]",
+     "R:37",
+     "C:[RULE:KEY]",
+     "R:severity",
+     "C:[RULE:VAL_STR]",
+     "R:high",
+     "C:[RULE:OBJ_END]",
+     "C:[RULE:ATTRS_END]",
+     "C:[RULE_END]",
+     "C:[RULES_END]",
+     "C:[SEQ_END]"
+    ],
+    "masked_paths": [
+     [
+      "headers",
+      "authorization"
+     ],
+     [
+      "payload",
+      "password"
+     ]
+    ],
+    "tensor": "ok"
+   }
+  },
+  {
+   "id": "dev-g-11",
+   "group": "dev_generated",
+   "description": "seeded case with 30 top-level payload fields",
+   "input": {
+    "format": "envelope",
+    "context": {
+     "event_id": "dev-g-11",
+     "metadata": {
+      "method": "PUT",
+      "path": "/inventory/items/8708",
+      "headers": {
+       "authorization": "Bearer syn-968"
+      }
+     },
+     "payload": {
+      "fld_83": 27.78,
+      "fld_03": [
+       null,
+       null,
+       3261
+      ],
+      "fld_42": {
+       "fld_88": [
+        55.69,
+        "elm"
+       ],
+       "fld_99": "harbor"
+      },
+      "fld_98": null,
+      "fld_04": "harbor",
+      "fld_66": [
+       "tundra",
+       "zephyr"
+      ],
+      "fld_11": 28.34,
+      "fld_20": true,
+      "fld_99": true,
+      "fld_09": [
+       116,
+       61.36,
+       null
+      ],
+      "fld_50": {
+       "fld_61": "quartz",
+       "fld_81": {
+        "fld_68": "delta",
+        "fld_58": true,
+        "fld_18": 4246
+       },
+       "fld_54": 5931
+      },
+      "fld_75": {
+       "fld_28": [
+        true,
+        46.85,
+        true
+       ],
+       "fld_39": false
+      },
+      "fld_22": "maple",
+      "fld_63": {
+       "fld_26": null,
+       "fld_60": {
+        "fld_25": 6032,
+        "fld_13": 4781
+       },
+       "fld_08": false
+      },
+      "fld_14": 181,
+      "fld_21": "umber",
+      "fld_86": {
+       "fld_06": "orchid",
+       "fld_77": [
+        "harbor",
+        true
+       ],
+       "fld_18": [
+        null,
+        58.23
+       ]
+      },
+      "fld_40": null,
+      "fld_57": 2405,
+      "fld_18": {
+       "fld_39": {
+        "fld_29": true,
+        "fld_39": 8959
+       },
+       "fld_96": {
+        "fld_98": false,
+        "fld_60": 7624,
+        "fld_34": true
+       }
+      },
+      "fld_27": 34.34,
+      "fld_95": null,
+      "fld_70": [
+       2900,
+       null
+      ],
+      "fld_44": 61.99,
+      "fld_62": false,
+      "fld_81": [
+       "birch",
+       false,
+       97.24
+      ],
+      "fld_33": null,
+      "fld_47": "kelp",
+      "fld_05": "quartz",
+      "fld_53": 7808,
+      "password": "pw-870"
+     }
+    },
+    "rule_info": {
+     "event_id": "dev-g-11",
+     "rules": [
+      {
+       "rule_id": "MOCK-G-11-0",
+       "severity": "medium"
+      }
+     ]
+    }
+   },
+   "expect": {
+    "fused": {
+     "event_id": "dev-g-11",
+     "method": "PUT",
+     "path": "/inventory/items/8708",
+     "headers": {
+      "authorization": "Bearer syn-968"
+     },
+     "payload": {
+      "fld_83": 27.78,
+      "fld_03": [
+       null,
+       null,
+       3261
+      ],
+      "fld_42": {
+       "fld_88": [
+        55.69,
+        "elm"
+       ],
+       "fld_99": "harbor"
+      },
+      "fld_98": null,
+      "fld_04": "harbor",
+      "fld_66": [
+       "tundra",
+       "zephyr"
+      ],
+      "fld_11": 28.34,
+      "fld_20": true,
+      "fld_99": true,
+      "fld_09": [
+       116,
+       61.36,
+       null
+      ],
+      "fld_50": {
+       "fld_61": "quartz",
+       "fld_81": {
+        "fld_68": "delta",
+        "fld_58": true,
+        "fld_18": 4246
+       },
+       "fld_54": 5931
+      },
+      "fld_75": {
+       "fld_28": [
+        true,
+        46.85,
+        true
+       ],
+       "fld_39": false
+      },
+      "fld_22": "maple",
+      "fld_63": {
+       "fld_26": null,
+       "fld_60": {
+        "fld_25": 6032,
+        "fld_13": 4781
+       },
+       "fld_08": false
+      },
+      "fld_14": 181,
+      "fld_21": "umber",
+      "fld_86": {
+       "fld_06": "orchid",
+       "fld_77": [
+        "harbor",
+        true
+       ],
+       "fld_18": [
+        null,
+        58.23
+       ]
+      },
+      "fld_40": null,
+      "fld_57": 2405,
+      "fld_18": {
+       "fld_39": {
+        "fld_29": true,
+        "fld_39": 8959
+       },
+       "fld_96": {
+        "fld_98": false,
+        "fld_60": 7624,
+        "fld_34": true
+       }
+      },
+      "fld_27": 34.34,
+      "fld_95": null,
+      "fld_70": [
+       2900,
+       null
+      ],
+      "fld_44": 61.99,
+      "fld_62": false,
+      "fld_81": [
+       "birch",
+       false,
+       97.24
+      ],
+      "fld_33": null,
+      "fld_47": "kelp",
+      "fld_05": "quartz",
+      "fld_53": 7808,
+      "password": "pw-870"
+     },
+     "content_type": null,
+     "client_ip": null,
+     "threat_score": null,
+     "rules": [
+      {
+       "rule_id": "MOCK-G-11-0",
+       "attributes": {
+        "severity": "medium"
+       }
+      }
+     ]
+    },
+    "tokens": [
+     "C:[SEQ_START]",
+     "C:[API:METHOD]",
+     "A:PUT",
+     "C:[API:PATH_START]",
+     "C:[API:PATH_SEG]",
+     "A:inventory",
+     "C:[API:PATH_SEG]",
+     "A:items",
+     "C:[API:PATH_SEG]",
+     "A:8708",
+     "C:[API:PATH_END]",
+     "C:[API:HEADERS_START]",
+     "C:[API:HEADER_NAME]",
+     "A:authorization",
+     "C:[API:HEADER_VALUE_MASKED]",
+     "M:[MASKED_AUTH]",
+     "C:[API:HEADERS_END]",
+     "C:[API:PAYLOAD_START]",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_03",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_NULL]",
+     "C:[API:VAL_NULL]",
+     "C:[API:VAL_INT]",
+     "A:3261",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_04",
+     "C:[API:VAL_STR]",
+     "A:harbor",
+     "C:[API:KEY]",
+     "A:fld_05",
+     "C:[API:VAL_STR]",
+     "A:quartz",
+     "C:[API:KEY]",
+     "A:fld_09",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_INT]",
+     "A:116",
+     "C:[API:VAL_FLOAT]",
+     "A:61.36",
+     "C:[API:VAL_NULL]",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_11",
+     "C:[API:VAL_FLOAT]",
+     "A:28.34",
+     "C:[API:KEY]",
+     "A:fld_14",
+     "C:[API:VAL_INT]",
+     "A:181",
+     "C:[API:KEY]",
+     "A:fld_18",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_39",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_29",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:KEY]",
+     "A:fld_39",
+     "C:[API:VAL_INT]",
+     "A:8959",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_96",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_34",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:KEY]",
+     "A:fld_60",
+     "C:[API:VAL_INT]",
+     "A:7624",
+     "C:[API:KEY]",
+     "A:fld_98",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:OBJ_END]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_20",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:KEY]",
+     "A:fld_21",
+     "C:[API:VAL_STR]",
+     "A:umber",
+     "C:[API:KEY]",
+     "A:fld_22",
+     "C:[API:VAL_STR]",
+     "A:maple",
+     "C:[API:KEY]",
+     "A:fld_27",
+     "C:[API:VAL_FLOAT]",
+     "A:34.34",
+     "C:[API:KEY]",
+     "A:fld_33",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_40",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_42",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_88",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_FLOAT]",
+     "A:55.69",
+     "C:[API:VAL_STR]",
+     "A:elm",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_99",
+     "C:[API:VAL_STR]",
+     "A:harbor",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_44",
+     "C:[API:VAL_FLOAT]",
+     "A:61.99",
+     "C:[API:KEY]",
+     "A:fld_47",
+     "C:[API:VAL_STR]",
+     "A:kelp",
+     "C:[API:KEY]",
+     "A:fld_50",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_54",
+     "C:[API:VAL_INT]",
+     "A:5931",
+     "C:[API:KEY]",
+     "A:fld_61",
+     "C:[API:VAL_STR]",
+     "A:quartz",
+     "C:[API:KEY]",
+     "A:fld_81",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_18",
+     "C:[API:VAL_INT]",
+     "A:4246",
+     "C:[API:KEY]",
+     "A:fld_58",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:KEY]",
+     "A:fld_68",
+     "C:[API:VAL_STR]",
+     "A:delta",
+     "C:[API:OBJ_END]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_53",
+     "C:[API:VAL_INT]",
+     "A:7808",
+     "C:[API:KEY]",
+     "A:fld_57",
+     "C:[API:VAL_INT]",
+     "A:2405",
+     "C:[API:KEY]",
+     "A:fld_62",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:KEY]",
+     "A:fld_63",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_08",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:KEY]",
+     "A:fld_26",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_60",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_13",
+     "C:[API:VAL_INT]",
+     "A:4781",
+     "C:[API:KEY]",
+     "A:fld_25",
+     "C:[API:VAL_INT]",
+     "A:6032",
+     "C:[API:OBJ_END]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_66",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_STR]",
+     "A:tundra",
+     "C:[API:VAL_STR]",
+     "A:zephyr",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_70",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_INT]",
+     "A:2900",
+     "C:[API:VAL_NULL]",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_75",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_28",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:VAL_FLOAT]",
+     "A:46.85",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_39",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_81",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_STR]",
+     "A:birch",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:VAL_FLOAT]",
+     "A:97.24",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_83",
+     "C:[API:VAL_FLOAT]",
+     "A:27.78",
+     "C:[API:KEY]",
+     "A:fld_86",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_06",
+     "C:[API:VAL_STR]",
+     "A:orchid",
+     "C:[API:KEY]",
+     "A:fld_18",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_NULL]",
+     "C:[API:VAL_FLOAT]",
+     "A:58.23",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_77",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_STR]",
+     "A:harbor",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:LIST_END]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_95",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_98",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_99",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:KEY]",
+     "A:password",
+     "C:[API:VAL_MASKED_STR]",
+     "M:[MASKED_SECRET]",
+     "C:[API:OBJ_END]",
+     "C:[API:PAYLOAD_END]",
+     "C:[RULES_START]",
+     "C:[RULE_START]",
+     "C:[RULE:ID]",
+     "R:MOCK-G-11-0",
+     "C:[RULE:ATTRS_START]",
+     "C:[RULE:OBJ_START]",
+     "C:[RULE:KEY]",
+     "R:severity",
+     "C:[RULE:VAL_STR]",
+     "R:medium",
+     "C:[RULE:OBJ_END]",
+     "C:[RULE:ATTRS_END]",
+     "C:[RULE_END]",
+     "C:[RULES_END]",
+     "C:[SEQ_END]"
+    ],
+    "masked_paths": [
+     [
+      "headers",
+      "authorization"
+     ],
+     [
+      "payload",
+      "password"
+     ]
+    ],
+    "tensor": "ok"
+   }
+  },
+  {
+   "id": "dev-g-12",
+   "group": "dev_generated",
+   "description": "seeded case with 40 top-level payload fields",
+   "input": {
+    "format": "envelope",
+    "context": {
+     "event_id": "dev-g-12",
+     "metadata": {
+      "method": "GET",
+      "path": "/users",
+      "headers": {
+       "accept": "text/plain",
+       "content-type": "application/json",
+       "authorization": "Bearer syn-372"
+      }
+     },
+     "payload": {
+      "fld_32": true,
+      "fld_39": [
+       15.47,
+       null,
+       2337
+      ],
+      "fld_38": {
+       "fld_46": {
+        "fld_55": 52.53,
+        "fld_05": 86.71,
+        "fld_66": 4248
+       },
+       "fld_66": {
+        "fld_75": "heron",
+        "fld_12": "amber"
+       },
+       "fld_19": {
+        "fld_76": true,
+        "fld_99": 61.31
+       }
+      },
+      "fld_67": 2061,
+      "fld_45": null,
+      "fld_05": false,
+      "fld_99": true,
+      "fld_98": "pebble",
+      "fld_01": 41.27,
+      "fld_54": null,
+      "fld_71": 2177,
+      "fld_49": {
+       "fld_92": [
+        false,
+        "birch",
+        null
+       ],
+       "fld_84": 9.24,
+       "fld_71": [
+        "saffron",
+        4845
+       ]
+      },
+      "fld_83": 90.89,
+      "fld_50": 38.44,
+      "fld_48": {
+       "fld_33": [
+        true,
+        "island",
+        false
+       ],
+       "fld_62": true
+      },
+      "fld_33": [
+       7920,
+       6223,
+       null
+      ],
+      "fld_27": {
+       "fld_47": "kestrel",
+       "fld_96": 55.05
+      },
+      "fld_15": {
+       "fld_60": null,
+       "fld_15": {
+        "fld_31": null,
+        "fld_46": false
+       },
+       "fld_21": [
+        7360,
+        32.33,
+        3134
+       ]
+      },
+      "fld_18": 88.98,
+      "fld_65": true,
+      "fld_03": {
+       "fld_82": false,
+       "fld_13": "iris"
+      },
+      "fld_06": [
+       null,
+       "iris"
+      ],
+      "fld_74": [
+       78.66,
+       71.1,
+       "kestrel"
+      ],
+      "fld_57": [
+       10.75,
+       null
+      ],
+      "fld_23": [
+       "maple",
+       7574,
+       "meadow"
+      ],
+      "fld_47": [
+       50.46,
+       null
+      ],
+      "fld_28": [
+       "grove",
+       61.34
+      ],
+      "fld_63": true,
+      "fld_58": 99.23,
+      "fld_11": [
+       null,
+       true,
+       true
+      ],
+      "fld_13": {
+       "fld_10": 3663,
+       "fld_35": 1616
+      },
+      "fld_52": {
+       "fld_33": "willow",
+       "fld_91": {
+        "fld_24": true,
+        "fld_49": 45.82
+       }
+      },
+      "fld_94": {
+       "fld_79": [
+        8482,
+        72.39,
+        false
+       ],
+       "fld_41": "orchid"
+      },
+      "fld_24": null,
+      "fld_59": true,
+      "fld_30": 44.61,
+      "fld_12": {
+       "fld_17": [
+        134,
+        3410
+       ],
+       "fld_15": 48.7
+      },
+      "fld_95": [
+       95.39,
+       false
+      ],
+      "fld_86": {
+       "fld_86": "raven",
+       "fld_15": null
+      },
+      "fld_19": null,
+      "password": "pw-517"
+     }
+    },
+    "rule_info": {
+     "event_id": "dev-g-12",
+     "rules": [
+      {
+       "rule_id": "MOCK-G-12-0",
+       "severity": "low",
+       "limit": 50
+      }
+     ]
+    }
+   },
+   "expect": {
+    "fused": {
+     "event_id": "dev-g-12",
+     "method": "GET",
+     "path": "/users",
+     "headers": {
+      "accept": "text/plain",
+      "content-type": "application/json",
+      "authorization": "Bearer syn-372"
+     },
+     "payload": {
+      "fld_32": true,
+      "fld_39": [
+       15.47,
+       null,
+       2337
+      ],
+      "fld_38": {
+       "fld_46": {
+        "fld_55": 52.53,
+        "fld_05": 86.71,
+        "fld_66": 4248
+       },
+       "fld_66": {
+        "fld_75": "heron",
+        "fld_12": "amber"
+       },
+       "fld_19": {
+        "fld_76": true,
+        "fld_99": 61.31
+       }
+      },
+      "fld_67": 2061,
+      "fld_45": null,
+      "fld_05": false,
+      "fld_99": true,
+      "fld_98": "pebble",
+      "fld_01": 41.27,
+      "fld_54": null,
+      "fld_71": 2177,
+      "fld_49": {
+       "fld_92": [
+        false,
+        "birch",
+        null
+       ],
+       "fld_84": 9.24,
+       "fld_71": [
+        "saffron",
+        4845
+       ]
+      },
+      "fld_83": 90.89,
+      "fld_50": 38.44,
+      "fld_48": {
+       "fld_33": [
+        true,
+        "island",
+        false
+       ],
+       "fld_62": true
+      },
+      "fld_33": [
+       7920,
+       6223,
+       null
+      ],
+      "fld_27": {
+       "fld_47": "kestrel",
+       "fld_96": 55.05
+      },
+      "fld_15": {
+       "fld_60": null,
+       "fld_15": {
+        "fld_31": null,
+        "fld_46": false
+       },
+       "fld_21": [
+        7360,
+        32.33,
+        3134
+       ]
+      },
+      "fld_18": 88.98,
+      "fld_65": true,
+      "fld_03": {
+       "fld_82": false,
+       "fld_13": "iris"
+      },
+      "fld_06": [
+       null,
+       "iris"
+      ],
+      "fld_74": [
+       78.66,
+       71.1,
+       "kestrel"
+      ],
+      "fld_57": [
+       10.75,
+       null
+      ],
+      "fld_23": [
+       "maple",
+       7574,
+       "meadow"
+      ],
+      "fld_47": [
+       50.46,
+       null
+      ],
+      "fld_28": [
+       "grove",
+       61.34
+      ],
+      "fld_63": true,
+      "fld_58": 99.23,
+      "fld_11": [
+       null,
+       true,
+       true
+      ],
+      "fld_13": {
+       "fld_10": 3663,
+       "fld_35": 1616
+      },
+      "fld_52": {
+       "fld_33": "willow",
+       "fld_91": {
+        "fld_24": true,
+        "fld_49": 45.82
+       }
+      },
+      "fld_94": {
+       "fld_79": [
+        8482,
+        72.39,
+        false
+       ],
+       "fld_41": "orchid"
+      },
+      "fld_24": null,
+      "fld_59": true,
+      "fld_30": 44.61,
+      "fld_12": {
+       "fld_17": [
+        134,
+        3410
+       ],
+       "fld_15": 48.7
+      },
+      "fld_95": [
+       95.39,
+       false
+      ],
+      "fld_86": {
+       "fld_86": "raven",
+       "fld_15": null
+      },
+      "fld_19": null,
+      "password": "pw-517"
+     },
+     "content_type": null,
+     "client_ip": null,
+     "threat_score": null,
+     "rules": [
+      {
+       "rule_id": "MOCK-G-12-0",
+       "attributes": {
+        "severity": "low",
+        "limit": 50
+       }
+      }
+     ]
+    },
+    "tokens": [
+     "C:[SEQ_START]",
+     "C:[API:METHOD]",
+     "A:GET",
+     "C:[API:PATH_START]",
+     "C:[API:PATH_SEG]",
+     "A:users",
+     "C:[API:PATH_END]",
+     "C:[API:HEADERS_START]",
+     "C:[API:HEADER_NAME]",
+     "A:accept",
+     "C:[API:HEADER_VALUE]",
+     "A:text/plain",
+     "C:[API:HEADER_NAME]",
+     "A:authorization",
+     "C:[API:HEADER_VALUE_MASKED]",
+     "M:[MASKED_AUTH]",
+     "C:[API:HEADER_NAME]",
+     "A:content-type",
+     "C:[API:HEADER_VALUE]",
+     "A:application/json",
+     "C:[API:HEADERS_END]",
+     "C:[API:PAYLOAD_START]",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_01",
+     "C:[API:VAL_FLOAT]",
+     "A:41.27",
+     "C:[API:KEY]",
+     "A:fld_03",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_13",
+     "C:[API:VAL_STR]",
+     "A:iris",
+     "C:[API:KEY]",
+     "A:fld_82",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_05",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:KEY]",
+     "A:fld_06",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_NULL]",
+     "C:[API:VAL_STR]",
+     "A:iris",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_11",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_NULL]",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_12",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_15",
+     "C:[API:VAL_FLOAT]",
+     "A:48.7",
+     "C:[API:KEY]",
+     "A:fld_17",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_INT]",
+     "A:134",
+     "C:[API:VAL_INT]",
+     "A:3410",
+     "C:[API:LIST_END]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_13",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_10",
+     "C:[API:VAL_INT]",
+     "A:3663",
+     "C:[API:KEY]",
+     "A:fld_35",
+     "C:[API:VAL_INT]",
+     "A:1616",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_15",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_15",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_31",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_46",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_21",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_INT]",
+     "A:7360",
+     "C:[API:VAL_FLOAT]",
+     "A:32.33",
+     "C:[API:VAL_INT]",
+     "A:3134",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_60",
+     "C:[API:VAL_NULL]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_18",
+     "C:[API:VAL_FLOAT]",
+     "A:88.98",
+     "C:[API:KEY]",
+     "A:fld_19",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_23",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_STR]",
+     "A:maple",
+     "C:[API:VAL_INT]",
+     "A:7574",
+     "C:[API:VAL_STR]",
+     "A:meadow",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_24",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_27",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_47",
+     "C:[API:VAL_STR]",
+     "A:kestrel",
+     "C:[API:KEY]",
+     "A:fld_96",
+     "C:[API:VAL_FLOAT]",
+     "A:55.05",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_28",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_STR]",
+     "A:grove",
+     "C:[API:VAL_FLOAT]",
+     "A:61.34",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_30",
+     "C:[API:VAL_FLOAT]",
+     "A:44.61",
+     "C:[API:KEY]",
+     "A:fld_32",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:KEY]",
+     "A:fld_33",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_INT]",
+     "A:7920",
+     "C:[API:VAL_INT]",
+     "A:6223",
+     "C:[API:VAL_NULL]",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_38",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_19",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_76",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:KEY]",
+     "A:fld_99",
+     "C:[API:VAL_FLOAT]",
+     "A:61.31",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_46",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_05",
+     "C:[API:VAL_FLOAT]",
+     "A:86.71",
+     "C:[API:KEY]",
+     "A:fld_55",
+     "C:[API:VAL_FLOAT]",
+     "A:52.53",
+     "C:[API:KEY]",
+     "A:fld_66",
+     "C:[API:VAL_INT]",
+     "A:4248",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_66",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_12",
+     "C:[API:VAL_STR]",
+     "A:amber",
+     "C:[API:KEY]",
+     "A:fld_75",
+     "C:[API:VAL_STR]",
+     "A:heron",
+     "C:[API:OBJ_END]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_39",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_FLOAT]",
+     "A:15.47",
+     "C:[API:VAL_NULL]",
+     "C:[API:VAL_INT]",
+     "A:2337",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_45",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_47",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_FLOAT]",
+     "A:50.46",
+     "C:[API:VAL_NULL]",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_48",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_33",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:VAL_STR]",
+     "A:island",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_62",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_49",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_71",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_STR]",
+     "A:saffron",
+     "C:[API:VAL_INT]",
+     "A:4845",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_84",
+     "C:[API:VAL_FLOAT]",
+     "A:9.24",
+     "C:[API:KEY]",
+     "A:fld_92",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:VAL_STR]",
+     "A:birch",
+     "C:[API:VAL_NULL]",
+     "C:[API:LIST_END]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_50",
+     "C:[API:VAL_FLOAT]",
+     "A:38.44",
+     "C:[API:KEY]",
+     "A:fld_52",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_33",
+     "C:[API:VAL_STR]",
+     "A:willow",
+     "C:[API:KEY]",
+     "A:fld_91",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_24",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:KEY]",
+     "A:fld_49",
+     "C:[API:VAL_FLOAT]",
+     "A:45.82",
+     "C:[API:OBJ_END]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_54",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_57",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_FLOAT]",
+     "A:10.75",
+     "C:[API:VAL_NULL]",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_58",
+     "C:[API:VAL_FLOAT]",
+     "A:99.23",
+     "C:[API:KEY]",
+     "A:fld_59",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:KEY]",
+     "A:fld_63",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:KEY]",
+     "A:fld_65",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:KEY]",
+     "A:fld_67",
+     "C:[API:VAL_INT]",
+     "A:2061",
+     "C:[API:KEY]",
+     "A:fld_71",
+     "C:[API:VAL_INT]",
+     "A:2177",
+     "C:[API:KEY]",
+     "A:fld_74",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_FLOAT]",
+     "A:78.66",
+     "C:[API:VAL_FLOAT]",
+     "A:71.1",
+     "C:[API:VAL_STR]",
+     "A:kestrel",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_83",
+     "C:[API:VAL_FLOAT]",
+     "A:90.89",
+     "C:[API:KEY]",
+     "A:fld_86",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_15",
+     "C:[API:VAL_NULL]",
+     "C:[API:KEY]",
+     "A:fld_86",
+     "C:[API:VAL_STR]",
+     "A:raven",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_94",
+     "C:[API:OBJ_START]",
+     "C:[API:KEY]",
+     "A:fld_41",
+     "C:[API:VAL_STR]",
+     "A:orchid",
+     "C:[API:KEY]",
+     "A:fld_79",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_INT]",
+     "A:8482",
+     "C:[API:VAL_FLOAT]",
+     "A:72.39",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:LIST_END]",
+     "C:[API:OBJ_END]",
+     "C:[API:KEY]",
+     "A:fld_95",
+     "C:[API:LIST_START]",
+     "C:[API:VAL_FLOAT]",
+     "A:95.39",
+     "C:[API:VAL_BOOL]",
+     "A:false",
+     "C:[API:LIST_END]",
+     "C:[API:KEY]",
+     "A:fld_98",
+     "C:[API:VAL_STR]",
+     "A:pebble",
+     "C:[API:KEY]",
+     "A:fld_99",
+     "C:[API:VAL_BOOL]",
+     "A:true",
+     "C:[API:KEY]",
+     "A:password",
+     "C:[API:VAL_MASKED_STR]",
+     "M:[MASKED_SECRET]",
+     "C:[API:OBJ_END]",
+     "C:[API:PAYLOAD_END]",
+     "C:[RULES_START]",
+     "C:[RULE_START]",
+     "C:[RULE:ID]",
+     "R:MOCK-G-12-0",
+     "C:[RULE:ATTRS_START]",
+     "C:[RULE:OBJ_START]",
+     "C:[RULE:KEY]",
+     "R:limit",
+     "C:[RULE:VAL_INT]",
+     "R:50",
+     "C:[RULE:KEY]",
+     "R:severity",
+     "C:[RULE:VAL_STR]",
+     "R:low",
+     "C:[RULE:OBJ_END]",
+     "C:[RULE:ATTRS_END]",
+     "C:[RULE_END]",
+     "C:[RULES_END]",
+     "C:[SEQ_END]"
+    ],
+    "masked_paths": [
+     [
+      "headers",
+      "authorization"
+     ],
+     [
+      "payload",
+      "password"
+     ]
+    ],
+    "tensor": "ok"
+   }
+  }
+ ]
+}
