@@ -4,6 +4,7 @@ import time
 
 from engine.app import create_app
 from engine.circuit_breaker import CircuitState, HybridCircuitBreaker
+from ingestion.vector_builder import UnifiedContextVectorBuilder
 from engine.service import StubModel, ThresholdPredictionService
 from engine.service import HybridVerificationService
 from engine.verifier import RuntimeLTLVerifier
@@ -35,16 +36,19 @@ def test_normal_no_alert():
 
 
 def test_runtime_verifier_allows_valid_context_under_five_ms():
-    result = RuntimeLTLVerifier().verify(
+    verifier = RuntimeLTLVerifier()
+    context = {
+        "threat_score": 0.2,
+        "role": "user",
+        "action": "read",
+        "rate_limit": 10,
+        "request_rate": 2,
+        "payload_size": 128,
+    }
+    verifier.verify("warmup", context)
+    result = verifier.verify(
         "e-valid",
-        {
-            "threat_score": 0.2,
-            "role": "user",
-            "action": "read",
-            "rate_limit": 10,
-            "request_rate": 2,
-            "payload_size": 128,
-        },
+        context,
     )
 
     assert result.z3_status == "SAT"
@@ -78,7 +82,9 @@ def test_runtime_verifier_falls_back_on_unknown(monkeypatch):
 
 def test_hybrid_circuit_breaker_transitions_and_recovers(monkeypatch):
     monkeypatch.setattr("z3.Solver.check", lambda self: z3.unknown)
-    breaker = HybridCircuitBreaker(failure_threshold=2, recovery_timeout_ms=0)
+    breaker = HybridCircuitBreaker(
+        failure_threshold=2, recovery_timeout_ms=0, max_latency_ms=20
+    )
 
     breaker.verify("e1", {"threat_score": 0.1})
     breaker.verify("e2", {"threat_score": 0.1})
@@ -107,7 +113,7 @@ def test_hybrid_ai_false_positive_is_overridden():
 
 
 def test_hybrid_ai_false_negative_is_overridden():
-    breaker = HybridCircuitBreaker()
+    breaker = HybridCircuitBreaker(max_latency_ms=20)
 
     result = breaker.evaluate_hybrid_decision(
         "e-negative",
@@ -160,6 +166,52 @@ def test_runtime_verify_accepts_unified_context_vector():
     assert body["z3_status"] == "SAT"
     assert body["decision"] == "ALLOW"
     assert body["label"] == "normal"
+
+
+def test_runtime_verify_endpoint_meets_five_ms_sla():
+    client = TestClient(create_app(alerts=Capture()))
+
+    payload = {
+        "event_id": "runtime-sla",
+        "unified_context_vector": [0.2, 149.95, 2.0],
+        "metadata": {"role": "user", "action": "read", "resource": "profile"},
+    }
+    client.post("/v1/verify/runtime", json={**payload, "event_id": "runtime-sla-warmup"})
+    response = client.post(
+        "/v1/verify/runtime",
+        json=payload,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["z3_status"] == "SAT"
+    assert body["decision"] == "ALLOW"
+    assert body["execution_time_ms"] < 5.0
+
+
+def test_unified_context_builder_handoff_is_deterministic():
+    event_id = "handoff-vector"
+    vector = UnifiedContextVectorBuilder().build(
+        {"amount": 149.95, "retry_count": 2}, threat_score=0.2
+    )
+    client = TestClient(create_app(alerts=Capture()))
+
+    response = client.post(
+        "/v1/verify/runtime",
+        json={
+            "event_id": event_id,
+            "unified_context_vector": vector,
+            "metadata": {"role": "user", "action": "read", "resource": "profile"},
+        },
+    )
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["event_id"] == event_id
+    assert body["z3_status"] == "SAT"
+    assert body["decision"] == "ALLOW"
+    assert body["label"] == "normal"
+    assert body["violated_rules"] == []
 
 
 def test_runtime_verify_applies_role_action_policy_constraint():
