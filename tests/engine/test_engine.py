@@ -5,6 +5,7 @@ import time
 from engine.app import create_app
 from engine.circuit_breaker import CircuitState, HybridCircuitBreaker
 from engine.service import StubModel, ThresholdPredictionService
+from engine.service import HybridVerificationService
 from engine.verifier import RuntimeLTLVerifier
 from shared_contracts.interfaces import AlertClient
 
@@ -138,3 +139,68 @@ def test_hybrid_open_circuit_uses_ai_fast_path(monkeypatch):
     assert result.override_reason == "circuit_breaker_fast_path"
     assert result.verification.z3_status == "UNKNOWN"
     assert elapsed_ms < 5
+
+
+def test_runtime_verify_accepts_unified_context_vector():
+    cap = Capture()
+    client = TestClient(create_app(alerts=cap))
+
+    response = client.post(
+        "/v1/verify/runtime",
+        json={
+            "event_id": "runtime-vector",
+            "unified_context_vector": [0.2, 149.95, 2.0],
+            "metadata": {"role": "user", "action": "read", "resource": "profile"},
+        },
+    )
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["event_id"] == "runtime-vector"
+    assert body["z3_status"] == "SAT"
+    assert body["decision"] == "ALLOW"
+    assert body["label"] == "normal"
+
+
+def test_runtime_verify_applies_role_action_policy_constraint():
+    cap = Capture()
+    hybrid = HybridVerificationService(
+        StubModel(), 0.8, "t", circuit_breaker=HybridCircuitBreaker(max_latency_ms=20)
+    )
+    client = TestClient(create_app(alerts=cap, hybrid_service=hybrid))
+
+    response = client.post(
+        "/v1/verify/runtime",
+        json={
+            "event_id": "runtime-policy",
+            "threat_score": 0.1,
+            "metadata": {"role": "user", "action": "delete", "resource": "UserAccount"},
+            "policy_rules": [{
+                "policy_id": "deny-delete",
+                "subject": "User",
+                "action": "Delete",
+                "resource": "UserAccount",
+                "effect": "Deny",
+                "raw_text": "Users cannot delete accounts",
+            }],
+        },
+    )
+
+    body = response.json()
+    assert response.status_code == 200
+    assert body["z3_status"] == "UNSAT"
+    assert body["decision"] == "BLOCK"
+    assert body["label"] == "anomaly"
+    assert len(cap.sent) == 1
+
+
+def test_circuit_breaker_status_endpoint():
+    client = TestClient(create_app(alerts=Capture()))
+
+    response = client.get("/v1/circuit-breaker/status")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "CLOSED"
+    assert body["total_evaluations"] == 0
+    assert "timeout_count" in body

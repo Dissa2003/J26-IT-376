@@ -216,6 +216,8 @@ class RuntimeLTLVerifier:
                     )
                 except (SyntaxError, NameError, TypeError, ValueError) as exc:
                     raise ValueError(f"Invalid custom constraint: {constraint!r}") from exc
+                if isinstance(expression, bool):
+                    expression = z3.BoolVal(expression)
                 if not isinstance(expression, z3.BoolRef):
                     raise ValueError(f"Custom constraint is not boolean: {constraint!r}")
             else:
