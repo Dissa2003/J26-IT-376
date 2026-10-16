@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
 import z3
+import time
 
 from engine.app import create_app
+from engine.circuit_breaker import CircuitState, HybridCircuitBreaker
 from engine.service import StubModel, ThresholdPredictionService
 from engine.verifier import RuntimeLTLVerifier
 from shared_contracts.interfaces import AlertClient
@@ -71,3 +73,68 @@ def test_runtime_verifier_falls_back_on_unknown(monkeypatch):
 
     assert result.z3_status == "UNKNOWN"
     assert result.decision == "FALLBACK"
+
+
+def test_hybrid_circuit_breaker_transitions_and_recovers(monkeypatch):
+    monkeypatch.setattr("z3.Solver.check", lambda self: z3.unknown)
+    breaker = HybridCircuitBreaker(failure_threshold=2, recovery_timeout_ms=0)
+
+    breaker.verify("e1", {"threat_score": 0.1})
+    breaker.verify("e2", {"threat_score": 0.1})
+    assert breaker.state is CircuitState.OPEN
+    assert breaker.timeout_count == 2
+
+    monkeypatch.undo()
+    result = breaker.verify("probe", {"threat_score": 0.1})
+    assert result.z3_status == "SAT"
+    assert breaker.state is CircuitState.CLOSED
+    assert breaker.failure_count == 0
+
+
+def test_hybrid_ai_false_positive_is_overridden():
+    breaker = HybridCircuitBreaker()
+
+    result = breaker.evaluate_hybrid_decision(
+        "e-positive", 0.95, 0.8, {"threat_score": 0.1}
+    )
+
+    assert result.label == "normal"
+    assert result.decision == "ALLOW"
+    assert result.override_applied is True
+    assert result.override_reason == "z3_formal_allow_override"
+    assert breaker.overrides_applied == 1
+
+
+def test_hybrid_ai_false_negative_is_overridden():
+    breaker = HybridCircuitBreaker()
+
+    result = breaker.evaluate_hybrid_decision(
+        "e-negative",
+        0.1,
+        0.8,
+        {"threat_score": 1.4, "role": "user", "action": "delete"},
+    )
+
+    assert result.label == "anomaly"
+    assert result.decision == "BLOCK"
+    assert result.override_applied is True
+    assert result.override_reason == "z3_formal_block_override"
+
+
+def test_hybrid_open_circuit_uses_ai_fast_path(monkeypatch):
+    breaker = HybridCircuitBreaker(failure_threshold=1, recovery_timeout_ms=60_000)
+    monkeypatch.setattr("z3.Solver.check", lambda self: z3.unknown)
+    breaker.verify("trip", {"threat_score": 0.1})
+
+    started = time.perf_counter()
+    result = breaker.evaluate_hybrid_decision(
+        "fast", 0.9, 0.8, {"threat_score": 0.1}
+    )
+    elapsed_ms = (time.perf_counter() - started) * 1000
+
+    assert result.label == "anomaly"
+    assert result.decision == "BLOCK"
+    assert result.override_applied is False
+    assert result.override_reason == "circuit_breaker_fast_path"
+    assert result.verification.z3_status == "UNKNOWN"
+    assert elapsed_ms < 5
