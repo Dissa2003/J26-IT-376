@@ -1,0 +1,91 @@
+{
+  "info": {
+    "_postman_id": "b4c1d8d7-3a56-4c3f-9b8f-1d6a8c3e2f10",
+    "name": "Kumara Engine Runtime Verification",
+    "description": "Health, prediction, runtime LTL verification, hybrid safety overrides, and circuit-breaker telemetry.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8003"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "Prediction",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event_id\": \"prediction-001\",\n  \"features\": {\"threat_score\": 0.9, \"request_rate\": 2}\n}",
+          "options": {"raw": {"language": "json"}}
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/predict",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "predict"]
+        }
+      }
+    },
+    {
+      "name": "Runtime Verify - AI False Positive Overridden by SAT",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event_id\": \"runtime-allow-001\",\n  \"unified_context_vector\": [0.2, 149.95, 2],\n  \"threat_score\": 0.2,\n  \"metadata\": {\n    \"role\": \"user\",\n    \"action\": \"read\",\n    \"resource\": \"profile\"\n  }\n}",
+          "options": {"raw": {"language": "json"}}
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/verify/runtime",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "verify", "runtime"]
+        }
+      }
+    },
+    {
+      "name": "Runtime Verify - Policy Violation Blocked by UNSAT",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event_id\": \"runtime-block-001\",\n  \"threat_score\": 0.1,\n  \"metadata\": {\n    \"role\": \"user\",\n    \"action\": \"delete\",\n    \"resource\": \"UserAccount\"\n  },\n  \"policy_rules\": [{\n    \"policy_id\": \"deny-delete\",\n    \"subject\": \"User\",\n    \"action\": \"Delete\",\n    \"resource\": \"UserAccount\",\n    \"effect\": \"Deny\",\n    \"raw_text\": \"Users cannot delete accounts\"\n  }]\n}",
+          "options": {"raw": {"language": "json"}}
+        },
+        "url": {
+          "raw": "{{baseUrl}}/v1/verify/runtime",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "verify", "runtime"]
+        }
+      }
+    },
+    {
+      "name": "Circuit Breaker Status",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1/circuit-breaker/status",
+          "host": ["{{baseUrl}}", "v1", "circuit-breaker", "status"],
+          "path": ["v1", "circuit-breaker", "status"]
+        }
+      }
+    }
+  ]
+}
