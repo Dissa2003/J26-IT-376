@@ -14,6 +14,11 @@ from redis.exceptions import RedisError, ResponseError
 from shared_contracts.config import Settings, get_settings
 from shared_contracts.interfaces import EventConsumer, EventProducer
 from shared_contracts.models import RawEvent
+from .vector_builder import (
+    HIGH_THREAT_THRESHOLD,
+    LOW_THREAT_THRESHOLD,
+    extract_threat_score,
+)
 
 log = logging.getLogger(__name__)
 EventHandler = Callable[[RawEvent], None]
@@ -60,6 +65,130 @@ class InMemoryBroker(EventProducer, EventConsumer):
         self.dead_letters.append({"payload": payload, "reason": reason})
 
 
+<<<<<<< Updated upstream
+=======
+class RingBufferBroker(InMemoryBroker):
+    """Bounded, lock-free hot-path buffer using threat-weighted eviction.
+
+    ``collections.deque`` append and popleft operations are atomic under
+    CPython. The producer therefore performs no explicit locking. TWDE routes
+    low-threat arrivals to overflow first and protects high-threat arrivals by
+    evicting the oldest low-threat buffered event when possible.
+    """
+
+    def __init__(
+        self,
+        *,
+        maxlen: int = DEFAULT_BUFFER_SIZE,
+        overflow_broker: EventProducer | None = None,
+        poll_interval: float = 0.001,
+        high_threat_threshold: float = HIGH_THREAT_THRESHOLD,
+        low_threat_threshold: float = LOW_THREAT_THRESHOLD,
+    ) -> None:
+        """Create a bounded buffer and an idle background drain worker."""
+        if maxlen < 1:
+            raise ValueError("maxlen must be positive")
+        if poll_interval <= 0:
+            raise ValueError("poll_interval must be positive")
+        if not 0.0 <= low_threat_threshold < high_threat_threshold <= 1.0:
+            raise ValueError(
+                "threat thresholds must satisfy 0 <= low < high <= 1"
+            )
+        super().__init__()
+        self._buffer: deque[RawEvent] = deque(maxlen=maxlen)
+        self._buffer_maxlen = maxlen
+        self._overflow_broker = overflow_broker
+        self._poll_interval = poll_interval
+        self._high_threat_threshold = high_threat_threshold
+        self._low_threat_threshold = low_threat_threshold
+        self._wake = threading.Event()
+        self._stopped = threading.Event()
+        self._buffered = 0
+        self._evicted = 0
+        self._worker = threading.Thread(
+            target=self._drain,
+            name="ingestion-ring-buffer",
+            daemon=True,
+        )
+        self._worker.start()
+
+    @property
+    def buffered_count(self) -> int:
+        """Return the approximate number of events awaiting dispatch."""
+        return len(self._buffer)
+
+    @property
+    def evicted_count(self) -> int:
+        """Return the number of buffered events routed out by TWDE."""
+        return self._evicted
+
+    def publish(self, event: RawEvent) -> None:
+        """Apply TWDE and enqueue an event without acquiring a producer lock."""
+        incoming_score = extract_threat_score(event.payload)
+        was_full = len(self._buffer) == self._buffer_maxlen
+        if was_full:
+            if incoming_score < self._low_threat_threshold:
+                self._spill(event)
+                return
+            evicted_index = self._find_eviction_index()
+            evicted = self._buffer[evicted_index]
+            del self._buffer[evicted_index]
+            self._evicted += 1
+            self._buffered -= 1
+            self._spill(evicted)
+        self._buffer.append(event)
+        self._buffered += 1
+        self._wake.set()
+
+    def _find_eviction_index(self) -> int:
+        """Choose the oldest low-threat event, protecting high-threat entries."""
+        medium_index: int | None = None
+        for index, buffered in enumerate(self._buffer):
+            score = extract_threat_score(buffered.payload)
+            if score < self._low_threat_threshold:
+                return index
+            if score < self._high_threat_threshold and medium_index is None:
+                medium_index = index
+        return 0 if medium_index is None else medium_index
+
+    def _spill(self, event: RawEvent) -> None:
+        """Send an evicted event to overflow without blocking on local state."""
+        if self._overflow_broker is None:
+            log.warning("Ring buffer full; dropping event %s", event.event_id)
+            return
+        try:
+            self._overflow_broker.publish(event)
+        except Exception:
+            log.exception(
+                "Unable to spill event %s to overflow broker",
+                event.event_id,
+            )
+
+    def stop(self, timeout: float = 1.0) -> None:
+        """Stop the drain worker after already-buffered events are handled."""
+        self._stopped.set()
+        self._wake.set()
+        self._worker.join(timeout)
+
+    def _drain(self) -> None:
+        """Dispatch events sequentially in FIFO order."""
+        while not self._stopped.is_set() or self._buffer:
+            event: RawEvent | None = None
+            try:
+                event = self._buffer.popleft()
+            except IndexError:
+                self._wake.wait(self._poll_interval)
+                self._wake.clear()
+                continue
+            for handler in self._handlers:
+                try:
+                    handler(event)
+                except Exception:
+                    log.exception("Ring buffer handler failed for %s", event.event_id)
+            self._buffered -= 1
+
+
+>>>>>>> Stashed changes
 class RedisStreamBroker(EventProducer, EventConsumer):
     """Reliable event broker backed by a Redis Stream consumer group."""
 

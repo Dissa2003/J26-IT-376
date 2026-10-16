@@ -10,6 +10,16 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from ingestion.broker import InMemoryBroker, RedisStreamBroker, create_broker
 from ingestion.app import create_app
 from ingestion.validator import IngestionValidator
+<<<<<<< Updated upstream
+=======
+from ingestion.pii_masker import PIIMasker, REDACTED
+from ingestion.vector_builder import (
+    HIGH_THREAT_THRESHOLD,
+    LOW_THREAT_THRESHOLD,
+    UnifiedContextVectorBuilder,
+    extract_threat_score,
+)
+>>>>>>> Stashed changes
 from shared_contracts.config import Settings
 from shared_contracts.interfaces import ProcessingClient
 from shared_contracts.models import Label, Prediction, RawEvent
@@ -192,6 +202,157 @@ def test_create_broker_uses_memory_in_local_environment() -> None:
     assert isinstance(broker, InMemoryBroker)
 
 
+<<<<<<< Updated upstream
+=======
+def test_ring_buffer_drains_events_sequentially() -> None:
+    """Buffered events are delivered FIFO by one background worker."""
+    broker = RingBufferBroker(maxlen=8)
+    received: list[str] = []
+    broker.subscribe(lambda event: received.append(event.event_id))
+    events = [RawEvent(event_id=str(index), source="test") for index in range(4)]
+
+    for event in events:
+        broker.publish(event)
+
+    deadline = time.monotonic() + 1.0
+    while len(received) < len(events) and time.monotonic() < deadline:
+        time.sleep(0.001)
+    broker.stop()
+
+    assert received == ["0", "1", "2", "3"]
+    assert broker.evicted_count == 0
+
+
+def test_ring_buffer_evicts_oldest_event_when_full() -> None:
+    """A full circular buffer routes a low-threat event to overflow."""
+    overflow = MagicMock()
+    broker = RingBufferBroker(maxlen=2, overflow_broker=overflow)
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_handler(event: RawEvent) -> None:
+        started.set()
+        release.wait(1.0)
+
+    broker.subscribe(slow_handler)
+    events = [RawEvent(event_id=str(index), source="test") for index in range(4)]
+
+    broker.publish(events[0])
+    assert started.wait(1.0)
+    broker.publish(events[1])
+    broker.publish(events[2])
+    broker.publish(events[3])
+    release.set()
+
+    deadline = time.monotonic() + 1.0
+    while broker.buffered_count and time.monotonic() < deadline:
+        time.sleep(0.001)
+    broker.stop()
+
+    assert broker.evicted_count == 0
+    assert overflow.publish.call_count >= 1
+
+
+def test_twde_routes_low_threat_arrival_to_overflow_when_full() -> None:
+    """TWDE sends a low-threat arrival to overflow instead of evicting memory."""
+    overflow = MagicMock()
+    broker = RingBufferBroker(maxlen=2, overflow_broker=overflow)
+    events = [
+        RawEvent(event_id="buffer-1", source="test", payload={"_threat_score": 0.1}),
+        RawEvent(event_id="buffer-2", source="test", payload={"_threat_score": 0.5}),
+        RawEvent(event_id="overflow", source="test", payload={"_threat_score": 0.2}),
+    ]
+
+    try:
+        broker.publish(events[0])
+        broker.publish(events[1])
+        broker.publish(events[2])
+        assert broker.buffered_count == 2
+        assert broker.evicted_count == 0
+        overflow.publish.assert_called_once_with(events[2])
+    finally:
+        broker.stop()
+
+
+def test_twde_preserves_high_threat_event_by_evicting_low_threat_event() -> None:
+    """TWDE retains high-threat arrivals and spills the oldest low-threat item."""
+    overflow = MagicMock()
+    broker = RingBufferBroker(maxlen=2, overflow_broker=overflow)
+    received: list[str] = []
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_handler(event: RawEvent) -> None:
+        received.append(event.event_id)
+        started.set()
+        release.wait(1.0)
+
+    broker.subscribe(slow_handler)
+    low = RawEvent(event_id="low", source="test", payload={"threat_score": 0.1})
+    high = RawEvent(event_id="high", source="test", payload={"threat_score": 0.9})
+    medium = RawEvent(
+        event_id="medium",
+        source="test",
+        payload={"_threat_score": 0.5},
+    )
+    incoming = RawEvent(
+        event_id="incoming-high",
+        source="test",
+        payload={"_threat_score": HIGH_THREAT_THRESHOLD},
+    )
+
+    try:
+        broker.publish(low)
+        assert started.wait(1.0)
+        broker.publish(high)
+        broker.publish(medium)
+        broker.publish(incoming)
+        release.set()
+        deadline = time.monotonic() + 1.0
+        while broker.buffered_count and time.monotonic() < deadline:
+            time.sleep(0.001)
+
+        assert overflow.publish.call_args.args == (medium,)
+        assert received == ["low", "high", "incoming-high"]
+    finally:
+        release.set()
+        broker.stop()
+
+
+def test_twde_thresholds_are_shared_with_vector_builder() -> None:
+    """Threat-score extraction clamps malformed values and honors TWDE thresholds."""
+    assert extract_threat_score({"threat_score": 0.9}) >= HIGH_THREAT_THRESHOLD
+    assert extract_threat_score({"_threat_score": 0.1}) < LOW_THREAT_THRESHOLD
+    assert extract_threat_score({"_threat_score": "invalid"}) == 0.0
+
+
+def test_twde_publish_hot_path_avoids_lock_contention() -> None:
+    """A full-buffer classification uses only in-memory operations."""
+    broker = RingBufferBroker(maxlen=8)
+    try:
+        for index in range(8):
+            broker.publish(
+                RawEvent(
+                    event_id=str(index),
+                    source="test",
+                    payload={"_threat_score": 0.5},
+                )
+            )
+        started = time.perf_counter_ns()
+        broker.publish(
+            RawEvent(
+                event_id="high",
+                source="test",
+                payload={"_threat_score": HIGH_THREAT_THRESHOLD},
+            )
+        )
+        elapsed_ms = (time.perf_counter_ns() - started) / 1_000_000
+        assert elapsed_ms < 10
+    finally:
+        broker.stop()
+
+
+>>>>>>> Stashed changes
 def test_create_broker_falls_back_when_redis_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
