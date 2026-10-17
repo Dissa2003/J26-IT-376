@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>LogiShield Member 4 Demo</title>
-<meta name="description" content="Local PP1 demonstration of the Member 4 tokenization and lightweight AI prediction pipeline.">
+<title>LogiShield LogiShield Demo</title>
+<meta name="description" content="Local PP1 demonstration of the LogiShield tokenization and lightweight AI prediction pipeline.">
 <link rel="icon" type="image/svg+xml" href="/demo/assets/favicon.svg">
 <link rel="stylesheet" href="/demo/assets/demo.css">
 </head>
@@ -19,16 +19,16 @@
     </svg>
     <div>
       <p class="brand-name">LogiShield</p>
-      <p class="brand-sub">Member 4 &middot; Structure-Aware Tokenization &amp; Lightweight AI Prediction</p>
+      <p class="brand-sub">LogiShield &middot; Structure-Aware Tokenization &amp; Lightweight AI Prediction</p>
     </div>
   </div>
-  <p class="tag">PP1 working prototype</p>
+  <p class="tag">PP1 working implementation</p>
 </header>
 
 <div class="notice" role="note">
   <strong>Synthetic data only.</strong>
-  Everything below is produced by the real Member 4 Python service on this machine
-  (<code>POST /v1/analyze</code>, contract <code>member4-analysis-v2</code>). Output is a privacy-safe
+  Everything below is produced by the real LogiShield Python service on this machine
+  (<code>POST /v1/analyze</code>, contract <code>logishield-analysis-v2</code>). Output is a privacy-safe
   projection: values the vocabulary does not already know are hidden by the server.
 </div>
 
@@ -57,7 +57,7 @@
 
   <section class="panel results" id="results" aria-labelledby="results-h" aria-busy="false">
     <h2 id="results-h" class="h-sm">2 &middot; Pipeline stages (genuine backend response)</h2>
-    <div class="empty" id="empty">No result yet. The six Member 4 stages will appear here after Analyze.</div>
+    <div class="empty" id="empty">No result yet. The six LogiShield stages will appear here after Analyze.</div>
     <div id="error-box" class="error" role="alert" hidden></div>
 
     <ol class="stages" id="stages" hidden>
@@ -132,14 +132,14 @@
     <h2 id="research-h" class="h-sm">Research status</h2>
     <h3 class="h-xs ok">Implemented</h3>
     <ul class="list">
-      <li>Member 4 internal pipeline: fusion, masking, normalization, tokenization, tensor preparation.</li>
+      <li>LogiShield internal pipeline: fusion, masking, normalization, tokenization, tensor preparation.</li>
       <li>Lightweight anomaly model and token-id vocabulary.</li>
-      <li>Local Member 4 HTTP API with privacy-safe response projection.</li>
+      <li>Local LogiShield HTTP API with privacy-safe response projection.</li>
     </ul>
     <h3 class="h-xs todo">Not yet integrated</h3>
     <ul class="list">
-      <li>Genuine Member 2 verified-rule output (rules here are mock fixtures).</li>
-      <li>Member 3 runtime handoff and Allow/Block verdicts.</li>
+      <li>Genuine Formal Verification verified-rule output (rules here are mock fixtures).</li>
+      <li>Runtime Verification runtime handoff and Allow/Block verdicts.</li>
       <li>Full group frontend/backend integration.</li>
     </ul>
     <p class="small muted">The model is fitted on two hand-written synthetic fixtures. A score shows the pipeline is wired end to end; it is not detection accuracy.</p>

@@ -1,4 +1,4 @@
-"""Adapters between upstream inputs and Member 4 internal models."""
+"""Adapters between upstream inputs and LogiShield internal models."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from shared_contracts.models import RawEvent
 
 from .models import AnomalyPrediction, UnifiedApiContext, VerifiedRule, VerifiedRuleInfo
 
-# Keys Member 1 adds to ``RawEvent.payload`` for intercepted HTTP requests.
+# Keys Ingestion adds to ``RawEvent.payload`` for intercepted HTTP requests.
 HTTP_METADATA_KEY = "_http_metadata"
 THREAT_SCORE_KEY = "_threat_score"
 
@@ -20,11 +20,11 @@ _ModelT = TypeVar("_ModelT", bound=BaseModel)
 
 
 class InputContractError(ValueError):
-    """Raised when an upstream input does not satisfy a Member 4 contract."""
+    """Raised when an upstream input does not satisfy a LogiShield contract."""
 
 
 def to_unified_api_context(source: RawEvent | Mapping[str, Any]) -> UnifiedApiContext:
-    """Convert a Member 1 event into a unified API context.
+    """Convert a Ingestion event into a unified API context.
 
     Accepts a ``RawEvent`` (or its dict form) whose payload carries the
     interception metadata, or an interception envelope with top-level
@@ -73,8 +73,8 @@ def to_verified_rule_info(source: Mapping[str, Any] | str | bytes) -> VerifiedRu
     )
 
 
-def to_member3_output(prediction: AnomalyPrediction) -> Any:
-    """Convert an anomaly prediction into the contract expected by Member 3."""
+def to_runtime_verification_output(prediction: AnomalyPrediction) -> Any:
+    """Convert an anomaly prediction into the contract expected by Runtime Verification."""
     raise NotImplementedError
 
 

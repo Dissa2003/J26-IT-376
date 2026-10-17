@@ -10,6 +10,8 @@ import * as components from "./page-components.js";
 import * as overview from "./page-overview.js";
 import * as reports from "./page-reports.js";
 import { mountPending } from "./page-pending.js";
+import * as policy from "./page-policy.js";
+import * as policyData from "./page-policy-data.js";
 
 let activeUnmount = null;
 
@@ -46,7 +48,12 @@ function render() {
   const view = document.getElementById("view");
   clear(view);
 
-  const pages = { overview: overview, anomaly: anomaly, logs: logs, components: components, reports: reports };
+  const pages = {
+    overview: overview, policy: policy, anomaly: anomaly, logs: logs,
+    components: components, reports: reports, "policy-data": policyData,
+    conflicts: policyData, cache: policyData, explainability: policyData,
+    evaluation: policyData, implementation: policyData
+  };
   if (pages[route.kind]) {
     pages[route.kind].mount(view, route);
     activeUnmount = pages[route.kind].unmount;

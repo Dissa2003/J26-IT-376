@@ -1,5 +1,5 @@
 /* Reports: (A) the current browser session, from the shared in-memory store,
- * and (B) documented Member 4 research evaluation evidence, from evidence.js.
+ * and (B) documented LogiShield research evaluation evidence, from evidence.js.
  *
  * The two halves are deliberately separate: the session half is live,
  * single-observation and session-local; the evidence half is frozen,
@@ -131,7 +131,7 @@ function build(root, route) {
   root.appendChild(head);
 
   // ---------- A. current browser session ----------
-  root.appendChild(sectionHead("Current Browser Session — Member 4 Prototype", "Session-local", "info"));
+  root.appendChild(sectionHead("Current Browser Session — LogiShield Implementation", "Session-local", "info"));
   const scope = el("div", "pending-banner info-banner");
   const scopeText = el("div");
   scopeText.appendChild(el("strong", null, "Live observations from this page load only"));
@@ -175,7 +175,7 @@ function build(root, route) {
 
   const links = el("div", "grid g-2");
   [["#/logs", "logs", "Logs & Traces", "Open per-stage traces, filters and the stored summary for each analysis"],
-   ["#/anomaly", "alert", "Anomaly Detection", "Run another synthetic request through the real Member 4 pipeline"]].forEach((a) => {
+   ["#/anomaly", "alert", "Anomaly Detection", "Run another synthetic request through the real LogiShield pipeline"]].forEach((a) => {
     const item = link(a[0], "action");
     const ico = el("span", "action-ico");
     ico.appendChild(icon(a[1], 22));
@@ -190,7 +190,7 @@ function build(root, route) {
 
   // ---------- B. documented research evidence ----------
   root.appendChild(el("div", "section-gap"));
-  root.appendChild(sectionHead("Member 4 Research Evaluation Evidence", "Documented · frozen", "pending"));
+  root.appendChild(sectionHead("LogiShield Research Evaluation Evidence", "Documented · frozen", "pending"));
   const ev = el("div", "pending-banner info-banner");
   const evText = el("div");
   evText.appendChild(el("strong", null, "Separate from the live session: documented, pre-registered, synthetic evaluation results"));

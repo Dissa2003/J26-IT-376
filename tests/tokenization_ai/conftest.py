@@ -1,4 +1,4 @@
-"""Shared fixtures for Member 4 tests."""
+"""Shared fixtures for LogiShield tests."""
 
 import pytest
 

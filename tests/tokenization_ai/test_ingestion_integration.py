@@ -1,15 +1,15 @@
-"""Member 1 -> Member 4 data-contract integration tests.
+"""Ingestion -> LogiShield data-contract integration tests.
 
-What this proves: a ``RawEvent`` that Member 1's real ``ingestion`` app
+What this proves: a ``RawEvent`` that Ingestion's real ``ingestion`` app
 forwards downstream (interception path, real ``PIIMasker`` and broker) is
-accepted by Member 4's real adapter, pipeline and HTTP API.
+accepted by LogiShield's real adapter, pipeline and HTTP API.
 
 What this does NOT prove: a running multi-service deployment. Everything
-runs in one process via ``TestClient`` with Member 1's own in-memory
+runs in one process via ``TestClient`` with Ingestion's own in-memory
 broker and a capturing stand-in for the processing client (the same
-pattern Member 1's tests use). There is no network hop, no Redis, no
-Member 2 verified-rule output (rules here are absent or MOCK) and no
-Member 3 handoff. All data is synthetic.
+pattern Ingestion's tests use). There is no network hop, no Redis, no
+Formal Verification verified-rule output (rules here are absent or MOCK) and no
+Runtime Verification handoff. All data is synthetic.
 """
 
 import time
@@ -29,7 +29,7 @@ from tokenization_ai.adapters import (
     to_unified_api_context,
     to_verified_rule_info,
 )
-from tokenization_ai.app import create_app as create_member4_app
+from tokenization_ai.app import create_app as create_logishield_app
 from tokenization_ai.demo import _build_demo_service
 
 BEARER = "synthetic-bearer-M1-SECRET-111"
@@ -56,7 +56,7 @@ INTERCEPTION = {
 
 
 class CapturingProcessing(ProcessingClient):
-    """Records the event Member 1 forwards downstream (as Member 1's own tests do)."""
+    """Records the event Ingestion forwards downstream (as Ingestion's own tests do)."""
 
     def __init__(self) -> None:
         self.events: list[RawEvent] = []
@@ -76,7 +76,7 @@ def _wait_for(processing: CapturingProcessing, count: int = 1) -> None:
     deadline = time.monotonic() + 3.0
     while len(processing.events) < count and time.monotonic() < deadline:
         time.sleep(0.01)
-    assert len(processing.events) >= count, "Member 1 did not forward an event downstream"
+    assert len(processing.events) >= count, "Ingestion did not forward an event downstream"
 
 
 @pytest.fixture
@@ -88,7 +88,7 @@ def ingestion():
 
 @pytest.fixture
 def forwarded(ingestion):
-    """(acknowledgement JSON, the real RawEvent Member 1 forwarded downstream)."""
+    """(acknowledgement JSON, the real RawEvent Ingestion forwarded downstream)."""
     client, processing = ingestion
     response = client.post("/v1/ingest", json=INTERCEPTION)
     assert response.status_code == 202
@@ -97,23 +97,23 @@ def forwarded(ingestion):
 
 
 @pytest.fixture(scope="module")
-def member4_service():
+def logishield_service():
     return _build_demo_service()
 
 
-def test_member1_output_has_the_shape_member4_adapter_expects(forwarded):
+def test_ingestion_output_has_the_shape_logishield_adapter_expects(forwarded):
     ack, event = forwarded
     assert isinstance(event, RawEvent)
     assert event.event_id == ack["event_id"]
     assert HTTP_METADATA_KEY in event.payload and THREAT_SCORE_KEY in event.payload
-    # Member 1's own masking already ran on the payload.
+    # Ingestion's own masking already ran on the payload.
     assert event.payload["password"] == REDACTED
     assert event.payload["contact"] == REDACTED
     assert PASSWORD not in event.model_dump_json()
     assert EMAIL not in event.model_dump_json()
 
 
-def test_adapter_accepts_member1_event_and_preserves_identity(forwarded):
+def test_adapter_accepts_ingestion_event_and_preserves_identity(forwarded):
     _ack, event = forwarded
     context = to_unified_api_context(event)
     assert context.event_id == event.event_id
@@ -124,16 +124,16 @@ def test_adapter_accepts_member1_event_and_preserves_identity(forwarded):
     assert context.payload["amount"] == 149.95
 
 
-def test_member4_service_processes_member1_event(forwarded, member4_service):
+def test_logishield_service_processes_ingestion_event(forwarded, logishield_service):
     _ack, event = forwarded
     context = to_unified_api_context(event)
     rule_info = to_verified_rule_info({"event_id": event.event_id, "rules": []})
 
-    result = member4_service.analyze(context, rule_info)
+    result = logishield_service.analyze(context, rule_info)
 
     assert result.prediction.event_id == event.event_id
     assert 0.0 <= result.prediction.score <= 1.0
-    # Member 4 masks again by itself: it does not rely on Member 1 having done so.
+    # LogiShield masks again by itself: it does not rely on Ingestion having done so.
     assert ("headers", "authorization") in result.masked_paths
     assert ("payload", "password") in result.masked_paths
     serialized = result.sequence.model_dump_json()
@@ -141,16 +141,16 @@ def test_member4_service_processes_member1_event(forwarded, member4_service):
         assert secret not in serialized
 
 
-def test_member1_redaction_marker_is_handled_as_an_ordinary_literal(forwarded, member4_service):
-    """Characterization: Member 4 does not special-case Member 1's marker.
+def test_ingestion_redaction_marker_is_handled_as_an_ordinary_literal(forwarded, logishield_service):
+    """Characterization: LogiShield does not special-case Ingestion's marker.
 
     ``[REDACTED_PII]`` under an unrecognized key (``contact`` here) reaches
-    Member 4 as plain text. It is safe (the original value is gone) but it is
-    tokenized with role ``literal_api``, not ``masked``, because Member 4's
+    LogiShield as plain text. It is safe (the original value is gone) but it is
+    tokenized with role ``literal_api``, not ``masked``, because LogiShield's
     masking provenance is path-based and never inferred from text.
     """
     _ack, event = forwarded
-    result = member4_service.analyze(
+    result = logishield_service.analyze(
         to_unified_api_context(event),
         to_verified_rule_info({"event_id": event.event_id, "rules": []}),
     )
@@ -159,9 +159,9 @@ def test_member1_redaction_marker_is_handled_as_an_ordinary_literal(forwarded, m
     assert (REDACTED, "masked") not in pairs
 
 
-def test_member4_api_accepts_member1_event_and_stays_privacy_safe(forwarded, member4_service):
+def test_logishield_api_accepts_ingestion_event_and_stays_privacy_safe(forwarded, logishield_service):
     _ack, event = forwarded
-    client = TestClient(create_member4_app(member4_service))
+    client = TestClient(create_logishield_app(logishield_service))
 
     response = client.post(
         "/v1/analyze",
@@ -170,7 +170,7 @@ def test_member4_api_accepts_member1_event_and_stays_privacy_safe(forwarded, mem
 
     assert response.status_code == 200
     body = response.json()
-    assert body["contract_version"] == "member4-analysis-v2"
+    assert body["contract_version"] == "logishield-analysis-v2"
     assert body["event_id"] == event.event_id
     assert body["provenance"]["rule_status"]["source"] == "none"
     assert body["privacy"]["output_kind"] == "privacy_safe_projection"
@@ -183,9 +183,9 @@ def test_member4_api_accepts_member1_event_and_stays_privacy_safe(forwarded, mem
     assert "authorization" in {f.split(".")[-1] for f in body["masking"]["masked_fields"]}
 
 
-def test_mock_rules_with_matching_event_id_are_labelled_mock(forwarded, member4_service):
+def test_mock_rules_with_matching_event_id_are_labelled_mock(forwarded, logishield_service):
     _ack, event = forwarded
-    client = TestClient(create_member4_app(member4_service))
+    client = TestClient(create_logishield_app(logishield_service))
     response = client.post(
         "/v1/analyze",
         json={
@@ -200,9 +200,9 @@ def test_mock_rules_with_matching_event_id_are_labelled_mock(forwarded, member4_
     assert status["verification_performed_by_this_service"] is False
 
 
-def test_rule_info_for_a_different_event_is_rejected(forwarded, member4_service):
+def test_rule_info_for_a_different_event_is_rejected(forwarded, logishield_service):
     _ack, event = forwarded
-    client = TestClient(create_member4_app(member4_service))
+    client = TestClient(create_logishield_app(logishield_service))
     response = client.post(
         "/v1/analyze",
         json={
@@ -216,7 +216,7 @@ def test_rule_info_for_a_different_event_is_rejected(forwarded, member4_service)
     assert BEARER not in response.text
 
 
-def test_member1_rejects_invalid_interception_so_nothing_reaches_member4(ingestion):
+def test_ingestion_rejects_invalid_interception_so_nothing_reaches_logishield(ingestion):
     client, processing = ingestion
     bad = {**INTERCEPTION, "threat_score": 5.0}
     response = client.post("/v1/ingest", json=bad)
@@ -225,10 +225,10 @@ def test_member1_rejects_invalid_interception_so_nothing_reaches_member4(ingesti
     assert processing.events == []
 
 
-def test_non_interception_member1_event_is_not_consumable_by_member4(ingestion, member4_service):
-    """Member 1's standard (non-HTTP) path carries no HTTP metadata.
+def test_non_interception_ingestion_event_is_not_consumable_by_logishield(ingestion, logishield_service):
+    """Ingestion's standard (non-HTTP) path carries no HTTP metadata.
 
-    This is a real contract limit between the two components: Member 4
+    This is a real contract limit between the two components: LogiShield
     needs method/path, which only the interception path provides.
     """
     client, processing = ingestion
@@ -241,7 +241,7 @@ def test_non_interception_member1_event_is_not_consumable_by_member4(ingestion, 
     with pytest.raises(InputContractError):
         to_unified_api_context(event)
 
-    api = TestClient(create_member4_app(member4_service))
+    api = TestClient(create_logishield_app(logishield_service))
     rejected = api.post(
         "/v1/analyze",
         json={"context": event.model_dump(mode="json"), "rule_source": "none"},

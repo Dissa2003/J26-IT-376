@@ -1,4 +1,4 @@
-"""Adapter from SR-BH 2020 raw CSV rows to Member 4's UnifiedApiContext / VerifiedRuleInfo.
+"""Adapter from SR-BH 2020 raw CSV rows to LogiShield's UnifiedApiContext / VerifiedRuleInfo.
 
 Dataset provenance
 -------------------
@@ -69,7 +69,7 @@ the whole dataset and never downloads anything itself.
   silently become a model feature just by existing in some future export.
 - **Masking is never bypassed, never duplicated**: this module's output is an
   ordinary, unmasked :class:`UnifiedApiContext` -- exactly like any other
-  Member 4 input -- that must still go through
+  LogiShield input -- that must still go through
   ``PrivacyMasker.mask_with_provenance`` like every other request. This
   module does not mask anything itself and must not be mistaken for a
   substitute for that stage.
@@ -86,7 +86,7 @@ the whole dataset and never downloads anything itself.
   wrong field of some combined result.
 - **Rules are never real rules**: :func:`to_empty_verified_rule_info` returns
   an empty ``rules`` list for every SR-BH 2020 row, because this dataset
-  carries no Member 2 formal-verification output at all. That empty list is
+  carries no Formal Verification formal-verification output at all. That empty list is
   not, and must never be described as, evidence that formal verification was
   performed, attempted, or skipped for the event -- see ``service.py``'s own
   ``predict`` docstring for the same point about an empty rules list.
@@ -276,7 +276,7 @@ def to_unified_api_context(
 def to_empty_verified_rule_info(event_id: str) -> VerifiedRuleInfo:
     """Return the (always-empty) rule info for one SR-BH 2020 event.
 
-    SR-BH 2020 carries no Member 2 formal-verification output, so every
+    SR-BH 2020 carries no Formal Verification formal-verification output, so every
     event gets an empty ``rules`` list. This is valid input to
     ``TokenizationAIService`` (see ``service.py``'s own docstring) and is
     not, and must never be described as, a claim that formal verification

@@ -1,4 +1,4 @@
-"""Unit tests for the Member 4 input adapters."""
+"""Unit tests for the LogiShield input adapters."""
 
 import json
 from datetime import datetime, timezone
@@ -24,7 +24,7 @@ METADATA = {
 
 
 def intercepted_event(**payload_overrides: object) -> RawEvent:
-    """Build a RawEvent the way Member 1 publishes an intercepted request."""
+    """Build a RawEvent the way Ingestion publishes an intercepted request."""
     payload = {
         "email": "[REDACTED_PII]",
         "amount": 149.95,

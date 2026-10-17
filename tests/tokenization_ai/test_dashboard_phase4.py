@@ -99,7 +99,7 @@ def test_json_export_contains_only_allowlisted_fields_and_no_secrets():
     out = _node(["export-format.js"], HOSTILE_ENTRY + r"""
 console.log(JSON.stringify(buildJsonReport([hostile], "2026-10-15T09:01:00.000Z")));
 """)
-    assert out["report_type"] == "member4-session-summaries" and out["event_count"] == 1
+    assert out["report_type"] == "logishield-session-summaries" and out["event_count"] == 1
     assert "uncalibrated" in out["scope"] and "no raw requests or secrets" in out["scope"]
     blob = json.dumps(out)
     for secret in SECRETS:
@@ -152,8 +152,8 @@ console.log(JSON.stringify({ csv, columns: CSV_COLUMNS, cells: {
     for name, cell in row.items():
         assert not cell.startswith(("=", "+", "-", "@", chr(9), chr(13))), (name, cell)
     assert row["masked_fields"] == "headers.authorization;payload.password"
-    assert out["filename"] == "member4-session-summaries-20261015T090050Z.csv"
-    assert out["jsonName"].endswith(".json") and "member4" in out["jsonName"] and "session" in out["jsonName"]
+    assert out["filename"] == "logishield-session-summaries-20261015T090050Z.csv"
+    assert out["jsonName"].endswith(".json") and "logishield" in out["jsonName"] and "session" in out["jsonName"]
 
 
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
@@ -249,7 +249,7 @@ def test_evidence_covers_kpi1_to_kpi5_with_required_fields():
     kpi5 = ev["KPIS"][4]
     assert kpi5["kind"] == "pending" and kpi5["result"] == "Not measured"
     assert "point" not in kpi5 and "mean" not in kpi5 and "interval" not in kpi5  # no number to misread
-    assert "Member 3" in kpi5["verdict"][0]
+    assert "Runtime Verification" in kpi5["verdict"][0]
 
 
 @pytest.mark.skipif(NODE is None, reason="node is not installed")
@@ -267,7 +267,7 @@ def test_evidence_does_not_overclaim_statistics_or_scope():
         assert needle in text or needle in kpi4["verdict"][0], needle
     assert "browser" in " ".join(kpi4["limits"]).lower()  # explicitly not comparable with browser timings
     joined = json.dumps(ev["METHODOLOGY"])
-    for needle in ("synthetic", "uncalibrated", "KPI 5", "Member 3", "production latency or an SLA"):
+    for needle in ("synthetic", "uncalibrated", "KPI 5", "Runtime Verification", "production latency or an SLA"):
         assert needle in joined, needle
 
 
@@ -338,9 +338,9 @@ def _flatten_latency(report):
 
 def test_reports_page_keeps_session_and_documented_evidence_separate():
     js = _read("page-reports.js")
-    assert "Current Browser Session " + chr(0x2014) + " Member 4 Prototype" in js
-    assert "Member 4 Research Evaluation Evidence" in js
-    assert js.index("Current Browser Session") < js.index("Member 4 Research Evaluation Evidence")
+    assert "Current Browser Session " + chr(0x2014) + " LogiShield Implementation" in js
+    assert "LogiShield Research Evaluation Evidence" in js
+    assert js.index("Current Browser Session") < js.index("LogiShield Research Evaluation Evidence")
     # Evidence data never flows into, or out of, the session store; the page only reads the store.
     assert "session.add(" not in js and "session.clear(" not in js
     lowered = js.lower()

@@ -1,4 +1,4 @@
-"""Tests for the Member 4 PP1 demonstration (tokenization_ai.demo).
+"""Tests for the LogiShield PP1 demonstration (tokenization_ai.demo).
 
 These tests verify the demo runs successfully end to end using its
 clearly-labeled synthetic fixtures and produces structurally valid
@@ -56,7 +56,7 @@ def test_run_demo_produces_runtime_metrics_with_non_negative_timings() -> None:
 
 def test_demo_fixtures_use_a_mock_rule_id_not_a_genuine_verification_marker() -> None:
     # The mock fixture must be unmistakably labeled as mock, so nobody
-    # downstream can mistake it for genuine Member 2 verified-rule output.
+    # downstream can mistake it for genuine Formal Verification verified-rule output.
     rule_infos = [rule_info for _, rule_info in demo._DEMO_EVENTS]
     all_rule_ids = [rule.rule_id for rule_info in rule_infos for rule in rule_info.rules]
 

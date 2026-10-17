@@ -1,14 +1,14 @@
-# Member 4 KPI 4 Latency Evaluation Protocol
+# LogiShield KPI 4 Latency Evaluation Protocol
 
-**Latency protocol version:** 1.0.0  
-**Scope:** Hybrid Structure-Aware Tokenization & Lightweight AI Prediction (Member 4 only).  
-**Covers:** KPI 4, "average inference time ≤ 5 ms" (proposal Table 2: *measure end-to-end prediction time*).  
+**Latency protocol version:** 1.0.0
+**Scope:** Hybrid Structure-Aware Tokenization & Lightweight AI Prediction (LogiShield only).
+**Covers:** KPI 4, "average inference time ≤ 5 ms" (proposal Table 2: *measure end-to-end prediction time*).
 **Independent of:** `PROTOCOL.md` (KPI 1–3, v1.0.0). That file and its fixtures are frozen and are not modified here.
 
 > The 5 ms figure is a **proposal target, not an achieved result**. Everything below is a
 > **single-machine, synthetic-workload, in-process/loopback** measurement. It is not a
 > production latency SLA, not a throughput or concurrency result, and says nothing about
-> detection quality, Member 2 integration or Member 3 integration.
+> detection quality, Formal Verification integration or Runtime Verification integration.
 
 ## 1. Pre-registration rules
 
@@ -23,7 +23,7 @@
 ## 2. What "inference time" means here (and what it does not)
 
 The proposal's wording is "average inference time" with the method "measure end-to-end
-prediction time". This protocol therefore measures **end-to-end prediction time of the real Member 4
+prediction time". This protocol therefore measures **end-to-end prediction time of the real LogiShield
 pipeline** and labels it as such. It is **not** the isolated cost of the ML model: the model
 (`LightweightAnomalyModel.predict`) is one of six stages. The production tracer's per-stage
 times (including `model_inference`) are reported separately as *informational* stage means.
@@ -82,7 +82,7 @@ Configuration: the demo service used by `python -m tokenization_ai` — `_build_
   stratum. A B3 mean exceeding 5 ms does not retroactively change the primary result; it is reported
   as measured and discussed.
 - `target_met` means only "on this machine, with this Python build and this synthetic workload, the
-  in-process Member 4 pipeline's average end-to-end prediction time was within 5 ms".
+  in-process LogiShield pipeline's average end-to-end prediction time was within 5 ms".
 
 ## 7. Exclusions
 

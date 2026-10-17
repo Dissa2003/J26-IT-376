@@ -50,7 +50,7 @@ def test_dashboard_overview_is_the_default_landing_page():
     assert 'export const DEFAULT_ROUTE = "dashboard";' in routes
     assert 'id: "dashboard", label: "Dashboard", icon: "home", kind: "overview"' in routes
     assert 'title: "LogiShield Dashboard"' in routes
-    assert 'subtitle: "Member 4 Research Prototype Overview"' in routes
+    assert 'subtitle: "LogiShield Research Implementation Overview"' in routes
     assert 'href="#/dashboard"' in _read("index.html")
     app = _read("app.js")
     assert "overview: overview" in app and 'from "./page-overview.js"' in app
@@ -164,7 +164,7 @@ def test_overview_never_claims_system_health_accuracy_or_verdicts():
         assert forbidden not in js, forbidden
     for needle in (
         "not detection accuracy", "Uncalibrated", "not the KPI 4 benchmark", "not deployed gateway latency",
-        "Only Member 4 has a live status", "KPI 5", "Session-local", "lost on reload", "Synthetic demo fixtures",
+        "Only LogiShield has a live status", "KPI 5", "Session-local", "lost on reload", "Synthetic demo fixtures",
     ):
         assert needle in js, needle
 
@@ -177,7 +177,7 @@ def test_overview_component_facts_are_reused_not_duplicated():
     # Statuses are read from the shared facts, never restated here.
     for restated in ("Tested in-process", "Not integrated", "Pending contract"):
         assert restated not in page
-    assert page.count("c.live") >= 2  # only the flagged Member 4 component gets a live badge
+    assert page.count("c.live") >= 2  # only the flagged LogiShield component gets a live badge
 
 
 def test_overview_quick_actions_are_real_links():

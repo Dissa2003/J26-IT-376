@@ -1,11 +1,47 @@
 /* The only module that talks to the network. Same-origin calls to the
- * existing Member 4 endpoints; nothing here scores, masks or tokenizes. */
+ * existing LogiShield endpoints; nothing here scores, masks or tokenizes. */
 
 const ANALYZE_URL = "/v1/analyze";
 const HEALTH_URL = "/health";
 const SCENARIOS_URL = "/demo/assets/scenarios.json";
-export const CONTRACT = "member4-analysis-v2";
+export const CONTRACT = "logishield-analysis-v2";
 const TIMEOUT_MS = 15000;
+
+export async function verifyPolicyText(policyText, policyId) {
+  const response = await fetch("/api/v1/verify-text", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ policy_text: policyText, policy_id: policyId || undefined }),
+    credentials: "same-origin",
+    cache: "no-store"
+  });
+  let payload = null;
+  try { payload = await response.json(); } catch (error) { payload = null; }
+  return { ok: response.ok, status: response.status, payload };
+}
+
+async function getPolicyData(path) {
+  try {
+    const response = await fetch(path, { cache: "no-store", credentials: "same-origin" });
+    let payload = null;
+    try { payload = await response.json(); } catch (error) { payload = null; }
+    return { ok: response.ok, status: response.status, payload };
+  } catch (error) {
+    return { ok: false, status: 0, payload: null };
+  }
+}
+
+export function getVerificationRecords() {
+  return getPolicyData("/api/v1/verification-records");
+}
+
+export function getRuleCache() {
+  return getPolicyData("/api/v1/rule-cache");
+}
+
+export function getConflicts() {
+  return getPolicyData("/api/v1/conflicts");
+}
 
 export async function getHealth() {
   try {
@@ -62,7 +98,7 @@ export async function analyze(request) {
       ok: false,
       message: timedOut
         ? "The backend did not respond within " + (TIMEOUT_MS / 1000) + " seconds."
-        : "Could not reach the Member 4 service. Is it running on this machine?"
+        : "Could not reach the LogiShield service. Is it running on this machine?"
     };
   } finally {
     clearTimeout(timer);

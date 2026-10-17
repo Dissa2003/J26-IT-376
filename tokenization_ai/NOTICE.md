@@ -4,14 +4,14 @@
 LogiShield – Neuro-Symbolic AI Verification for API Gateways
 
 **Component:**
-Member 4 – Hybrid Structure-Aware Tokenization & Lightweight AI Prediction
+LogiShield – Hybrid Structure-Aware Tokenization & Lightweight AI Prediction
 
 **Implemented by:**
 Abeykoon K.G.T.D.
 Student ID: IT23152946
 
 **Branch:**
-`feature/member4-tokenization-ai`
+`feature/logishield-tokenization-ai`
 
 **Scope:**
 - Input fusion
@@ -24,7 +24,7 @@ Student ID: IT23152946
 - Anomaly prediction
 - Rule-aligned signal
 - Logs / trace
-- Member 4 tests and KPI evaluation
+- LogiShield tests and KPI evaluation
 
 ---
 

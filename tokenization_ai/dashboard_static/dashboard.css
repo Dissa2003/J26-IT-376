@@ -1,4 +1,4 @@
-/* LogiShield dashboard (Member 4). Dark-navy shell; no external fonts or images. */
+/* LogiShield dashboard (LogiShield). Dark-navy shell; no external fonts or images. */
 :root {
   --bg0: #030a1a;
   --bg1: #061431;
@@ -118,6 +118,45 @@ a { color: var(--blue-2); }
 
 /* ---- page ---- */
 .view { padding: 22px 28px 40px; outline: none; min-width: 0; }
+.policy-live-note { margin: 0 0 16px; }
+.policy-live-note p { flex: 1; }
+.policy-form { display: grid; gap: 12px; }
+.policy-input, .text-input {
+  width: 100%; border: 1px solid var(--edge); border-radius: 8px; background: #061431; color: var(--ink);
+  font: inherit; padding: 10px 12px;
+}
+.policy-input { resize: vertical; min-height: 96px; }
+.policy-input:focus, .text-input:focus { border-color: var(--cyan); outline: 2px solid rgba(34, 211, 238, 0.2); }
+.btn-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; width: max-content;
+  padding: 0 16px; border: 1px solid #3c8cff; border-radius: 8px; background: #1b5fe6; color: #fff;
+  font: 650 14px/1 inherit; cursor: pointer;
+}
+.btn-primary:hover { background: #2a77ff; }
+.btn-primary:disabled { opacity: 0.65; cursor: wait; }
+.policy-output { display: flex; flex-direction: column; gap: 14px; }
+.loading-note { color: var(--cyan); padding: 16px 0; }
+.policy-result { border: 1px solid var(--edge); border-left: 4px solid var(--blue-2); border-radius: 8px; padding: 14px 16px; background: rgba(10, 26, 60, 0.7); }
+.policy-result.live { border-left-color: var(--green); }
+.policy-result.bad, .policy-error { border-left-color: var(--red); }
+.policy-result.mock { border-left-color: var(--amber); }
+.policy-result-status { font-size: 24px; font-weight: 750; letter-spacing: 0.5px; }
+.policy-result p, .policy-error p { color: var(--muted); margin-top: 3px; }
+.policy-stages { display: grid; gap: 12px; }
+.policy-stage { border: 1px solid var(--line); border-radius: 9px; padding: 12px; background: rgba(6, 20, 49, 0.7); }
+.policy-stage-head { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; }
+.policy-stage-head h3 { flex: 1; font-size: 14px; }
+.policy-stage-marker { display: inline-flex; color: var(--cyan); }
+.policy-code { margin: 0; padding: 11px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; color: #c8d6f2; background: #030a1a; border: 1px solid #102957; border-radius: 7px; font-size: 12px; }
+.policy-inference { display: grid; gap: 10px; }
+.inference-step { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; align-items: start; }
+.step-number { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: #fff; background: var(--blue); font-weight: 700; }
+.inference-step strong { display: block; margin-bottom: 5px; color: var(--ink); }
+.solver-summary { display: grid; gap: 7px; }
+.solver-line { color: #c8d6f2; font-size: 13px; }
+.policy-error { border: 1px solid #7b2933; border-left: 4px solid var(--red); border-radius: 8px; padding: 14px 16px; background: rgba(127, 29, 29, 0.16); }
+.policy-unsupported { border-color: #80601f; border-left-color: var(--amber); background: rgba(245, 165, 36, 0.1); }
+.policy-conflicts { display: grid; gap: 8px; }
 .page-head { margin-bottom: 18px; }
 .page-title { font-size: 32px; line-height: 1.15; font-weight: 700; letter-spacing: 0.1px; }
 .page-sub { color: var(--muted); font-size: 15px; margin-top: 4px; max-width: 900px; }

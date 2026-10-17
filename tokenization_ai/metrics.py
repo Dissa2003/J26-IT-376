@@ -1,4 +1,4 @@
-"""Runtime metrics for the Member 4 pipeline, derived from a :class:`PipelineTrace`.
+"""Runtime metrics for the LogiShield pipeline, derived from a :class:`PipelineTrace`.
 
 Scope -- runtime measurements only
 -----------------------------------
@@ -8,9 +8,9 @@ given. That is true and useful regardless of whether the input was a
 synthetic demo fixture or real traffic.
 
 This module deliberately does **not** compute precision, recall, F1, or
-any other detection-accuracy metric. Member 4 has no real labeled
+any other detection-accuracy metric. LogiShield has no real labeled
 dataset as of this phase (see the Phase 9/10 planning notes and
-``test_service.py``'s synthetic-PP1-prototype test docstring), so there
+``test_service.py``'s synthetic-PP1-implementation test docstring), so there
 is no ground truth to score predictions against. A number that *looks*
 like a quality metric but is computed from hand-picked synthetic labels
 would invite exactly the kind of "it works" misreading this project is

@@ -1,17 +1,17 @@
-# Member 4 — Hybrid Structure-Aware Tokenization & Lightweight AI Prediction
+# LogiShield — Hybrid Structure-Aware Tokenization & Lightweight AI Prediction
 
 Research ID **J-26-IT-376** · LogiShield: Neuro-Symbolic AI Verification for API Gateways
 
 > **Status in one paragraph.** This package is a working, tested **proof of concept** of
-> Member 4's component: it fuses an API request with verified-rule information, masks
+> LogiShield's component: it fuses an API request with verified-rule information, masks
 > sensitive data, tokenizes the result with an explicit structure-aware grammar, prepares a
 > fixed-size tensor and scores it with a small trained model. It is **not** a validated
-> intrusion detector, it has **not** been integrated with Member 2's or Member 3's
+> intrusion detector, it has **not** been integrated with Formal Verification's or Runtime Verification's
 > components, and every reported measurement is from **synthetic** data on a single machine.
 > See [Limitations](#9-scientific-limitations) and [INTEGRATION_STATUS.md](INTEGRATION_STATUS.md).
 
 *Documentation was last verified against the repository at commit `ea50a49` (branch
-`feature/member4-tokenization-ai`; the masking hardening of audit finding D3 is included).
+`feature/logishield-tokenization-ai`; the masking hardening of audit finding D3 is included).
 Counts and numbers below come from the stated source files or from the evidence reports named
 in §8; nothing here was re-measured when writing it.*
 
@@ -21,7 +21,7 @@ in §8; nothing here was re-measured when writing it.*
 
 **Component responsibility (proposal):** preprocess a unified API context together with
 verified symbolic rule information into an AI-ready representation, run a lightweight model,
-and emit an anomaly-aware signal for the next stage (Member 3's runtime verification).
+and emit an anomaly-aware signal for the next stage (Runtime Verification's runtime verification).
 
 **Research gap addressed (proposal §1.3):** little evidence exists for a low-latency
 preprocessing pipeline that combines API context with *already-verified symbolic rule
@@ -55,7 +55,7 @@ Unified API context  +  verified-rule information
 6 Lightweight prediction model.py         LightweightAnomalyModel.predict → score in [0,1]
    │  service.py   TokenizationAIService.predict / analyze   (orchestration + tracing)
    ▼
-AnomalyPrediction(event_id, score, model_version)      ← handoff to Member 3 NOT implemented
+AnomalyPrediction(event_id, score, model_version)      ← handoff to Runtime Verification NOT implemented
 ```
 
 | Stage | What it does | Source |
@@ -70,8 +70,8 @@ AnomalyPrediction(event_id, score, model_version)      ← handoff to Member 3 N
 | Tracing | Per-stage timings and count-only summaries; never raw values | `tracing.py`, `metrics.py` |
 
 Not implemented (so not claimed): learned **embeddings** (token ids feed hashed n-gram
-features; there is no embedding table), a **rule-aligned signal**, a **Member 3 output
-adapter** (`adapters.to_member3_output` raises `NotImplementedError`), an anomaly **label /
+features; there is no embedding table), a **rule-aligned signal**, a **Runtime Verification output
+adapter** (`adapters.to_runtime_verification_output` raises `NotImplementedError`), an anomaly **label /
 threshold**, and the request-only vs rule-fused **baseline comparison**.
 
 ## 3. Input and output structures
@@ -80,11 +80,11 @@ threshold**, and the request-only vs rule-fused **baseline comparison**.
 
 - `UnifiedApiContext`: `event_id`, `method`, `path`, `content_type`, `client_ip`, `headers`,
   `payload` (object), `threat_score` (0–1, optional), `timestamp`.
-  Accepted forms: Member 1 interception envelope (`event_id`, `metadata{method,path,…}`,
+  Accepted forms: Ingestion interception envelope (`event_id`, `metadata{method,path,…}`,
   `payload`, `threat_score`) or a `RawEvent` whose payload carries `_http_metadata` /
   `_threat_score`.
-- `VerifiedRuleInfo`: `event_id` and `rules: [{rule_id, …attributes}]`. **This is Member 4's
-  own input structure; it is not Member 2's actual output format** (see
+- `VerifiedRuleInfo`: `event_id` and `rules: [{rule_id, …attributes}]`. **This is LogiShield's
+  own input structure; it is not Formal Verification's actual output format** (see
   [INTEGRATION_STATUS.md](INTEGRATION_STATUS.md)).
 
 `threat_score` is carried in the context but is **not tokenized and not used by the model**.
@@ -97,7 +97,7 @@ threshold**, and the request-only vs rule-fused **baseline comparison**.
 | `AnomalyPrediction{event_id, score, model_version}` | `service.predict` | Score ∈ [0,1]; not calibrated |
 | `TokenSequence{tokens, roles}` / `ModelInput{input_ids, attention_mask}` | internal | ids are never returned by the API |
 | `PipelineAnalysis` | `service.analyze` | prediction + normalized record + masked paths + tokens + tensor |
-| API response `member4-analysis-v2` | `POST /v1/analyze` | privacy-safe projection, see §6 |
+| API response `logishield-analysis-v2` | `POST /v1/analyze` | privacy-safe projection, see §6 |
 | Trace / runtime metrics | `tracing.py`, `metrics.py` | counts and timings only |
 
 ## 4. Privacy masking, normalization and token roles
@@ -118,7 +118,7 @@ threshold**, and the request-only vs rule-fused **baseline comparison**.
   hardened code (§8), and KPI 1–3 were only re-run for reproducibility (§9.7).
 - **Roles are authoritative.** `tokenizer.py` assigns `control` / `literal_api` /
   `literal_rule` / `masked` at the moment each token is emitted; the vocabulary and tensorizer
-  read them rather than infer them. Member 1's `[REDACTED_PII]` marker is **not** recognized as
+  read them rather than infer them. Ingestion's `[REDACTED_PII]` marker is **not** recognized as
   masked: it is tokenized as an ordinary `literal_api` (documented by a characterization test).
 - **Grammar** (summary; full specification in `evaluation/PROTOCOL.md` §3):
   `[SEQ_START] method path headers payload rules [SEQ_END]`, with `[API:*]` tags for
@@ -128,7 +128,7 @@ threshold**, and the request-only vs rule-fused **baseline comparison**.
 ## 5. Setup
 
 Requirements: Python 3.12+ (developed and measured on 3.14.7), the packages in the root
-`requirements.txt`, **plus NumPy** (kept out of the root requirements file; Member 4 only):
+`requirements.txt`, **plus NumPy** (kept out of the root requirements file; LogiShield only):
 
 ```powershell
 cd C:\Users\kavin\Documents\LogiShield-Research\J26-IT-376
@@ -175,7 +175,7 @@ $body = @'
 Invoke-RestMethod -Uri http://127.0.0.1:8004/v1/analyze -Method Post -ContentType application/json -Body $body
 ```
 
-Response (`contract_version: "member4-analysis-v2"`) contains `event_id`, `provenance`
+Response (`contract_version: "logishield-analysis-v2"`) contains `event_id`, `provenance`
 (rule-source label, `verification_performed_by_this_service: false`, model note,
 `detection_accuracy_claim: "none"`), `privacy`, `masking`, `masked_representation`, `tokens`,
 `tensor` (metadata only, no ids), `prediction`, and `timings`. Errors use
@@ -206,7 +206,7 @@ real-world detection."*
 
 ### Function 1 — Input fusion, privacy masking and normalization (~60 s)
 
-1. Select **Suspicious API request** (mock rule fixture is labelled "not genuine Member 2
+1. Select **Suspicious API request** (mock rule fixture is labelled "not genuine Formal Verification
    output").
 2. In *Request sent to the API* point out the raw synthetic `Authorization` header and
    `password`. Click **Analyze**.
@@ -274,7 +274,7 @@ original evidence — use an empty directory):
 | 2 Token mapping | ≥ 90% | **31 / 31** sequences matched; 3719 / 3719 token positions; masking provenance 31 / 31 | same |
 | 3 Tensor correctness | ≥ 95% | **30 / 30** tensors (Wilson 88.7–100%); 1 / 1 capacity rejection as specified | same |
 | 4 Average prediction time | ≤ 5 ms | **Current code (`ea50a49`, post-D3): pre-registered B1 mean 0.3413 ms** (worst batch mean 0.3481 ms; 5 batches × 1000 = 5000 calls). Historical pre-D3 baseline: 0.3200 ms (worst batch 0.3371 ms). Both on one machine and a synthetic workload; target met in both | `evaluation/LATENCY_PROTOCOL.md` |
-| 5 Downstream usability | ≥ 90% | **Pending genuine Member 3 integration — not measured** | [INTEGRATION_STATUS.md](INTEGRATION_STATUS.md) |
+| 5 Downstream usability | ≥ 90% | **Pending genuine Runtime Verification integration — not measured** | [INTEGRATION_STATUS.md](INTEGRATION_STATUS.md) |
 
 **KPI 4 in detail.** The same frozen latency protocol and harness were run twice:
 
@@ -344,7 +344,7 @@ original evidence — use an empty directory):
    unchanged frozen fixtures reproduced the identical results hash (`f353779d…`), which
    confirms only that those 31 cases are unaffected; it is not a measurement of the new
    masking rules. KPI 4 **was** re-measured on the hardened code (§8, 0.3413 ms). The
-   Member 1 header exposure is noted in INTEGRATION_STATUS.
+   Ingestion header exposure is noted in INTEGRATION_STATUS.
 8. **Latency** is one machine (Windows 10, 8 logical CPUs, Windows "Ultimate Performance"
    power scheme), Python-level timing, GC disabled in timed loops, synthetic payloads of ≤ 128
    tokens after truncation; not a throughput, concurrency or production-SLA result. The
@@ -352,7 +352,7 @@ original evidence — use an empty directory):
    was a separate run, so the ≈ +6.7% difference is indicative, not a controlled estimate of
    the masking cost.
 9. **Score semantics.** The score is uncalibrated and is not a probability of attack.
-10. **Integration.** No Member 2 or Member 3 integration exists; KPI 5 is unmeasured.
+10. **Integration.** No Formal Verification or Runtime Verification integration exists; KPI 5 is unmeasured.
 
 ## 10. Troubleshooting
 
@@ -362,7 +362,7 @@ original evidence — use an empty directory):
 | `No module named tokenization_ai` | Run from the repository root (`...\J26-IT-376`); `python -m` resolves the package from the current directory |
 | `[Errno 10048]` / port 8004 in use | An earlier server is still running. Stop it, or find it with `Get-NetTCPConnection -LocalPort 8004` |
 | `/demo` shows "Demo scenarios unavailable" | The page loaded but `/demo/assets/scenarios.json` failed; reload, confirm the server is on 127.0.0.1:8004 and check `/health` |
-| Analyze fails: "Could not reach the Member 4 service" | Server not running or a different port; start it as in §6 |
+| Analyze fails: "Could not reach the LogiShield service" | Server not running or a different port; start it as in §6 |
 | `/health` returns 503 / `model_not_ready` | Vocabulary or model not fitted; the default demo service fits both at start-up, so restart the process |
 | `411 length_required` from a custom client | The endpoint requires a `Content-Length` header; chunked uploads are rejected |
 | `422 invalid_event_id` | `event_id` must be 1–64 characters of letters, digits, `.`, `_`, `:` or `-` |

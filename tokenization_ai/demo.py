@@ -1,25 +1,25 @@
-"""Small, runnable PP1 demonstration of the Member 4 pipeline, end to end.
+"""Small, runnable PP1 demonstration of the LogiShield pipeline, end to end.
 
 SYNTHETIC DEMONSTRATION ONLY -- NOT A RESEARCH RESULT.
 
 Every event, payload, and "verified rule" in this module is a small,
 hand-constructed fixture written for this demo, in the same spirit as
 the synthetic fixtures already used in ``test_service.py``'s
-"synthetic PP1 prototype" test and ``model.py``'s own training-fixture
+"synthetic PP1 implementation" test and ``model.py``'s own training-fixture
 caveat. In particular:
 
 - The rule fixtures below (``rule_id="MOCK-R-..."``) are illustrative
-  mock data standing in for Member 2's real formal-verification output.
+  mock data standing in for Formal Verification's real formal-verification output.
   They are not the product of genuine rule verification, and nothing
-  here exercises Member 2's actual rule engine.
-- Member 3 integration is not exercised at all: ``adapters.to_member3_output``
+  here exercises Formal Verification's actual rule engine.
+- Runtime Verification integration is not exercised at all: ``adapters.to_runtime_verification_output``
   remains an intentional ``NotImplementedError`` pending an agreed
   contract with that team (see ``adapters.py``), and this demo does not
   attempt to work around that.
 - The "benign"/"suspicious" labels used to train the small demo model
   are this module's author's own illustrative choices, not ground truth
   from any real system. The resulting scores demonstrate that the six
-  Member 4 stages are wired together correctly end to end; they are not
+  LogiShield stages are wired together correctly end to end; they are not
   evidence of real-world anomaly-detection accuracy and must never be
   cited as such.
 
@@ -65,7 +65,7 @@ _DEMO_EVENTS: list[tuple[UnifiedApiContext, VerifiedRuleInfo]] = [
             headers={"Authorization": "Bearer demo-not-a-real-token"},
         ),
         # MOCK verified-rule fixture -- illustrative only, not genuine
-        # Member 2 output. See the module docstring.
+        # Formal Verification output. See the module docstring.
         VerifiedRuleInfo(
             event_id="demo-suspicious-1",
             rules=[VerifiedRule(rule_id="MOCK-R-SQLI", attributes={"severity": "high"})],
@@ -130,9 +130,9 @@ def run_demo() -> list[tuple[str, AnomalyPrediction, PipelineTrace, RuntimeMetri
 
 def main() -> None:
     print("=" * 72)
-    print("Member 4 PP1 demonstration -- SYNTHETIC DATA ONLY, NOT A REAL DATASET")
-    print("Verified-rule fixtures are MOCK data, not genuine Member 2 output.")
-    print("Member 2/3 integration is not exercised in this demo.")
+    print("LogiShield PP1 demonstration -- SYNTHETIC DATA ONLY, NOT A REAL DATASET")
+    print("Verified-rule fixtures are MOCK data, not genuine Formal Verification output.")
+    print("Formal Verification/3 integration is not exercised in this demo.")
     print("=" * 72)
 
     results = run_demo()

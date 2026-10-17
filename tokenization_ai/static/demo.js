@@ -1,4 +1,4 @@
-/* LogiShield Member 4 demo client.
+/* LogiShield LogiShield demo client.
  *
  * Presentation only: it posts a synthetic fixture to the same-origin
  * POST /v1/analyze endpoint and renders whatever the backend returns.
@@ -11,7 +11,7 @@
 
   var API_URL = "/v1/analyze";
   var SCENARIOS_URL = "/demo/assets/scenarios.json";
-  var CONTRACT = "member4-analysis-v2";
+  var CONTRACT = "logishield-analysis-v2";
   var TIMEOUT_MS = 15000;
 
   var scenarios = [];
@@ -92,7 +92,7 @@
     if (source === "mock_fixture") {
       $("rule-chip").textContent = "MOCK rule fixture";
       $("rule-text").textContent =
-        "Illustrative mock data, not genuine Member 2 verification output. " +
+        "Illustrative mock data, not genuine Formal Verification verification output. " +
         "This service does not verify rules.";
     } else {
       $("rule-chip").textContent = "No verified-rule input";
@@ -291,12 +291,12 @@
       }
       render(result.payload);
       renderedId = scenario.id;
-      setStatus("ok", "Analysis complete. These values came from the Member 4 service.");
+      setStatus("ok", "Analysis complete. These values came from the LogiShield service.");
     }).catch(function (error) {
       var timedOut = error && error.name === "AbortError";
       showError(timedOut
         ? "The backend did not respond within " + (TIMEOUT_MS / 1000) + " seconds."
-        : "Could not reach the Member 4 service. Is it running on this machine?");
+        : "Could not reach the LogiShield service. Is it running on this machine?");
       setStatus("fail", "Analysis failed: backend unreachable.");
     }).then(function () {
       clearTimeout(timer);

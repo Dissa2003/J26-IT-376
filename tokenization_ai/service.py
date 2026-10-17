@@ -1,4 +1,4 @@
-"""End-to-end Member 4 pipeline from fused input to anomaly prediction."""
+"""End-to-end LogiShield pipeline from fused input to anomaly prediction."""
 
 from __future__ import annotations
 

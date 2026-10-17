@@ -1,5 +1,5 @@
 {
-  "disclaimer": "Synthetic demonstration fixtures only. Rule entries are MOCK fixtures, not genuine Member 2 verification output.",
+  "disclaimer": "Synthetic demonstration fixtures only. Rule entries are MOCK fixtures, not genuine Formal Verification verification output.",
   "scenarios": [
     {
       "id": "benign",

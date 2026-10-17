@@ -2,7 +2,7 @@
  *
  * Everything here is either (a) documented architecture/integration fact
  * taken from the repository README and tokenization_ai/INTEGRATION_STATUS.md,
- * or (b) Member 4's own live readiness from GET /health (via shell.js) and
+ * or (b) LogiShield's own live readiness from GET /health (via shell.js) and
  * the last observed stage timings from this session. No status, latency,
  * CPU, memory, throughput or uptime is shown for any other module. */
 
@@ -12,32 +12,32 @@ import { session } from "./session.js";
 
 export const COMPONENTS = [
   {
-    order: 1, name: "Data Processing", member: "Member 1", icon: "database", module: "ingestion/",
+    order: 1, name: "Data Processing", member: "Ingestion", icon: "database", module: "ingestion/",
     role: "Ingress interception, buffering and serialization, data masking and context dispatching.",
     output: "Structured Unified API Context",
     link: ["Tested in-process", "info"],
-    evidence: "Member 1's real output is accepted by Member 4's adapter in tests. No network hop, broker or deployment is involved."
+    evidence: "Ingestion's real output is accepted by LogiShield's adapter in tests. No network hop, broker or deployment is involved."
   },
   {
-    order: 2, name: "Formal Verification", member: "Member 2", icon: "rules", module: "processing/",
+    order: 2, name: "Formal Verification", member: "Formal Verification", icon: "rules", module: "processing/",
     role: "LTL/SMT rule encoding, neuro-symbolic constraint layer and formal verification engine.",
     output: "Rule cache, LTL formula, JSON vector / verified rule outputs",
     link: ["Not integrated", "pending"],
-    evidence: "Member 2's report has a different shape and no event id. Member 4's demos use MOCK rule fixtures."
+    evidence: "Formal Verification's report has a different shape and no event id. LogiShield's demos use MOCK rule fixtures."
   },
   {
-    order: 3, name: "Tokenization & AI", member: "Member 4", icon: "cpu", module: "tokenization_ai/", live: true,
+    order: 3, name: "Tokenization & AI", member: "LogiShield", icon: "cpu", module: "tokenization_ai/", live: true,
     role: "Input fusion, privacy-aware masking, structure-aware tokenization, tensor preparation and lightweight AI prediction.",
     output: "Anomaly score, internal AI-ready tensor, per-stage trace",
     link: ["Standalone", "info"],
     evidence: "Runs standalone on 127.0.0.1:8004 and is not part of docker-compose. The rule-aligned signal is not implemented."
   },
   {
-    order: 4, name: "Runtime Verification", member: "Member 3", icon: "shield", module: "engine/, api_gateway/",
+    order: 4, name: "Runtime Verification", member: "Runtime Verification", icon: "shield", module: "engine/, api_gateway/",
     role: "Z3 runtime rule engine, hybrid circuit breaker and mock API gateway router.",
     output: "Allow/Block verdict and XAI trace",
     link: ["Pending contract", "pending"],
-    evidence: "No Member 3 input contract exists, and the repository holds only placeholder code for this module."
+    evidence: "No Runtime Verification input contract exists, and the repository holds only placeholder code for this module."
   }
 ];
 
@@ -52,50 +52,50 @@ const PIPELINE = [
 
 const INTEGRATION = [
   {
-    link: "Member 1 → Member 4", what: "Unified API context",
+    link: "Ingestion → LogiShield", what: "Unified API context",
     status: ["Tested in-process", "info"],
-    evidence: "tests/tokenization_ai/test_member1_integration.py passes Member 1's real app output through Member 4's adapter, service and API.",
-    limit: "Not a network, broker or deployment integration. Standard (non-interception) ingest events cannot be consumed by Member 4."
+    evidence: "tests/tokenization_ai/test_ingestion_integration.py passes Ingestion's real app output through LogiShield's adapter, service and API.",
+    limit: "Not a network, broker or deployment integration. Standard (non-interception) ingest events cannot be consumed by LogiShield."
   },
   {
-    link: "Member 2 → Member 4", what: "Verified rule information",
+    link: "Formal Verification → LogiShield", what: "Verified rule information",
     status: ["Not integrated", "pending"],
-    evidence: "Documented schema mismatch: Member 2's verification report has no event id and a different shape from Member 4's rule input.",
-    limit: "Every rule in the demos is a MOCK fixture. Member 4 never verifies rules; it only tokenizes the rule information it is given."
+    evidence: "Documented schema mismatch: Formal Verification's verification report has no event id and a different shape from LogiShield's rule input.",
+    limit: "Every rule in the demos is a MOCK fixture. LogiShield never verifies rules; it only tokenizes the rule information it is given."
   },
   {
-    link: "Member 4 → Member 3", what: "Anomaly-aware signal",
+    link: "LogiShield → Runtime Verification", what: "Anomaly-aware signal",
     status: ["Pending contract", "pending"],
-    evidence: "adapters.to_member3_output raises NotImplementedError by design. No Member 3 input contract exists.",
-    limit: "Nothing is sent to Member 3, and no Allow/Block decision exists anywhere in this system."
+    evidence: "adapters.to_runtime_verification_output raises NotImplementedError by design. No Runtime Verification input contract exists.",
+    limit: "Nothing is sent to Runtime Verification, and no Allow/Block decision exists anywhere in this system."
   },
   {
     link: "KPI 5", what: "Downstream usability",
     status: ["Not measured", "pending"],
-    evidence: "It cannot be measured honestly without a genuine Member 3 contract and consumer.",
+    evidence: "It cannot be measured honestly without a genuine Runtime Verification contract and consumer.",
     limit: "No percentage is reported or implied."
   },
   {
     link: "Deployment", what: "Packaging",
     status: ["Standalone", "info"],
-    evidence: "Member 4 is not listed in docker-compose.yml; it is started with python -m tokenization_ai.",
+    evidence: "LogiShield is not listed in docker-compose.yml; it is started with python -m tokenization_ai.",
     limit: "A complete deployed system is not demonstrated."
   },
   {
     link: "engine/ on port 8003", what: "Generic placeholder",
     status: ["Different component", "pending"],
-    evidence: "engine/ holds a generic StubModel (score = the largest feature value, clipped to 0–1) in the Member 3 module slot.",
-    limit: "It is not Member 4's trained model on port 8004, and this dashboard never calls it."
+    evidence: "engine/ holds a generic StubModel (score = the largest feature value, clipped to 0–1) in the Runtime Verification module slot.",
+    limit: "It is not LogiShield's trained model on port 8004, and this dashboard never calls it."
   }
 ];
 
 const LIMITATIONS = [
-  "The Member 4 service is stateless. The dashboard keeps only allowlisted analysis summaries in memory for the current page load.",
+  "The LogiShield service is stateless. The dashboard keeps only allowlisted analysis summaries in memory for the current page load.",
   "The model scores hashed n-gram features of token ids with a logistic regression. There is no learned embedding table, and it is fitted on two synthetic fixtures.",
   "The rule-aligned signal and the next-component input named in the proposal are not defined or implemented.",
   "Masking is a name- and shape-based blocklist, not a guarantee.",
   "Arrows marked proposed or not integrated describe the intended architecture from the research README. They are not agreed contracts.",
-  "No health, CPU, memory, throughput, uptime or instance data exists for any module other than Member 4's own readiness check."
+  "No health, CPU, memory, throughput, uptime or instance data exists for any module other than LogiShield's own readiness check."
 ];
 
 let ui = null;
@@ -138,7 +138,7 @@ function edge(parent, d, kind) {
 
 function buildDiagram(health) {
   const root = svg("svg", { class: "diagram", viewBox: "0 0 1160 440", role: "img",
-    "aria-label": "LogiShield component architecture: API requests, Member 1, Member 2, Member 4, Member 3 and the decision" });
+    "aria-label": "LogiShield component architecture: API requests, Ingestion, Formal Verification, LogiShield, Runtime Verification and the decision" });
   const defs = svg("defs");
   marker(defs, "arr-tested", "#22d3ee");
   marker(defs, "arr-pending", "#8ea5cf");
@@ -158,17 +158,17 @@ function buildDiagram(health) {
   node(root, { x: 10, y: 165, w: 140, h: 100, icon: "globe", title: "API requests",
     lines: ["Ingress", "interception"], cls: "dg-ghost" });
   node(root, { x: 200, y: 30, w: 210, h: 120, icon: "database", title: "1 · Data Processing",
-    lines: ["Member 1", "Unified API context"] });
+    lines: ["Ingestion", "Unified API context"] });
   node(root, { x: 200, y: 290, w: 210, h: 120, icon: "rules", title: "2 · Formal Verification",
-    lines: ["Member 2", "Verified rule information"], cls: "dg-ghost" });
+    lines: ["Formal Verification", "Verified rule information"], cls: "dg-ghost" });
   const m4 = node(root, { x: 480, y: 130, w: 240, h: 180, icon: "cpu", title: "3 · Tokenization & AI",
-    lines: ["Member 4 · this service", "Fusion, masking, normalization,", "tokenization, tensor, model", "Anomaly score (uncalibrated)"], cls: "dg-m4" });
+    lines: ["LogiShield · this service", "Fusion, masking, normalization,", "tokenization, tensor, model", "Anomaly score (uncalibrated)"], cls: "dg-m4" });
   const dotClass = health.state === "ready" ? "dg-dot-ok" : (health.state === "checking" ? "dg-dot-idle" : "dg-dot-bad");
   const label = { ready: "Ready (GET /health)", notready: "Not ready (GET /health)", down: "Unreachable", checking: "Checking…" }[health.state] || "Unknown";
   m4.appendChild(svg("circle", { cx: 494, cy: 289, r: 5, class: dotClass }));
   text(m4, 507, 293, "dg-sub", label);
   node(root, { x: 790, y: 165, w: 230, h: 110, icon: "shield", title: "4 · Runtime Verification",
-    lines: ["Member 3", "Verdict + XAI trace"], cls: "dg-ghost" });
+    lines: ["Runtime Verification", "Verdict + XAI trace"], cls: "dg-ghost" });
   node(root, { x: 1050, y: 165, w: 100, h: 110, icon: "decisions", title: "Decision",
     lines: ["Allow / Block", "not produced"], cls: "dg-ghost" });
   return root;
@@ -274,7 +274,7 @@ export function mount(root, route) {
   const textBox = el("div");
   textBox.appendChild(el("strong", null, "Architecture and integration status, not live telemetry"));
   textBox.appendChild(el("p", null,
-    "Only Member 4's readiness is checked live (GET /health). Everything about the other modules is documented repository fact; " +
+    "Only LogiShield's readiness is checked live (GET /health). Everything about the other modules is documented repository fact; " +
     "no operational status, load or performance figure is shown for them."));
   banner.appendChild(textBox);
   root.appendChild(banner);
@@ -296,10 +296,10 @@ export function mount(root, route) {
   });
   arch.body.appendChild(legend);
   arch.body.appendChild(el("p", "card-note",
-    "Order follows the research README pipeline. Member 4 consumes the unified API context and verified rule information, then hands an anomaly-aware signal to Member 3; only the first link has test evidence."));
+    "Order follows the research README pipeline. LogiShield consumes the unified API context and verified rule information, then hands an anomaly-aware signal to Runtime Verification; only the first link has test evidence."));
   root.appendChild(arch.root);
 
-  const impl = card({ title: "Member 4 pipeline (implemented)", icon: "layers", badge: badge("Implemented", "live") });
+  const impl = card({ title: "LogiShield pipeline (implemented)", icon: "layers", badge: badge("Implemented", "live") });
   ui.pipeline = el("div", "stage-cards");
   impl.body.appendChild(ui.pipeline);
   ui.pipelineNote = el("p", "card-note", "");

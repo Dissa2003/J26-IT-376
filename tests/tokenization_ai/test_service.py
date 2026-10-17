@@ -1,8 +1,8 @@
-"""Unit tests for Member 4's end-to-end service orchestration.
+"""Unit tests for LogiShield's end-to-end service orchestration.
 
-The "synthetic PP1 prototype demonstration" test at the bottom of this
+The "synthetic PP1 implementation demonstration" test at the bottom of this
 file uses a small, explicitly synthetic fixture (same style as Phase 9's
-model tests) solely to prove the six Member 4 stages are wired together
+model tests) solely to prove the six LogiShield stages are wired together
 correctly end to end. It does not and cannot demonstrate real-world
 anomaly-detection accuracy -- no labeled real dataset exists -- and its
 result must never be read or cited as such.
@@ -269,16 +269,16 @@ def test_empty_rules_prediction_carries_no_verification_claim() -> None:
     assert set(prediction.model_dump().keys()) == {"event_id", "score", "model_version"}
 
 
-# -- Synthetic PP1 prototype demonstration ------------------------------------
+# -- Synthetic PP1 implementation demonstration ------------------------------------
 
 
-def test_synthetic_pp1_prototype_end_to_end_demonstration() -> None:
-    """PP1 PROTOTYPE DEMONSTRATION -- SYNTHETIC DATA ONLY.
+def test_synthetic_pp1_implementation_end_to_end_demonstration() -> None:
+    """PP1 IMPLEMENTATION DEMONSTRATION -- SYNTHETIC DATA ONLY.
 
     This test builds a Vocabulary and LightweightAnomalyModel from a
     small, hand-constructed, explicitly synthetic fixture (not real API
-    traffic, not a real dataset) and runs them through the full Member 4
-    service pipeline. It demonstrates that the six Member 4 stages are
+    traffic, not a real dataset) and runs them through the full LogiShield
+    service pipeline. It demonstrates that the six LogiShield stages are
     correctly wired together end to end -- fusion through masking,
     normalization, tokenization, tensorization, and model inference --
     and nothing more.
@@ -286,7 +286,7 @@ def test_synthetic_pp1_prototype_end_to_end_demonstration() -> None:
     It does NOT demonstrate, and must never be cited as demonstrating,
     real-world anomaly-detection accuracy, precision, recall, or any
     other measured security performance. No labeled real dataset exists
-    for Member 4 as of this phase (see the Phase 9/10 planning reports);
+    for LogiShield as of this phase (see the Phase 9/10 planning reports);
     this test's "benign" and "suspicious" labels are illustrative
     fixtures chosen by this test's author, not ground truth from any
     real system.

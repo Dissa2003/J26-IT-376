@@ -69,7 +69,7 @@ def _run_session_js(driver: str) -> dict:
 
 HOSTILE_RESPONSE = r"""
 const data = {
-  contract_version: "member4-analysis-v2", event_id: "evt-1",
+  contract_version: "logishield-analysis-v2", event_id: "evt-1",
   // fields a response should never carry, to prove the store cannot keep them
   raw_request: { password: "HUNTER2-RAW", headers: { Authorization: "Bearer RAW-TOKEN" } },
   context: { payload: { password: "HUNTER2-RAW" } },
@@ -168,7 +168,7 @@ def test_logs_page_is_session_only_and_makes_no_requests():
     js = _read("page-logs.js")
     assert "fetch(" not in js
     assert 'from "./session.js"' in js
-    assert "Member 4 Session Traces" in js
+    assert "LogiShield Session Traces" in js
     assert "not persisted gateway logs" in js
     assert "not distributed tracing" in js
     assert "dashboard local time" in js
@@ -189,9 +189,9 @@ def test_logs_page_has_timeline_flow_and_detail_for_the_six_stages():
     js = _read("page-logs.js")
     for stage in ("fusion", "masking", "normalization", "tokenization", "tensorization", "model_inference"):
         assert f"{stage}:" in js
-    for title in ("Trace timeline", "Member 4 component flow", "Event details & correlation", "Session events"):
+    for title in ("Trace timeline", "LogiShield component flow", "Event details & correlation", "Session events"):
         assert title in js
-    assert "Not implemented; no agreed contract" in js  # the Member 3 hand-off is shown as not implemented
+    assert "Not implemented; no agreed contract" in js  # the Runtime Verification hand-off is shown as not implemented
 
 
 def test_anomaly_page_feeds_the_store_only_after_a_successful_response():
@@ -208,7 +208,7 @@ def test_components_page_uses_real_health_and_no_other_module_status():
     js = _read("page-components.js")
     assert 'from "./shell.js"' in js and "shell.health" in js
     assert "fetch(" not in js
-    # Only Member 4 may carry a live status.
+    # Only LogiShield may carry a live status.
     live_flags = [line for line in js.splitlines() if "live: true" in line]
     assert len(live_flags) == 1 and "tokenization_ai/" in live_flags[0]
     assert js.count('badge("Not connected", "pending")') == 1  # the single non-live branch
@@ -221,11 +221,11 @@ def test_components_page_uses_real_health_and_no_other_module_status():
         "Not integrated",
         "Pending contract",
         "Not measured",
-        "to_member3_output raises NotImplementedError",
+        "to_runtime_verification_output raises NotImplementedError",
         "not part of docker-compose",
         "never calls it",
         "generic StubModel",
-        "not Member 4's trained model",
+        "not LogiShield's trained model",
         "port 8004",
     ],
 )
@@ -245,16 +245,16 @@ def test_components_page_does_not_claim_operation_or_invent_metrics():
 
 def test_components_edges_distinguish_tested_from_proposed():
     js = _read("page-components.js")
-    assert js.count('"tested")') == 1  # exactly one tested connection (Member 1 -> Member 4)
+    assert js.count('"tested")') == 1  # exactly one tested connection (Ingestion -> LogiShield)
     assert js.count('"pending")') >= 4
     assert "arr-tested" in js and "arr-pending" in js
     css = _read("dashboard.css")
     assert ".dg-pending" in css and "stroke-dasharray" in css
 
 
-def test_member1_integration_evidence_named_on_the_page_exists():
-    assert (ROOT.parent / "tests" / "tokenization_ai" / "test_member1_integration.py").exists()
-    assert "test_member1_integration.py" in _read("page-components.js")
+def test_ingestion_integration_evidence_named_on_the_page_exists():
+    assert (ROOT.parent / "tests" / "tokenization_ai" / "test_ingestion_integration.py").exists()
+    assert "test_ingestion_integration.py" in _read("page-components.js")
     assert (ROOT / "INTEGRATION_STATUS.md").exists()
 
 
@@ -280,8 +280,10 @@ def test_only_the_api_module_uses_fetch():
 
 def test_navigation_lists_functional_and_pending_pages_consistently():
     routes = _read("routes.js")
-    assert routes.count("id: ") == 9
-    for rid in ("dashboard", "traffic", "anomaly", "rules", "decisions", "logs", "components", "reports", "settings"):
+    assert routes.count("id: ") == 17
+    for rid in ("dashboard", "policy-verification", "policy-management", "conflicts", "rule-cache",
+                "explainability", "evaluation", "runtime", "cicd", "traffic", "anomaly", "rules",
+                "decisions", "logs", "components", "reports", "settings"):
         assert f'id: "{rid}"' in routes
     app = _read("app.js")
     assert "logs: logs" in app and "components: components" in app and "anomaly: anomaly" in app

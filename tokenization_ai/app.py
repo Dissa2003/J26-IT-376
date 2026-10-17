@@ -1,4 +1,4 @@
-"""Local FastAPI wrapper that exposes the Member 4 pipeline for inspection.
+"""Local FastAPI wrapper that exposes the LogiShield pipeline for inspection.
 
 ``POST /v1/analyze`` runs the *existing* :class:`TokenizationAIService`
 (fusion -> masking -> normalization -> tokenization -> tensorization ->
@@ -66,6 +66,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from shared_contracts.models import ErrorResponse
+from api.routes import router as policy_router
 
 from .adapters import InputContractError, to_unified_api_context, to_verified_rule_info
 from .dashboard import install_dashboard
@@ -97,7 +98,7 @@ _DEMO_HEADERS = {
     "Cache-Control": "no-store",
 }
 
-CONTRACT_VERSION = "member4-analysis-v2"
+CONTRACT_VERSION = "logishield-analysis-v2"
 
 MAX_BODY_BYTES = 64 * 1024
 MAX_COLLECTION_ITEMS = 50
@@ -196,7 +197,7 @@ class AnalyzeRequest(BaseModel):
 
     context: dict[str, Any] = Field(
         description=(
-            "Member 1 interception envelope (event_id, metadata{method,path,...}, payload, "
+            "Ingestion interception envelope (event_id, metadata{method,path,...}, payload, "
             "optional threat_score/timestamp) or an event whose payload carries _http_metadata."
         )
     )
@@ -293,7 +294,7 @@ class TimingsView(BaseModel):
 
 
 class AnalyzeResponse(BaseModel):
-    contract_version: Literal["member4-analysis-v2"] = CONTRACT_VERSION
+    contract_version: Literal["logishield-analysis-v2"] = CONTRACT_VERSION
     event_id: str
     provenance: Provenance
     privacy: PrivacyView
@@ -312,7 +313,7 @@ _RULE_LABELS = {
 }
 _RULE_NOTES = {
     RuleSource.NONE: "No verified-rule input was supplied; this is not a verification result.",
-    RuleSource.MOCK_FIXTURE: "Rules are illustrative mock fixtures, not genuine Member 2 output.",
+    RuleSource.MOCK_FIXTURE: "Rules are illustrative mock fixtures, not genuine Formal Verification output.",
     RuleSource.VERIFIED: (
         "Rules were asserted by the caller to be verified; this service did not verify them."
     ),
@@ -460,6 +461,7 @@ def create_app(
         return _build_response(request.rule_source, rule_info, result, trace, note, service)
 
     install_dashboard(app)  # additive: GET /dashboard only; /demo and /v1/analyze unchanged
+    app.include_router(policy_router)
     return app
 
 

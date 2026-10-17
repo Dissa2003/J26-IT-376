@@ -1,4 +1,4 @@
-"""Unit tests for the Member 4 input contracts."""
+"""Unit tests for the LogiShield input contracts."""
 
 import pytest
 from pydantic import ValidationError

@@ -1,4 +1,4 @@
-/* Shared shell state: the Member 4 service readiness shown in the header and
+/* Shared shell state: the LogiShield service readiness shown in the header and
  * on the Anomaly Detection page. Only GET /health is used. */
 
 import { getHealth } from "./api.js";
@@ -26,8 +26,8 @@ export const shell = {
 };
 
 export function healthLabel(health) {
-  if (health.state === "ready") { return "Member 4 service ready"; }
-  if (health.state === "notready") { return "Member 4 service not ready"; }
-  if (health.state === "down") { return "Member 4 service unreachable"; }
+  if (health.state === "ready") { return "LogiShield service ready"; }
+  if (health.state === "notready") { return "LogiShield service not ready"; }
+  if (health.state === "down") { return "LogiShield service unreachable"; }
   return "Checking service…";
 }

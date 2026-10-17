@@ -1,1 +1,1 @@
-"""Member 4: hybrid structure-aware tokenization and lightweight AI prediction."""
+"""LogiShield: hybrid structure-aware tokenization and lightweight AI prediction."""

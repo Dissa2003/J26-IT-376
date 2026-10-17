@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class UnifiedApiContext(BaseModel):
-    """One intercepted API request as supplied by Member 1."""
+    """One intercepted API request as supplied by Ingestion."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -34,7 +34,7 @@ class VerifiedRule(BaseModel):
 
 
 class VerifiedRuleInfo(BaseModel):
-    """Verified rule information for one event as supplied by Member 2."""
+    """Verified rule information for one event as supplied by Formal Verification."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -97,7 +97,7 @@ class ModelInput(BaseModel):
 
 
 class AnomalyPrediction(BaseModel):
-    """Anomaly prediction emitted for Member 3."""
+    """Anomaly prediction emitted for Runtime Verification."""
 
     event_id: str
     score: float = Field(ge=0.0, le=1.0)

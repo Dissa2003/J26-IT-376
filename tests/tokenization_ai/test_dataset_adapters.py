@@ -404,7 +404,7 @@ def test_extract_binary_label_does_not_mutate_the_input_row() -> None:
     assert row == before
 
 
-# -- Compatibility with the existing Member 4 pipeline ----------------------------
+# -- Compatibility with the existing LogiShield pipeline ----------------------------
 
 
 def test_adapter_output_flows_through_the_full_tokenization_chain() -> None:

@@ -1,4 +1,4 @@
-"""Tests for the Member 4 KPI 1-3 evaluation framework.
+"""Tests for the LogiShield KPI 1-3 evaluation framework.
 
 These verify the *framework*: fixture integrity, oracle independence,
 scoring arithmetic, and that the runner actually detects defects (via

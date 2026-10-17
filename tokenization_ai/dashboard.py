@@ -1,4 +1,4 @@
-"""Static host for the Member 4 dashboard at ``/dashboard``.
+"""Static host for the LogiShield dashboard at ``/dashboard``.
 
 Presentation only. This module serves a small single-page client from the
 separate ``dashboard_static`` directory and adds no analysis logic, no state
@@ -40,6 +40,8 @@ DASHBOARD_ASSETS: dict[str, str] = {
     "page-anomaly.js": "text/javascript; charset=utf-8",
     "page-logs.js": "text/javascript; charset=utf-8",
     "page-components.js": "text/javascript; charset=utf-8",
+    "page-policy.js": "text/javascript; charset=utf-8",
+    "page-policy-data.js": "text/javascript; charset=utf-8",
     "page-pending.js": "text/javascript; charset=utf-8",
     "logo.svg": "image/svg+xml",
 }

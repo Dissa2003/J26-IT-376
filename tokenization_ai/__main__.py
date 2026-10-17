@@ -1,4 +1,4 @@
-"""Run the Member 4 analysis service locally: ``python -m tokenization_ai``.
+"""Run the LogiShield analysis service locally: ``python -m tokenization_ai``.
 
 Binds to 127.0.0.1 only (local development / demonstration).
 """

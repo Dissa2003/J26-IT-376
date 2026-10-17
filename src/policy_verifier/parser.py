@@ -1,37 +1,69 @@
+from __future__ import annotations
+
+import re
 import uuid
-from typing import Optional
-from .models import SecurityPolicy, PolicyEffect
+
+from .models import (
+    PolicyCondition,
+    PolicyEffect,
+    PolicyInterpretation,
+    SecurityPolicy,
+)
+
+
+class UnsupportedPolicyError(ValueError):
+    """Raised when text is outside the intentionally limited policy grammar."""
+
+
+_ONLY = re.compile(
+    r"^only (?P<subject>[\w -]+) can (?P<action>\w+) (?P<resource>[\w -]+)[.]?$",
+    re.IGNORECASE,
+)
+_CAN = re.compile(
+    r"^(?P<subject>[\w -]+) can (?P<action>\w+) (?P<resource>[\w -]+)[.]?$",
+    re.IGNORECASE,
+)
+_CANNOT = re.compile(
+    r"^(?P<subject>[\w -]+) cannot (?P<action>\w+) (?P<resource>[\w -]+)[.]?$",
+    re.IGNORECASE,
+)
+
+
+def _canonical(value: str) -> str:
+    return "".join(part.capitalize() for part in value.strip().split())
+
 
 class PolicyParser:
-    def parse_text(self, text: str, policy_id: Optional[str] = None) -> SecurityPolicy:
-        pid = policy_id or str(uuid.uuid4())[:8]
-        text_lower = text.lower()
+    """Parser for three explicit forms; it never guesses unsupported text."""
 
-        effect = PolicyEffect.DENY if any(w in text_lower for w in ["cannot", "deny", "no one", "forbidden"]) else PolicyEffect.ALLOW
-
-        if "admin" in text_lower:
-            subject = "Admin"
-        elif "manager" in text_lower:
-            subject = "Manager"
-        elif "user" in text_lower:
-            subject = "User"
-        else:
-            subject = "Everyone"
-
-        if "delete" in text_lower:
-            action, resource = "Delete", "UserAccount"
-        elif "read" in text_lower or "view" in text_lower:
-            action, resource = "Read", "UserProfile"
-        elif "approve" in text_lower:
-            action, resource = "Approve", "Invoice"
-        else:
-            action, resource = "Access", "Resource"
-
+    def parse_text(self, text: str, policy_id: str | None = None) -> SecurityPolicy:
+        cleaned = " ".join(text.strip().split())
+        if not cleaned:
+            raise UnsupportedPolicyError("Policy text must not be empty.")
+        match = _ONLY.match(cleaned)
+        interpretation = PolicyInterpretation.ONLY_ROLE
+        effect = PolicyEffect.ALLOW
+        if not match:
+            match = _CANNOT.match(cleaned)
+            interpretation = PolicyInterpretation.ROLE_PROHIBITION
+            effect = PolicyEffect.DENY
+        if not match:
+            match = _CAN.match(cleaned)
+            interpretation = PolicyInterpretation.ROLE_PERMISSION
+            effect = PolicyEffect.ALLOW
+        if not match:
+            raise UnsupportedPolicyError(
+                "Unsupported policy. Use '<role> can <action> <resource>', "
+                "'only <role> can <action> <resource>', or "
+                "'<role> cannot <action> <resource>'."
+            )
+        values = match.groupdict()
         return SecurityPolicy(
-            policy_id=pid,
-            subject=subject,
-            action=action,
-            resource=resource,
+            policy_id=policy_id or str(uuid.uuid4())[:8],
+            subject=_canonical(values["subject"]),
+            action=_canonical(values["action"]),
+            resource=_canonical(values["resource"]),
             effect=effect,
-            raw_text=text
+            raw_text=text,
+            interpretation=interpretation,
         )

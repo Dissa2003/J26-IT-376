@@ -378,7 +378,7 @@ def test_refitting_overwrites_previous_training_state() -> None:
 def test_pipeline_integration_tokenizer_vocabulary_tensorizer_model() -> None:
     """HybridTokenizer -> Vocabulary -> Tensorizer -> LightweightAnomalyModel.
 
-    Verifies the four Member 4 stages are wire-compatible end to end,
+    Verifies the four LogiShield stages are wire-compatible end to end,
     using a small, explicitly synthetic training fixture. This is a
     plumbing/compatibility test, not a real-world anomaly-detection
     quality claim.

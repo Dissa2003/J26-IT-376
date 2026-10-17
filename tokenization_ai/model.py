@@ -10,7 +10,7 @@ token-order/structural sensitivity: this tokenizer's grammar packs
 structural meaning into adjacent tokens (e.g. ``API_KEY, <key>,
 API_VAL_STR, <value>``), so an adjacent-pair feature directly captures
 "this tag was followed by this kind of value/tag" -- the kind of local
-structure Member 4's hybrid tokenization is designed to preserve.
+structure LogiShield's hybrid tokenization is designed to preserve.
 
 This is deliberately the smallest architecture that is still genuinely
 order-sensitive and genuinely trainable (a real gradient computed from a

@@ -1,6 +1,6 @@
 """KPI 4 latency benchmark (see LATENCY_PROTOCOL.md).
 
-Measures the REAL Member 4 implementation at three separate boundaries:
+Measures the REAL LogiShield implementation at three separate boundaries:
 
 - B1  in-process pipeline: ``TokenizationAIService.predict`` (no tracing),
       plus B1T (the same call with the production tracer enabled);
@@ -382,7 +382,7 @@ def run_benchmark(
         "target_met": pooled_mean <= TARGET_MS and worst_batch <= TARGET_MS,
         "protocol_conformant_run": conformant,
         "interpretation": (
-            "On this machine, Python build and synthetic workload, the in-process Member 4 pipeline's "
+            "On this machine, Python build and synthetic workload, the in-process LogiShield pipeline's "
             "average end-to-end prediction time was within the 5 ms target. This is not a production SLA."
             if pooled_mean <= TARGET_MS and worst_batch <= TARGET_MS
             else "The in-process average exceeded the 5 ms target on this machine and workload."
@@ -396,7 +396,7 @@ def run_benchmark(
         "scope_statement": (
             "KPI 4 single-machine synthetic-workload latency measurement of end-to-end prediction time. "
             "Not isolated ML-model inference, not a production SLA, not detection accuracy, "
-            "not Member 2/3 integration."
+            "not Formal Verification/3 integration."
         ),
         "target_ms": TARGET_MS,
         "config": {
@@ -435,7 +435,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     cfg = report["config"]
     env = report["environment"]
     lines = [
-        "# Member 4 KPI 4 latency report",
+        "# LogiShield KPI 4 latency report",
         "",
         f"Latency protocol {report['latency_protocol_version']} · protocol-conformant run: **{cfg['protocol_conformant']}**",
         "",

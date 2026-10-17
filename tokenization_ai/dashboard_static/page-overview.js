@@ -1,7 +1,7 @@
-/* Dashboard overview: Member 4 research prototype.
+/* Dashboard overview: LogiShield research implementation.
  *
  * Reads only (a) the shared in-memory session store of allowlisted analysis
- * summaries and (b) Member 4's own readiness from shell.js (GET /health).
+ * summaries and (b) LogiShield's own readiness from shell.js (GET /health).
  * It makes no requests of its own and shows no gateway traffic, rule
  * verification, decision or other-module status. With no analysis yet every
  * metric is an empty state, never a zero standing in for history. */
@@ -13,6 +13,7 @@ import { session } from "./session.js";
 import { buildOverviewModel } from "./overview-model.js";
 import { COMPONENTS } from "./page-components.js";
 import { STAGE_INFO } from "./page-logs.js";
+import { getVerificationRecords } from "./api.js";
 
 const ROLES = [
   ["control", "Control tag"],
@@ -23,16 +24,16 @@ const ROLES = [
 
 const TRANSPARENCY = [
   "Synthetic demo fixtures only: no real traffic, users or credentials are involved.",
-  "A lightweight prototype model fitted on two synthetic fixtures; its score is not detection accuracy.",
+  "A lightweight implementation model fitted on two synthetic fixtures; its score is not detection accuracy.",
   "Scores are uncalibrated: not a probability, not a verdict and not an Allow or Block decision.",
   "Session-local data: held in this page's memory and lost on reload; nothing is persisted.",
-  "No end-to-end runtime verification: the Member 4 → Member 3 hand-off is not implemented.",
+  "No end-to-end runtime verification: the LogiShield → Runtime Verification hand-off is not implemented.",
   "KPI 5 (downstream usability) is not measured.",
   "Cross-member integration is incomplete; no connected or deployed system is demonstrated."
 ];
 
 const ACTIONS = [
-  ["#/anomaly", "alert", "Anomaly Detection", "Run a synthetic request through the real Member 4 pipeline", true],
+  ["#/anomaly", "alert", "Anomaly Detection", "Run a synthetic request through the real LogiShield pipeline", true],
   ["#/logs", "logs", "Logs & Traces", "Inspect this session's analysis traces, timings and provenance", false],
   ["#/components", "components", "System Components", "Architecture, integration status and documented limitations", false]
 ];
@@ -63,10 +64,10 @@ function build(root, route) {
   titles.appendChild(el("p", "page-sub", route.subtitle));
   head.appendChild(titles);
   const side = el("div", "overview-side");
-  side.appendChild(badge("Member 4 prototype scope", "info"));
+  side.appendChild(badge("LogiShield implementation scope", "info"));
   ui.ready = el("button", "health-chip");
   ui.ready.type = "button";
-  ui.ready.title = "Re-check the Member 4 service (GET /health)";
+  ui.ready.title = "Re-check the LogiShield service (GET /health)";
   ui.ready.addEventListener("click", () => { shell.refreshHealth(); });
   ui.readyDot = el("span", "dot dot-idle");
   ui.readyText = el("span", null, "Checking service…");
@@ -79,12 +80,17 @@ function build(root, route) {
   const scope = el("div", "pending-banner info-banner");
   scope.appendChild(badge("Scope", "info"));
   const scopeText = el("div");
-  scopeText.appendChild(el("strong", null, "Member 4 research prototype overview"));
+  scopeText.appendChild(el("strong", null, "LogiShield research implementation overview"));
   scopeText.appendChild(el("p", null,
-    "This page summarizes only what the Member 4 service and this browser session have actually produced. " +
+    "This page summarizes only what the LogiShield service and this browser session have actually produced. " +
     "It does not show gateway traffic, rule verification, Allow/Block decisions or any other module's status."));
   scope.appendChild(scopeText);
   root.appendChild(scope);
+
+  const policyCard = card({ title: "Policy verification overview", icon: "shield", badge: badge("Backend data", "info") });
+  ui.policySummary = policyCard.body;
+  policyCard.body.appendChild(emptyNote("Loading policy verification records…"));
+  root.appendChild(policyCard.root);
 
   ui.degraded = el("div", "error-box");
   ui.degraded.setAttribute("role", "status");
@@ -156,8 +162,8 @@ function paintHealth(health) {
   if (health.state === "notready" || health.state === "down") {
     ui.degraded.hidden = false;
     ui.degraded.textContent = health.state === "down"
-      ? "The Member 4 service could not be reached from this page, so new analyses will fail. Metrics below are from analyses already completed in this session."
-      : "The Member 4 service did not report ready, so new analyses may fail. Metrics below are from analyses already completed in this session.";
+      ? "The LogiShield service could not be reached from this page, so new analyses will fail. Metrics below are from analyses already completed in this session."
+      : "The LogiShield service did not report ready, so new analyses may fail. Metrics below are from analyses already completed in this session.";
   } else {
     ui.degraded.hidden = true;
     ui.degraded.textContent = "";
@@ -221,7 +227,7 @@ function paintLatest(model) {
     ["Observed", fmtTime(e.observedAt) + " (dashboard local time)"]
   ]));
   body.appendChild(el("p", "caveat",
-    "The score is an uncalibrated output of a lightweight prototype model. It is not detection accuracy, a probability of attack, or an Allow/Block verdict."));
+    "The score is an uncalibrated output of a lightweight implementation model. It is not detection accuracy, a probability of attack, or an Allow/Block verdict."));
   body.appendChild(link("#/logs", "card-link", "View this event in Logs & Traces"));
 }
 
@@ -310,7 +316,7 @@ function paintComponents(health) {
   });
   body.appendChild(strip);
   body.appendChild(el("p", "card-note",
-    "Only Member 4 has a live status. Order follows the research pipeline; apart from the in-process-tested Member 1 context link, the connections are proposed, not integrated. " +
+    "Only LogiShield has a live status. Order follows the research pipeline; apart from the in-process-tested Ingestion context link, the connections are proposed, not integrated. " +
     "No connected, deployed, verified or operational system is claimed."));
   body.appendChild(link("#/components", "card-link", "Architecture and integration details in System Components"));
 }
@@ -332,6 +338,26 @@ export function mount(root, route) {
   build(root, route);
   paintHealth(shell.health);
   paintAll();
+  getVerificationRecords().then((result) => {
+    if (!ui) { return; }
+    clear(ui.policySummary);
+    if (!result.ok || !Array.isArray(result.payload) || !result.payload.length) {
+      ui.policySummary.appendChild(emptyNote(result.ok
+        ? "No policies have been verified in this backend process yet."
+        : "Policy verification records are not connected."));
+      return;
+    }
+    const records = result.payload;
+    const conflicts = records.reduce((total, report) => total + (Array.isArray(report.conflicts) ? report.conflicts.length : 0), 0);
+    const eligible = records.filter((report) => report.rule_status === "eligible").length;
+    ui.policySummary.appendChild(kv([
+      ["Recorded submissions", String(records.length)],
+      ["Entailment / solver outcomes", String(records.filter((report) => report.solver_result && report.solver_result.is_entailment).length)],
+      ["Conflicts returned", String(conflicts)],
+      ["Cache eligible", String(eligible)]
+    ]));
+    ui.policySummary.appendChild(el("p", "card-note", "Process-local records only; this is not durable policy storage."));
+  });
   unsubscribers = [
     shell.subscribe((health) => { if (ui) { paintHealth(health); } }),
     session.subscribe(() => { if (ui) { paintAll(); } })

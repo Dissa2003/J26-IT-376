@@ -1,4 +1,4 @@
-"""Independent specification of the Member 4 representation (PROTOCOL.md section 3).
+"""Independent specification of the LogiShield representation (PROTOCOL.md section 3).
 
 Nothing in this module imports the production tokenizer, masker, normalizer,
 vocabulary or tensorizer: the tag strings below are restated from the written

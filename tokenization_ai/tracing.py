@@ -1,4 +1,4 @@
-"""Per-stage tracing of the Member 4 pipeline for debugging and auditability.
+"""Per-stage tracing of the LogiShield pipeline for debugging and auditability.
 
 Each traced request gets its own :class:`PipelineTrace`, created fresh by
 :meth:`PipelineTracer.start`. There is no module-level or instance-level
@@ -72,7 +72,7 @@ class StageTrace:
 class PipelineTrace:
     """One request's ordered, append-only collection of :class:`StageTrace` entries.
 
-    Identified only by ``event_id`` (already known to every Member 4
+    Identified only by ``event_id`` (already known to every LogiShield
     caller; not itself sensitive). Owned exclusively by whoever received
     it from :meth:`PipelineTracer.start` -- nothing in this module hands
     the same instance to two different requests.

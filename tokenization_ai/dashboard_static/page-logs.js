@@ -1,4 +1,4 @@
-/* Logs & Traces: "Member 4 Session Traces".
+/* Logs & Traces: "LogiShield Session Traces".
  *
  * Shows only the allowlisted summaries that the Anomaly Detection page put
  * into the in-memory session store from successful POST /v1/analyze
@@ -67,7 +67,7 @@ function build(root, route) {
   const banner = el("div", "pending-banner info-banner");
   banner.appendChild(badge("Session-local", "info"));
   const text = el("div");
-  text.appendChild(el("strong", null, "Member 4 Session Traces"));
+  text.appendChild(el("strong", null, "LogiShield Session Traces"));
   text.appendChild(el("p", null,
     "These are session-local analysis traces built from the responses of POST /v1/analyze that this dashboard received since the page loaded. " +
     "They are not persisted gateway logs and not distributed tracing across the LogiShield modules. They are held in memory only and disappear on reload."));
@@ -116,7 +116,7 @@ function build(root, route) {
   const low = el("div", "grid g-3");
   const timeline = card({ title: "Trace timeline", icon: "history", badge: badge("Selected event", "info") });
   ui.timelineBody = timeline.body;
-  const flow = card({ title: "Member 4 component flow", icon: "layers", badge: badge("Internal stages", "info") });
+  const flow = card({ title: "LogiShield component flow", icon: "layers", badge: badge("Internal stages", "info") });
   ui.flowBody = flow.body;
   const detail = card({ title: "Event details & correlation", icon: "info" });
   ui.detailBody = detail.body;
@@ -271,10 +271,10 @@ function paintFlow(entry) {
     chain.appendChild(node(info[1], info[0], fmtMs(stage.ms) + " ms", stage.ok ? "" : "flow-fail"));
   });
   chain.appendChild(node("activity", "Anomaly score " + entry.score.toFixed(4), "Uncalibrated · " + entry.modelVersion, "flow-io"));
-  chain.appendChild(node("decisions", "Member 3 hand-off", "Not implemented; no agreed contract", "flow-pending"));
+  chain.appendChild(node("decisions", "Runtime Verification hand-off", "Not implemented; no agreed contract", "flow-pending"));
   body.appendChild(chain);
   body.appendChild(el("p", "card-note",
-    "Only Member 4's internal stages are shown. No other module takes part in this trace."));
+    "Only LogiShield's internal stages are shown. No other module takes part in this trace."));
 }
 
 function paintDetails(entry) {

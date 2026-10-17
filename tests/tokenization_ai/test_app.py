@@ -1,4 +1,4 @@
-"""TestClient tests for the Member 4 ``POST /v1/analyze`` service.
+"""TestClient tests for the LogiShield ``POST /v1/analyze`` service.
 
 All inputs are SYNTHETIC. Scores here show the pipeline is wired end to
 end through HTTP; they are not evidence of detection accuracy.
@@ -450,7 +450,7 @@ def test_response_contract_is_stable(client):
         "prediction",
         "timings",
     }
-    assert body["contract_version"] == "member4-analysis-v2"
+    assert body["contract_version"] == "logishield-analysis-v2"
     assert set(body["privacy"]) == {
         "output_kind",
         "policy",

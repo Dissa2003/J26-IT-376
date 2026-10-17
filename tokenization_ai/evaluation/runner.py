@@ -49,10 +49,10 @@ _PRODUCTION_FILES = (
 LIMITATIONS = [
     "Synthetic, hand-picked, small-N specification-coverage evaluation; not a random sample of traffic.",
     "Percentages are the share of curated scenarios handled as specified. They are not detection accuracy, "
-    "precision, recall, F1, formal-rule verification correctness, or evidence of Member 2/3 integration.",
+    "precision, recall, F1, formal-rule verification correctness, or evidence of Formal Verification/3 integration.",
     "The oracle is independent in process (hand-written fixtures, separate grammar acceptor and reference "
     "encoder) but not in authorship; it detects regressions and deviations from the written design, not a flawed design.",
-    "Rules are mock fixtures; Member 2's real verified-rule schema is unavailable.",
+    "Rules are mock fixtures; Formal Verification's real verified-rule schema is unavailable.",
     "The vocabulary is fitted on a tiny synthetic dev corpus; the unknown-token rate characterises that corpus only.",
     "One tensor configuration (max_length=128). The anomaly model is not exercised by KPIs 1-3.",
     "No real dataset (SR-BH) was used.",
@@ -620,7 +620,7 @@ def run_evaluation(
         "protocol_version": PROTOCOL_VERSION,
         "scope_statement": (
             "Synthetic specification-coverage evaluation of KPIs 1-3. Not real-world detection accuracy, "
-            "not formal verification, not Member 2/3 integration."
+            "not formal verification, not Formal Verification/3 integration."
         ),
         "targets_percent": TARGETS,
         "data": {
@@ -658,7 +658,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         return f"| {label} | {m['numerator']} / {m['denominator']} | {pct} | {ci_text} | {tgt} | {met} |"
 
     lines = [
-        "# Member 4 KPI 1-3 evaluation report",
+        "# LogiShield KPI 1-3 evaluation report",
         "",
         f"Protocol {report['protocol_version']} · results hash `{report['results_sha256'][:16]}…`",
         "",

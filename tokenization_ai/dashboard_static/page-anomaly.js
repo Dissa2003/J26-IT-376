@@ -28,11 +28,11 @@ const ROLES = [
 ];
 
 const LIMITS = [
-  "Synthetic demonstration data only. The rules shown are MOCK fixtures, not Member 2 output.",
+  "Synthetic demonstration data only. The rules shown are MOCK fixtures, not Formal Verification output.",
   "The model is fitted on two hand-written synthetic fixtures. Its score separates those fixtures; it is not detection accuracy.",
   "The score is uncalibrated: not a probability of attack, not a verdict, and not an Allow or Block decision.",
   "Masking is a name- and shape-based blocklist, not a guarantee. Unlisted field names are not masked.",
-  "Member 2 and Member 3 integration and KPI 5 are pending; nothing on this page represents them.",
+  "Formal Verification and Runtime Verification integration and KPI 5 are pending; nothing on this page represents them.",
   "Stage timings are single-request, in-process measurements from this run. They are not the KPI 4 benchmark or HTTP latency."
 ];
 
@@ -91,7 +91,7 @@ function build(root, route) {
 
   // Pipeline strip.
   const strip = el("ol", "pipeline");
-  strip.setAttribute("aria-label", "Member 4 pipeline stages");
+  strip.setAttribute("aria-label", "LogiShield pipeline stages");
   ui.steps = {};
   PIPELINE.forEach((p) => {
     const li = el("li", "step");
@@ -239,7 +239,7 @@ function paintControls() {
     ui.ruleBox.hidden = false;
     if (source === "mock_fixture") {
       ui.ruleChip.textContent = "MOCK rule fixture";
-      ui.ruleText.textContent = "Illustrative mock data, not genuine Member 2 verification output. This service does not verify rules.";
+      ui.ruleText.textContent = "Illustrative mock data, not genuine Formal Verification verification output. This service does not verify rules.";
     } else {
       ui.ruleChip.textContent = "No verified-rule input";
       ui.ruleText.textContent = "No rules supplied. This is not a verification result.";
@@ -258,7 +258,7 @@ function paintControls() {
   let text = "Loading scenarios…";
   if (state.busy) { kind = "loading"; text = "Sending the synthetic request to POST /v1/analyze…"; }
   else if (state.error) { kind = "fail"; text = "Analysis failed."; }
-  else if (state.result) { kind = "ok"; text = "Analysis complete. These values came from the Member 4 service."; }
+  else if (state.result) { kind = "ok"; text = "Analysis complete. These values came from the LogiShield service."; }
   else if (state.scenariosFailed) { kind = "fail"; text = "Demo scenarios unavailable."; }
   else if (scenario) { text = "Ready. Press Analyze to send this synthetic request to the backend."; }
   ui.status.className = "status" + (kind ? " " + kind : "");

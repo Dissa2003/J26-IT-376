@@ -9,7 +9,7 @@ export const STAGE_ORDER = ["fusion", "masking", "normalization", "tokenization"
 const ROLE_KEYS = ["control", "literal_api", "masked", "literal_rule"];
 
 export const SCOPE_STATEMENT =
-  "Current browser session of the Member 4 research prototype. Synthetic demonstration fixtures only; " +
+  "Current browser session of the LogiShield research implementation. Synthetic demonstration fixtures only; " +
   "scores are uncalibrated outputs of a model fitted on two synthetic fixtures and are not detection accuracy, " +
   "probabilities or Allow/Block verdicts. Data is session-local and contains no raw requests or secrets.";
 
@@ -64,7 +64,7 @@ export function pickEntry(entry) {
 export function buildJsonReport(entries, generatedAtIso) {
   const list = Array.isArray(entries) ? entries : [];
   return {
-    report_type: "member4-session-summaries",
+    report_type: "logishield-session-summaries",
     schema_version: 1,
     generated_at_utc: str(generatedAtIso, 40),
     scope: SCOPE_STATEMENT,
@@ -135,5 +135,5 @@ export function exportFilename(kind, generatedAtIso) {
   const stamp = isNaN(d.getTime())
     ? "unknown-time"
     : d.toISOString().split("-").join("").split(":").join("").split(".")[0] + "Z";
-  return "member4-session-summaries-" + stamp + "." + (kind === "csv" ? "csv" : "json");
+  return "logishield-session-summaries-" + stamp + "." + (kind === "csv" ? "csv" : "json");
 }

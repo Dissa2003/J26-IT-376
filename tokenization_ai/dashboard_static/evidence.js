@@ -1,4 +1,4 @@
-/* Documented Member 4 research evaluation evidence (KPIs 1-5).
+/* Documented LogiShield research evaluation evidence (KPIs 1-5).
  *
  * Static, frozen facts. Nothing here is measured by the dashboard and nothing
  * is derived from the live session. Each value is copied from a named
@@ -46,7 +46,7 @@ export const KPIS = [
     limits: [
       "With N = 31 even a perfect score has a Wilson 95% lower bound of 89.0%, below the 90% target.",
       "Synthetic, small-N and same-author oracle: it detects regressions and deviations from the written design, not a flawed design.",
-      "Not real-world traffic, not detection accuracy, not Member 2 or Member 3 integration; rules are mock fixtures."
+      "Not real-world traffic, not detection accuracy, not Formal Verification or Runtime Verification integration; rules are mock fixtures."
     ],
     refs: ["kpi_report.json → results.kpi1_input_alignment", "tokenization_ai/evaluation/PROTOCOL.md §4", "tokenization_ai/README.md §8"]
   },
@@ -100,7 +100,7 @@ export const KPIS = [
     id: "kpi4",
     kind: "latency",
     title: "KPI 4 · Average pipeline prediction time",
-    question: "How long does the in-process Member 4 pipeline take, on average, from fusion to anomaly score?",
+    question: "How long does the in-process LogiShield pipeline take, on average, from fusion to anomaly score?",
     target: "≤ 5 ms",
     targetValue: 5,
     result: "0.3413 ms pooled mean (worst batch mean 0.3481 ms)",
@@ -124,17 +124,17 @@ export const KPIS = [
     id: "kpi5",
     kind: "pending",
     title: "KPI 5 · Downstream usability",
-    question: "Is the anomaly signal usable by the next verification component (Member 3)?",
+    question: "Is the anomaly signal usable by the next verification component (Runtime Verification)?",
     target: "≥ 90%",
     result: "Not measured",
     sample: "No measurement exists.",
-    verdict: ["Pending genuine Member 3 integration", "pending"],
+    verdict: ["Pending genuine Runtime Verification integration", "pending"],
     context: [
-      "It needs a documented Member 3 input contract and a running consumer. Neither exists in the repository."
+      "It needs a documented Runtime Verification input contract and a running consumer. Neither exists in the repository."
     ],
     limits: [
-      "Any percentage computed today would be measured against a contract Member 4 invented, i.e. a self-assessment, so none is reported.",
-      "The adapter to Member 3 raises NotImplementedError by design."
+      "Any percentage computed today would be measured against a contract LogiShield invented, i.e. a self-assessment, so none is reported.",
+      "The adapter to Runtime Verification raises NotImplementedError by design."
     ],
     refs: ["tokenization_ai/INTEGRATION_STATUS.md §3–§4", "tokenization_ai/CONTRACT_PROPOSAL.md"]
   }
@@ -160,5 +160,5 @@ export const METHODOLOGY = [
   "The lightweight model is fitted on two synthetic fixtures. Its anomaly score is uncalibrated: not a probability, not a verdict, not an Allow or Block decision.",
   "KPI 4 is an in-process timing benchmark on one machine and workload. It is not production latency or an SLA.",
   "Live session figures above are single observations from this browser session and are not part of any KPI.",
-  "Member 2 and Member 3 integration is incomplete, there is no final Member 3 hand-off, and KPI 5 has not been measured."
+  "Formal Verification and Runtime Verification integration is incomplete, there is no final Runtime Verification hand-off, and KPI 5 has not been measured."
 ];

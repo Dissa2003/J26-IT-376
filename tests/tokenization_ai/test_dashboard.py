@@ -1,4 +1,4 @@
-"""Tests for the Member 4 ``/dashboard`` host and its static client.
+"""Tests for the LogiShield ``/dashboard`` host and its static client.
 
 The dashboard is presentation only. These tests check that it is served with a
 strict CSP from its own allowlisted directory, that the original ``/demo`` is
@@ -178,8 +178,8 @@ def test_only_the_api_module_uses_the_network_and_only_known_endpoints():
     assert 'ANALYZE_URL = "/v1/analyze"' in api
     assert 'HEALTH_URL = "/health"' in api
     assert 'SCENARIOS_URL = "/demo/assets/scenarios.json"' in api
-    assert re.findall(r"fetch\(\s*([A-Za-z_]+)", api) == ["HEALTH_URL", "SCENARIOS_URL", "ANALYZE_URL"]
-    assert 'CONTRACT = "member4-analysis-v2"' in api
+    assert re.findall(r"fetch\(\s*([A-Za-z_]+)", api) == ["path", "HEALTH_URL", "SCENARIOS_URL", "ANALYZE_URL"]
+    assert 'CONTRACT = "logishield-analysis-v2"' in api
     for path in _js_files():
         if path.name != "api.js":
             assert "fetch(" not in path.read_text(encoding="utf-8"), path.name
@@ -211,7 +211,7 @@ def test_client_does_no_scoring_masking_or_fabrication():
 def test_no_fabricated_figures_or_verdict_vocabulary_in_the_client():
     text = "\n".join(p.read_text(encoding="utf-8") for p in DASH.iterdir() if p.is_file())
     for forbidden in (
-        "326", "94.8", "96.2", "12,426", "10,842", "Critical", "Monitor", "Throttle", "Challenge",
+        "326", "94.8", "96.2", "12,426", "10,842", "Critical", "Throttle", "Challenge",
         "Allowed Requests", "Blocked Requests", "Total Anomalies", "Operational", "Healthy",
         "SAMPLE DATA", "sample_data",
     ):

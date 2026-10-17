@@ -1,4 +1,4 @@
-"""Route and static-asset tests for the Member 4 ``/demo`` client.
+"""Route and static-asset tests for the LogiShield ``/demo`` client.
 
 The client is presentation only. These tests check that it is served, that
 its fixtures are accepted by the real backend, and that the client source
@@ -35,7 +35,7 @@ def test_demo_page_loads_with_required_content(client):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     html = response.text
-    assert "<title>LogiShield Member 4 Demo</title>" in html
+    assert "<title>LogiShield LogiShield Demo</title>" in html
     assert "/demo/assets/demo.css" in html
     assert "/demo/assets/demo.js" in html
     # Declared explicitly so browsers do not request /favicon.ico (a 404 console error).
@@ -52,8 +52,8 @@ def test_demo_page_loads_with_required_content(client):
         assert stage in html
     # Research status: implemented vs not yet integrated, no overclaiming.
     assert "Implemented" in html and "Not yet integrated" in html
-    assert "Genuine Member 2 verified-rule output" in html
-    assert "Member 3 runtime handoff" in html
+    assert "Genuine Formal Verification verified-rule output" in html
+    assert "Runtime Verification runtime handoff" in html
     assert "not detection accuracy" in html
 
 
@@ -104,7 +104,7 @@ def test_both_scenarios_exist_and_are_labelled_synthetic():
     rules = scenarios["suspicious"]["request"]["rule_info"]["rules"]
     assert all(r["rule_id"].startswith("MOCK-") for r in rules)
     served = json.loads((STATIC / "scenarios.json").read_text(encoding="utf-8"))
-    assert "MOCK" in served["disclaimer"] and "not genuine Member 2" in served["disclaimer"]
+    assert "MOCK" in served["disclaimer"] and "not genuine Formal Verification" in served["disclaimer"]
 
 
 def test_scenarios_call_the_real_backend_with_v2_contract(client):
@@ -113,7 +113,7 @@ def test_scenarios_call_the_real_backend_with_v2_contract(client):
         response = client.post("/v1/analyze", json=scenario["request"])
         assert response.status_code == 200, scenario["id"]
         body = response.json()
-        assert body["contract_version"] == CONTRACT_VERSION == "member4-analysis-v2"
+        assert body["contract_version"] == CONTRACT_VERSION == "logishield-analysis-v2"
         assert body["event_id"] == scenario["request"]["context"]["event_id"]
         assert body["privacy"]["output_kind"] == "privacy_safe_projection"
         assert body["provenance"]["rule_status"]["verification_performed_by_this_service"] is False
@@ -138,7 +138,7 @@ def test_client_source_posts_only_to_the_analyze_endpoint():
     assert 'API_URL = "/v1/analyze"' in js
     assert re.findall(r"fetch\(\s*([A-Za-z_]+)", js) == ["API_URL", "SCENARIOS_URL"]
     assert "https://" not in js and "http://" not in js
-    assert "CONTRACT = \"member4-analysis-v2\"" in js
+    assert "CONTRACT = \"logishield-analysis-v2\"" in js
 
 
 def test_client_source_has_no_storage_logging_or_unsafe_dom():
