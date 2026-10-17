@@ -1,7 +1,7 @@
 # Replace with real GitHub handles
-/ingestion/        @member1
-/processing/       @member2
-/engine/           @member3
-/api_gateway/      @member4
-/shared_contracts/ @member1 @member2 @member3 @member4
-/docker-compose.yml @member1 @member2 @member3 @member4
+/ingestion/        @Dissa2003
+/processing/       @Dissa2003
+/engine/            @Dissa2003
+/api_gateway/      @Dissa2003
+/shared_contracts/ @Dissa2003
+/docker-compose.yml @Dissa2003

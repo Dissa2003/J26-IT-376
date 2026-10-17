@@ -7,7 +7,7 @@ from typing import Callable
 from .models import Alert, FeatureVector, Prediction, RawEvent
 
 
-# --- Member 1: ingestion ---
+# --- Ingestion: ingestion ---
 class EventProducer(ABC):
     @abstractmethod
     def publish(self, event: RawEvent) -> None: ...
@@ -18,7 +18,7 @@ class EventConsumer(ABC):
     def subscribe(self, handler: Callable[[RawEvent], None]) -> None: ...
 
 
-# --- Member 2: processing ---
+# --- Formal Verification: processing ---
 class SchemaValidator(ABC):
     @abstractmethod
     def validate(self, event: RawEvent) -> None:
@@ -30,7 +30,7 @@ class FeatureTransformer(ABC):
     def transform(self, event: RawEvent) -> FeatureVector: ...
 
 
-# --- Member 3: engine ---
+# --- Runtime Verification: engine ---
 class InferenceModel(ABC):
     @abstractmethod
     def score(self, features: FeatureVector) -> float:
@@ -42,7 +42,7 @@ class PredictionService(ABC):
     def predict(self, features: FeatureVector) -> Prediction: ...
 
 
-# --- Member 4: gateway ---
+# --- LogiShield: gateway ---
 class Notifier(ABC):
     @abstractmethod
     def notify(self, alert: Alert) -> None: ...

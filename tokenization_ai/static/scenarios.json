@@ -1,0 +1,43 @@
+{
+  "disclaimer": "Synthetic demonstration fixtures only. Rule entries are MOCK fixtures, not genuine Formal Verification verification output.",
+  "scenarios": [
+    {
+      "id": "benign",
+      "title": "Benign API request",
+      "description": "A routine order lookup with a small numeric payload and no verified-rule input.",
+      "request": {
+        "context": {
+          "event_id": "demo-benign-1",
+          "metadata": { "method": "GET", "path": "/orders/123" },
+          "payload": { "amount": 25, "currency": "USD" }
+        },
+        "rule_source": "none"
+      }
+    },
+    {
+      "id": "suspicious",
+      "title": "Suspicious API request",
+      "description": "A login attempt carrying a credential, an Authorization header and an injection-style payload value, paired with a MOCK verified-rule fixture.",
+      "request": {
+        "context": {
+          "event_id": "demo-suspicious-1",
+          "metadata": {
+            "method": "POST",
+            "path": "/login",
+            "headers": { "Authorization": "Bearer demo-not-a-real-token" }
+          },
+          "payload": {
+            "username": "admin",
+            "password": "hunter2",
+            "q": "' OR 1=1 --"
+          }
+        },
+        "rule_source": "mock_fixture",
+        "rule_info": {
+          "event_id": "demo-suspicious-1",
+          "rules": [{ "rule_id": "MOCK-R-SQLI", "severity": "high" }]
+        }
+      }
+    }
+  ]
+}

@@ -1,26 +1,34 @@
-from z3 import Solver, Bool, Not, sat
-from typing import List, Tuple
+from __future__ import annotations
+
+from .models import ConflictFinding, SecurityPolicy, VerificationStatus
+
 
 class ConflictDetector:
-    def check_conflicts(self, fol_expressions: List[str]) -> Tuple[str, List[str]]:
-        s = Solver()
-        variables = {}
-        conflicts = []
+    def find_conflicts(self, policies: list[SecurityPolicy]) -> list[ConflictFinding]:
+        findings: list[ConflictFinding] = []
+        for index, left in enumerate(policies):
+            for right in policies[index + 1 :]:
+                same_scope = (
+                    left.subject == right.subject
+                    and left.action == right.action
+                    and left.resource == right.resource
+                    and left.conditions == right.conditions
+                )
+                if same_scope and left.effect != right.effect:
+                    findings.append(
+                        ConflictFinding(
+                            conflict_id=f"{left.policy_id}:{right.policy_id}",
+                            category="direct_permission_prohibition",
+                            policy_ids=[left.policy_id, right.policy_id],
+                            status=VerificationStatus.UNSAT,
+                            evidence=[left.raw_text, right.raw_text],
+                            explanation="The same subject, action, resource, and conditions contain both permission and prohibition.",
+                        )
+                    )
+        return findings
 
-        for expr in fol_expressions:
-            clean_expr = expr.replace("(", "_").replace(")", "").replace(", ", "_")
-            
-            if "Deny_" in clean_expr:
-                base_key = clean_expr.replace("Deny_", "")
-                allow_var_name = f"Allow_{base_key}"
-                
-                v_allow = variables.setdefault(allow_var_name, Bool(allow_var_name))
-                s.add(Not(v_allow))
-                conflicts.append(expr)
-            else:
-                v = variables.setdefault(clean_expr, Bool(clean_expr))
-                s.add(v)
-
-        result = s.check()
-        status = "SAT" if result == sat else "UNSAT"
-        return status, (conflicts if status == "UNSAT" else [])
+    def check_conflicts(self, fol_expressions: list[str]) -> tuple[str, list[str]]:
+        """Compatibility adapter for the original public method."""
+        has_allow = any("Allow(" in expression for expression in fol_expressions)
+        has_deny = any("Deny(" in expression for expression in fol_expressions)
+        return ("UNSAT", fol_expressions) if has_allow and has_deny else ("SAT", [])

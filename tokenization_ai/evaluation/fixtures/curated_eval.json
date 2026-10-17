@@ -1,0 +1,279 @@
+{
+  "protocol_version": "1.0.0",
+  "group": "curated_eval",
+  "note": "Hand-written. 'expect' was authored from PROTOCOL.md section 3, not generated from or compared against production output. Token notation: C control, A API literal, R rule literal, M masked.",
+  "cases": [
+    {
+      "id": "E01-benign-numeric",
+      "description": "Benign GET with an integer and a string payload field, no headers, no rules.",
+      "reference_compatible": true,
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-e01", "metadata": {"method": "GET", "path": "/orders/123"}, "payload": {"amount": 25, "currency": "USD"}},
+        "rule_info": null
+      },
+      "expect": {
+        "fused": {"event_id": "eval-e01", "method": "GET", "path": "/orders/123", "headers": {}, "payload": {"amount": 25, "currency": "USD"}, "content_type": null, "client_ip": null, "threat_score": null, "rules": []},
+        "tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:GET","C:[API:PATH_START]","C:[API:PATH_SEG]","A:orders","C:[API:PATH_SEG]","A:123","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:KEY]","A:amount","C:[API:VAL_INT]","A:25","C:[API:KEY]","A:currency","C:[API:VAL_STR]","A:USD","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULES_END]","C:[SEQ_END]"],
+        "masked_paths": [],
+        "tensor": "ok"
+      }
+    },
+    {
+      "id": "E02-suspicious-login-mock-rule",
+      "description": "Login with credential, Authorization header, injection-style string and one mock rule.",
+      "reference_compatible": false,
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-e02", "metadata": {"method": "POST", "path": "/login", "headers": {"Authorization": "Bearer synthetic-token-001"}}, "payload": {"username": "admin", "password": "synthetic-pw-1", "q": "' OR 1=1 --"}, "threat_score": 0.5},
+        "rule_info": {"event_id": "eval-e02", "rules": [{"rule_id": "MOCK-R-SQLI", "severity": "high"}]}
+      },
+      "expect": {
+        "fused": {"event_id": "eval-e02", "method": "POST", "path": "/login", "headers": {"Authorization": "Bearer synthetic-token-001"}, "payload": {"username": "admin", "password": "synthetic-pw-1", "q": "' OR 1=1 --"}, "content_type": null, "client_ip": null, "threat_score": 0.5, "rules": [{"rule_id": "MOCK-R-SQLI", "attributes": {"severity": "high"}}]},
+        "tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:POST","C:[API:PATH_START]","C:[API:PATH_SEG]","A:login","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADER_NAME]","A:authorization","C:[API:HEADER_VALUE_MASKED]","M:[MASKED_AUTH]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:KEY]","A:password","C:[API:VAL_MASKED_STR]","M:[MASKED_SECRET]","C:[API:KEY]","A:q","C:[API:VAL_STR]","A:' OR 1=1 --","C:[API:KEY]","A:username","C:[API:VAL_STR]","A:admin","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULE_START]","C:[RULE:ID]","R:MOCK-R-SQLI","C:[RULE:ATTRS_START]","C:[RULE:OBJ_START]","C:[RULE:KEY]","R:severity","C:[RULE:VAL_STR]","R:high","C:[RULE:OBJ_END]","C:[RULE:ATTRS_END]","C:[RULE_END]","C:[RULES_END]","C:[SEQ_END]"],
+        "masked_paths": [["headers", "authorization"], ["payload", "password"]],
+        "tensor": "ok"
+      }
+    },
+    {
+      "id": "E03-nested-mixed-types-pii-key",
+      "description": "Nested object with bool/int/float/null/list values and a PII key (email).",
+      "reference_compatible": false,
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-e03", "metadata": {"method": "PUT", "path": "/users/42/profile"}, "payload": {"profile": {"name": "Alice Example", "email": "alice@example.com", "tags": ["a", "b"], "age": 30, "active": true, "nickname": null, "score": 9.5}}},
+        "rule_info": null
+      },
+      "expect": {
+        "fused": {"event_id": "eval-e03", "method": "PUT", "path": "/users/42/profile", "headers": {}, "payload": {"profile": {"name": "Alice Example", "email": "alice@example.com", "tags": ["a", "b"], "age": 30, "active": true, "nickname": null, "score": 9.5}}, "content_type": null, "client_ip": null, "threat_score": null, "rules": []},
+        "tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:PUT","C:[API:PATH_START]","C:[API:PATH_SEG]","A:users","C:[API:PATH_SEG]","A:42","C:[API:PATH_SEG]","A:profile","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:KEY]","A:profile","C:[API:OBJ_START]","C:[API:KEY]","A:active","C:[API:VAL_BOOL]","A:true","C:[API:KEY]","A:age","C:[API:VAL_INT]","A:30","C:[API:KEY]","A:email","C:[API:VAL_MASKED_STR]","M:[MASKED_PII]","C:[API:KEY]","A:name","C:[API:VAL_STR]","A:Alice Example","C:[API:KEY]","A:nickname","C:[API:VAL_NULL]","C:[API:KEY]","A:score","C:[API:VAL_FLOAT]","A:9.5","C:[API:KEY]","A:tags","C:[API:LIST_START]","C:[API:VAL_STR]","A:a","C:[API:VAL_STR]","A:b","C:[API:LIST_END]","C:[API:OBJ_END]","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULES_END]","C:[SEQ_END]"],
+        "masked_paths": [["payload", "profile", "email"]],
+        "tensor": "ok"
+      }
+    },
+    {
+      "id": "E04-value-shaped-pii-under-ordinary-keys",
+      "description": "Email-shaped and IP-shaped values under non-sensitive keys, plus a PII key (card).",
+      "reference_compatible": false,
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-e04", "metadata": {"method": "POST", "path": "/contact"}, "payload": {"note": "reach me at", "contact": "bob@example.org", "ip": "198.51.100.7", "card": "4111 1111 1111 1111"}},
+        "rule_info": null
+      },
+      "expect": {
+        "fused": {"event_id": "eval-e04", "method": "POST", "path": "/contact", "headers": {}, "payload": {"note": "reach me at", "contact": "bob@example.org", "ip": "198.51.100.7", "card": "4111 1111 1111 1111"}, "content_type": null, "client_ip": null, "threat_score": null, "rules": []},
+        "tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:POST","C:[API:PATH_START]","C:[API:PATH_SEG]","A:contact","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:KEY]","A:card","C:[API:VAL_MASKED_STR]","M:[MASKED_PII]","C:[API:KEY]","A:contact","C:[API:VAL_MASKED_STR]","M:[MASKED_PII]","C:[API:KEY]","A:ip","C:[API:VAL_MASKED_STR]","M:[MASKED_IP]","C:[API:KEY]","A:note","C:[API:VAL_STR]","A:reach me at","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULES_END]","C:[SEQ_END]"],
+        "masked_paths": [["payload", "card"], ["payload", "contact"], ["payload", "ip"]],
+        "tensor": "ok"
+      }
+    },
+    {
+      "id": "E05-unknown-fields-not-masked",
+      "description": "Free-text and opaque-code fields under unknown names are NOT masked (documented limitation).",
+      "reference_compatible": true,
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-e05", "metadata": {"method": "POST", "path": "/submit"}, "payload": {"memo": "synthetic-free-text-77", "zz_code": "abc123"}},
+        "rule_info": null
+      },
+      "expect": {
+        "fused": {"event_id": "eval-e05", "method": "POST", "path": "/submit", "headers": {}, "payload": {"memo": "synthetic-free-text-77", "zz_code": "abc123"}, "content_type": null, "client_ip": null, "threat_score": null, "rules": []},
+        "tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:POST","C:[API:PATH_START]","C:[API:PATH_SEG]","A:submit","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:KEY]","A:memo","C:[API:VAL_STR]","A:synthetic-free-text-77","C:[API:KEY]","A:zz_code","C:[API:VAL_STR]","A:abc123","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULES_END]","C:[SEQ_END]"],
+        "masked_paths": [],
+        "tensor": "ok"
+      }
+    },
+    {
+      "id": "E06-sensitive-query-parameter",
+      "description": "Sensitive query parameter inside the path is masked in place; the segment stays an API literal.",
+      "reference_compatible": false,
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-e06", "metadata": {"method": "GET", "path": "/reset?token=synthetic-reset-9&page=2"}, "payload": {}},
+        "rule_info": null
+      },
+      "expect": {
+        "fused": {"event_id": "eval-e06", "method": "GET", "path": "/reset?token=synthetic-reset-9&page=2", "headers": {}, "payload": {}, "content_type": null, "client_ip": null, "threat_score": null, "rules": []},
+        "tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:GET","C:[API:PATH_START]","C:[API:PATH_SEG]","A:reset?token=%5BMASKED_SECRET%5D&page=2","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULES_END]","C:[SEQ_END]"],
+        "masked_paths": [["path"]],
+        "tensor": "ok"
+      }
+    },
+    {
+      "id": "E07-lookalike-placeholder-value",
+      "description": "A payload value textually equal to a masking placeholder under an ordinary key must stay an unmasked literal.",
+      "reference_compatible": true,
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-e07", "metadata": {"method": "POST", "path": "/echo"}, "payload": {"comment": "[MASKED_SECRET]"}},
+        "rule_info": null
+      },
+      "expect": {
+        "fused": {"event_id": "eval-e07", "method": "POST", "path": "/echo", "headers": {}, "payload": {"comment": "[MASKED_SECRET]"}, "content_type": null, "client_ip": null, "threat_score": null, "rules": []},
+        "tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:POST","C:[API:PATH_START]","C:[API:PATH_SEG]","A:echo","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:KEY]","A:comment","C:[API:VAL_STR]","A:[MASKED_SECRET]","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULES_END]","C:[SEQ_END]"],
+        "masked_paths": [],
+        "tensor": "ok"
+      }
+    },
+    {
+      "id": "E08-control-tag-text-as-key",
+      "description": "A payload key textually equal to a control tag must be an ordinary API literal.",
+      "reference_compatible": true,
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-e08", "metadata": {"method": "POST", "path": "/x"}, "payload": {"[API:VAL_STR]": "v"}},
+        "rule_info": null
+      },
+      "expect": {
+        "fused": {"event_id": "eval-e08", "method": "POST", "path": "/x", "headers": {}, "payload": {"[API:VAL_STR]": "v"}, "content_type": null, "client_ip": null, "threat_score": null, "rules": []},
+        "tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:POST","C:[API:PATH_START]","C:[API:PATH_SEG]","A:x","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:KEY]","A:[API:VAL_STR]","C:[API:VAL_STR]","A:v","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULES_END]","C:[SEQ_END]"],
+        "masked_paths": [],
+        "tensor": "ok"
+      }
+    },
+    {
+      "id": "E09-normalization-method-path-headers",
+      "description": "Lower-case method, repeated/trailing slashes and padded mixed-case header names are normalized for tokenization but preserved at fusion.",
+      "reference_compatible": false,
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-e09", "metadata": {"method": "post", "path": "//a//b/", "headers": {"X-Request-Id": "req-1", "Accept": "application/json", " Content-Type ": "application/json"}}, "payload": {}},
+        "rule_info": null
+      },
+      "expect": {
+        "fused": {"event_id": "eval-e09", "method": "post", "path": "//a//b/", "headers": {"X-Request-Id": "req-1", "Accept": "application/json", " Content-Type ": "application/json"}, "payload": {}, "content_type": null, "client_ip": null, "threat_score": null, "rules": []},
+        "tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:POST","C:[API:PATH_START]","C:[API:PATH_SEG]","A:a","C:[API:PATH_SEG]","A:b","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADER_NAME]","A:accept","C:[API:HEADER_VALUE]","A:application/json","C:[API:HEADER_NAME]","A:content-type","C:[API:HEADER_VALUE]","A:application/json","C:[API:HEADER_NAME]","A:x-request-id","C:[API:HEADER_VALUE]","A:req-1","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULES_END]","C:[SEQ_END]"],
+        "masked_paths": [],
+        "tensor": "ok"
+      }
+    },
+    {
+      "id": "E10-multiple-rules-nested-attributes",
+      "description": "Two mock rules; the first has nested object, list, bool, float, int and null attributes.",
+      "reference_compatible": false,
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-e10", "metadata": {"method": "GET", "path": "/items"}, "payload": {}},
+        "rule_info": {"event_id": "eval-e10", "rules": [{"rule_id": "MOCK-R-A", "severity": "low", "limits": {"max": 10, "burst": 2.5}, "tags": ["x", "y"], "enabled": true, "note": null}, {"rule_id": "MOCK-R-B"}]}
+      },
+      "expect": {
+        "fused": {"event_id": "eval-e10", "method": "GET", "path": "/items", "headers": {}, "payload": {}, "content_type": null, "client_ip": null, "threat_score": null, "rules": [{"rule_id": "MOCK-R-A", "attributes": {"severity": "low", "limits": {"max": 10, "burst": 2.5}, "tags": ["x", "y"], "enabled": true, "note": null}}, {"rule_id": "MOCK-R-B", "attributes": {}}]},
+        "tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:GET","C:[API:PATH_START]","C:[API:PATH_SEG]","A:items","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULE_START]","C:[RULE:ID]","R:MOCK-R-A","C:[RULE:ATTRS_START]","C:[RULE:OBJ_START]","C:[RULE:KEY]","R:enabled","C:[RULE:VAL_BOOL]","R:true","C:[RULE:KEY]","R:limits","C:[RULE:OBJ_START]","C:[RULE:KEY]","R:burst","C:[RULE:VAL_FLOAT]","R:2.5","C:[RULE:KEY]","R:max","C:[RULE:VAL_INT]","R:10","C:[RULE:OBJ_END]","C:[RULE:KEY]","R:note","C:[RULE:VAL_NULL]","C:[RULE:KEY]","R:severity","C:[RULE:VAL_STR]","R:low","C:[RULE:KEY]","R:tags","C:[RULE:LIST_START]","C:[RULE:VAL_STR]","R:x","C:[RULE:VAL_STR]","R:y","C:[RULE:LIST_END]","C:[RULE:OBJ_END]","C:[RULE:ATTRS_END]","C:[RULE_END]","C:[RULE_START]","C:[RULE:ID]","R:MOCK-R-B","C:[RULE:ATTRS_START]","C:[RULE:OBJ_START]","C:[RULE:OBJ_END]","C:[RULE:ATTRS_END]","C:[RULE_END]","C:[RULES_END]","C:[SEQ_END]"],
+        "masked_paths": [],
+        "tensor": "ok"
+      }
+    },
+    {
+      "id": "E11-same-name-in-api-and-rule-namespaces",
+      "description": "Field 'severity' appears in the payload and in a rule attribute; roles must differ by namespace.",
+      "reference_compatible": true,
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-e11", "metadata": {"method": "POST", "path": "/ns"}, "payload": {"severity": "high"}},
+        "rule_info": {"event_id": "eval-e11", "rules": [{"rule_id": "MOCK-R-NS", "severity": "high"}]}
+      },
+      "expect": {
+        "fused": {"event_id": "eval-e11", "method": "POST", "path": "/ns", "headers": {}, "payload": {"severity": "high"}, "content_type": null, "client_ip": null, "threat_score": null, "rules": [{"rule_id": "MOCK-R-NS", "attributes": {"severity": "high"}}]},
+        "tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:POST","C:[API:PATH_START]","C:[API:PATH_SEG]","A:ns","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:KEY]","A:severity","C:[API:VAL_STR]","A:high","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULE_START]","C:[RULE:ID]","R:MOCK-R-NS","C:[RULE:ATTRS_START]","C:[RULE:OBJ_START]","C:[RULE:KEY]","R:severity","C:[RULE:VAL_STR]","R:high","C:[RULE:OBJ_END]","C:[RULE:ATTRS_END]","C:[RULE_END]","C:[RULES_END]","C:[SEQ_END]"],
+        "masked_paths": [],
+        "tensor": "ok"
+      }
+    },
+    {
+      "id": "E12-ingestion-style-raw-event",
+      "description": "Member-1-shaped RawEvent dict with _http_metadata/_threat_score and an already-redacted [REDACTED_PII] value.",
+      "reference_compatible": false,
+      "input": {
+        "format": "raw_event",
+        "context": {"event_id": "eval-e12", "source": "/orders", "payload": {"amount": 7, "contact": "[REDACTED_PII]", "_http_metadata": {"method": "POST", "path": "/orders", "content_type": "application/json", "headers": {"Authorization": "Bearer synthetic-raw"}}, "_threat_score": 0.3}},
+        "rule_info": null
+      },
+      "expect": {
+        "fused": {"event_id": "eval-e12", "method": "POST", "path": "/orders", "headers": {"Authorization": "Bearer synthetic-raw"}, "payload": {"amount": 7, "contact": "[REDACTED_PII]"}, "content_type": "application/json", "client_ip": null, "threat_score": 0.3, "rules": []},
+        "tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:POST","C:[API:PATH_START]","C:[API:PATH_SEG]","A:orders","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADER_NAME]","A:authorization","C:[API:HEADER_VALUE_MASKED]","M:[MASKED_AUTH]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:KEY]","A:amount","C:[API:VAL_INT]","A:7","C:[API:KEY]","A:contact","C:[API:VAL_STR]","A:[REDACTED_PII]","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULES_END]","C:[SEQ_END]"],
+        "masked_paths": [["headers", "authorization"]],
+        "tensor": "ok"
+      }
+    },
+    {
+      "id": "E13-unicode-literal",
+      "description": "Non-ASCII payload value kept as one literal.",
+      "reference_compatible": true,
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-e13", "metadata": {"method": "POST", "path": "/search"}, "payload": {"q": "café ✓ 日本語"}},
+        "rule_info": null
+      },
+      "expect": {
+        "fused": {"event_id": "eval-e13", "method": "POST", "path": "/search", "headers": {}, "payload": {"q": "café ✓ 日本語"}, "content_type": null, "client_ip": null, "threat_score": null, "rules": []},
+        "tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:POST","C:[API:PATH_START]","C:[API:PATH_SEG]","A:search","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:KEY]","A:q","C:[API:VAL_STR]","A:café ✓ 日本語","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULES_END]","C:[SEQ_END]"],
+        "masked_paths": [],
+        "tensor": "ok"
+      }
+    },
+    {
+      "id": "E14-root-path-empty-payload",
+      "description": "Root path yields no segments; empty payload and no rules.",
+      "reference_compatible": true,
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-e14", "metadata": {"method": "GET", "path": "/"}, "payload": {}},
+        "rule_info": null
+      },
+      "expect": {
+        "fused": {"event_id": "eval-e14", "method": "GET", "path": "/", "headers": {}, "payload": {}, "content_type": null, "client_ip": null, "threat_score": null, "rules": []},
+        "tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:GET","C:[API:PATH_START]","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULES_END]","C:[SEQ_END]"],
+        "masked_paths": [],
+        "tensor": "ok"
+      }
+    },
+    {
+      "id": "E15-list-of-objects-with-pii",
+      "description": "PII key inside each element of a list of objects; list order preserved.",
+      "reference_compatible": false,
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-e15", "metadata": {"method": "POST", "path": "/batch"}, "payload": {"users": [{"email": "c@example.com", "id": 1}, {"email": "d@example.com", "id": 2}]}},
+        "rule_info": null
+      },
+      "expect": {
+        "fused": {"event_id": "eval-e15", "method": "POST", "path": "/batch", "headers": {}, "payload": {"users": [{"email": "c@example.com", "id": 1}, {"email": "d@example.com", "id": 2}]}, "content_type": null, "client_ip": null, "threat_score": null, "rules": []},
+        "tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:POST","C:[API:PATH_START]","C:[API:PATH_SEG]","A:batch","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:KEY]","A:users","C:[API:LIST_START]","C:[API:OBJ_START]","C:[API:KEY]","A:email","C:[API:VAL_MASKED_STR]","M:[MASKED_PII]","C:[API:KEY]","A:id","C:[API:VAL_INT]","A:1","C:[API:OBJ_END]","C:[API:OBJ_START]","C:[API:KEY]","A:email","C:[API:VAL_MASKED_STR]","M:[MASKED_PII]","C:[API:KEY]","A:id","C:[API:VAL_INT]","A:2","C:[API:OBJ_END]","C:[API:LIST_END]","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULES_END]","C:[SEQ_END]"],
+        "masked_paths": [["payload", "users", 0, "email"], ["payload", "users", 1, "email"]],
+        "tensor": "ok"
+      }
+    },
+    {
+      "id": "E16-auth-headers-client-ip-content-type",
+      "description": "Cookie and X-API-Key headers masked, ordinary header kept, client_ip masked but not tokenized.",
+      "reference_compatible": false,
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-e16", "metadata": {"method": "GET", "path": "/h", "content_type": "application/json", "client_ip": "192.0.2.55", "headers": {"Cookie": "sid=synthetic", "X-API-Key": "synthetic-key", "User-Agent": "demo-agent/1.0"}}, "payload": {}},
+        "rule_info": null
+      },
+      "expect": {
+        "fused": {"event_id": "eval-e16", "method": "GET", "path": "/h", "headers": {"Cookie": "sid=synthetic", "X-API-Key": "synthetic-key", "User-Agent": "demo-agent/1.0"}, "payload": {}, "content_type": "application/json", "client_ip": "192.0.2.55", "threat_score": null, "rules": []},
+        "tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:GET","C:[API:PATH_START]","C:[API:PATH_SEG]","A:h","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADER_NAME]","A:cookie","C:[API:HEADER_VALUE_MASKED]","M:[MASKED_AUTH]","C:[API:HEADER_NAME]","A:user-agent","C:[API:HEADER_VALUE]","A:demo-agent/1.0","C:[API:HEADER_NAME]","A:x-api-key","C:[API:HEADER_VALUE_MASKED]","M:[MASKED_AUTH]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULES_END]","C:[SEQ_END]"],
+        "masked_paths": [["client_ip"], ["headers", "cookie"], ["headers", "x-api-key"]],
+        "tensor": "ok"
+      }
+    },
+    {
+      "id": "E17-numeric-edge-values",
+      "description": "Negative int, zero, float and false literal.",
+      "reference_compatible": true,
+      "input": {
+        "format": "envelope",
+        "context": {"event_id": "eval-e17", "metadata": {"method": "POST", "path": "/edge"}, "payload": {"neg": -5, "zero": 0, "ratio": 0.5, "flag": false}},
+        "rule_info": null
+      },
+      "expect": {
+        "fused": {"event_id": "eval-e17", "method": "POST", "path": "/edge", "headers": {}, "payload": {"neg": -5, "zero": 0, "ratio": 0.5, "flag": false}, "content_type": null, "client_ip": null, "threat_score": null, "rules": []},
+        "tokens": ["C:[SEQ_START]","C:[API:METHOD]","A:POST","C:[API:PATH_START]","C:[API:PATH_SEG]","A:edge","C:[API:PATH_END]","C:[API:HEADERS_START]","C:[API:HEADERS_END]","C:[API:PAYLOAD_START]","C:[API:OBJ_START]","C:[API:KEY]","A:flag","C:[API:VAL_BOOL]","A:false","C:[API:KEY]","A:neg","C:[API:VAL_INT]","A:-5","C:[API:KEY]","A:ratio","C:[API:VAL_FLOAT]","A:0.5","C:[API:KEY]","A:zero","C:[API:VAL_INT]","A:0","C:[API:OBJ_END]","C:[API:PAYLOAD_END]","C:[RULES_START]","C:[RULES_END]","C:[SEQ_END]"],
+        "masked_paths": [],
+        "tensor": "ok"
+      }
+    }
+  ]
+}
