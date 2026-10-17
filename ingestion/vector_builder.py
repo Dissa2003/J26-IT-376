@@ -9,6 +9,19 @@ from google.protobuf import descriptor_pb2, descriptor_pool, json_format, messag
 from google.protobuf.message_factory import GetMessageClass
 from google.protobuf.struct_pb2 import Struct
 
+HIGH_THREAT_THRESHOLD = 0.70
+LOW_THREAT_THRESHOLD = 0.30
+
+
+def extract_threat_score(payload: Mapping[str, Any]) -> float:
+    """Return the normalized threat score carried by an event payload."""
+    value = payload.get("_threat_score", payload.get("threat_score", 0.0))
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return min(1.0, max(0.0, score))
+
 
 def _context_message_class() -> type[message.Message]:
     """Build the wire schema once through protobuf's descriptor registry."""

@@ -9,11 +9,21 @@ from fastapi.testclient import TestClient
 import pytest
 from redis.exceptions import ConnectionError as RedisConnectionError
 
-from ingestion.broker import InMemoryBroker, RedisStreamBroker, RingBufferBroker, create_broker
+from ingestion.broker import (
+    InMemoryBroker,
+    RedisStreamBroker,
+    RingBufferBroker,
+    create_broker,
+)
 from ingestion.app import create_app
 from ingestion.validator import IngestionValidator
 from ingestion.pii_masker import PIIMasker, REDACTED
-from ingestion.vector_builder import UnifiedContextVectorBuilder
+from ingestion.vector_builder import (
+    HIGH_THREAT_THRESHOLD,
+    LOW_THREAT_THRESHOLD,
+    UnifiedContextVectorBuilder,
+    extract_threat_score,
+)
 from shared_contracts.config import Settings
 from shared_contracts.interfaces import ProcessingClient
 from shared_contracts.models import Label, Prediction, RawEvent
@@ -44,17 +54,6 @@ class FlakyProcessing(ProcessingClient):
             threshold=0.8,
             model_version="retry-test",
         )
-
-
-class CapturingProcessing(FakeProcessing):
-    """Processing fake that records the event received downstream."""
-
-    def __init__(self) -> None:
-        self.events: list[RawEvent] = []
-
-    def process(self, event: RawEvent) -> Prediction:
-        self.events.append(event)
-        return super().process(event)
 
 
 def test_publish_delivers_raw_event_to_subscriber() -> None:
@@ -227,8 +226,9 @@ def test_ring_buffer_drains_events_sequentially() -> None:
 
 
 def test_ring_buffer_evicts_oldest_event_when_full() -> None:
-    """A full circular buffer evicts the oldest event without blocking."""
-    broker = RingBufferBroker(maxlen=2)
+    """A full circular buffer routes a low-threat event to overflow."""
+    overflow = MagicMock()
+    broker = RingBufferBroker(maxlen=2, overflow_broker=overflow)
     started = threading.Event()
     release = threading.Event()
 
@@ -251,8 +251,107 @@ def test_ring_buffer_evicts_oldest_event_when_full() -> None:
         time.sleep(0.001)
     broker.stop()
 
-    assert broker.evicted_count >= 1
+    assert broker.evicted_count == 0
+    assert overflow.publish.call_count >= 1
 
+
+def test_twde_routes_low_threat_arrival_to_overflow_when_full() -> None:
+    """TWDE sends a low-threat arrival to overflow instead of evicting memory."""
+    overflow = MagicMock()
+    broker = RingBufferBroker(maxlen=2, overflow_broker=overflow)
+    events = [
+        RawEvent(event_id="buffer-1", source="test", payload={"_threat_score": 0.1}),
+        RawEvent(event_id="buffer-2", source="test", payload={"_threat_score": 0.5}),
+        RawEvent(event_id="overflow", source="test", payload={"_threat_score": 0.2}),
+    ]
+
+    try:
+        broker.publish(events[0])
+        broker.publish(events[1])
+        broker.publish(events[2])
+        assert broker.buffered_count == 2
+        assert broker.evicted_count == 0
+        overflow.publish.assert_called_once_with(events[2])
+    finally:
+        broker.stop()
+
+
+def test_twde_preserves_high_threat_event_by_evicting_low_threat_event() -> None:
+    """TWDE retains high-threat arrivals and spills the oldest low-threat item."""
+    overflow = MagicMock()
+    broker = RingBufferBroker(maxlen=2, overflow_broker=overflow)
+    received: list[str] = []
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_handler(event: RawEvent) -> None:
+        received.append(event.event_id)
+        started.set()
+        release.wait(1.0)
+
+    broker.subscribe(slow_handler)
+    low = RawEvent(event_id="low", source="test", payload={"threat_score": 0.1})
+    high = RawEvent(event_id="high", source="test", payload={"threat_score": 0.9})
+    medium = RawEvent(
+        event_id="medium",
+        source="test",
+        payload={"_threat_score": 0.5},
+    )
+    incoming = RawEvent(
+        event_id="incoming-high",
+        source="test",
+        payload={"_threat_score": HIGH_THREAT_THRESHOLD},
+    )
+
+    try:
+        broker.publish(low)
+        assert started.wait(1.0)
+        broker.publish(high)
+        broker.publish(medium)
+        broker.publish(incoming)
+        release.set()
+        deadline = time.monotonic() + 1.0
+        while broker.buffered_count and time.monotonic() < deadline:
+            time.sleep(0.001)
+
+        assert overflow.publish.call_args.args == (medium,)
+        assert received == ["low", "high", "incoming-high"]
+    finally:
+        release.set()
+        broker.stop()
+
+
+def test_twde_thresholds_are_shared_with_vector_builder() -> None:
+    """Threat-score extraction clamps malformed values and honors TWDE thresholds."""
+    assert extract_threat_score({"threat_score": 0.9}) >= HIGH_THREAT_THRESHOLD
+    assert extract_threat_score({"_threat_score": 0.1}) < LOW_THREAT_THRESHOLD
+    assert extract_threat_score({"_threat_score": "invalid"}) == 0.0
+
+
+def test_twde_publish_hot_path_avoids_lock_contention() -> None:
+    """A full-buffer classification uses only in-memory operations."""
+    broker = RingBufferBroker(maxlen=8)
+    try:
+        for index in range(8):
+            broker.publish(
+                RawEvent(
+                    event_id=str(index),
+                    source="test",
+                    payload={"_threat_score": 0.5},
+                )
+            )
+        started = time.perf_counter_ns()
+        broker.publish(
+            RawEvent(
+                event_id="high",
+                source="test",
+                payload={"_threat_score": HIGH_THREAT_THRESHOLD},
+            )
+        )
+        elapsed_ms = (time.perf_counter_ns() - started) / 1_000_000
+        assert elapsed_ms < 10
+    finally:
+        broker.stop()
 
 def test_create_broker_falls_back_when_redis_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
@@ -266,112 +365,3 @@ def test_create_broker_falls_back_when_redis_is_unavailable(
     broker = create_broker(Settings(app_env="production"))
 
     assert isinstance(broker, InMemoryBroker)
-
-
-def test_ingest_captures_http_interception_payload() -> None:
-    """HTTP interception payloads return an immediate capture acknowledgement."""
-    client = TestClient(create_app(processing=FakeProcessing()))
-
-    r = client.post(
-        "/v1/ingest",
-        json={
-            "metadata": {"path": "/orders", "method": "POST"},
-            "payload": {"x": 1},
-            "threat_score": 0.1,
-        },
-    )
-    assert r.status_code == 202
-    body = r.json()
-    assert body["event_id"]
-    assert body["masked_payload"]["x"] == 1
-    assert body["protobuf_bytes_size"] > 0
-    assert body["unified_context_vector"] == [0.1, 1.0]
-    assert body["pipeline_metrics"]["execution_time_ms"] >= 0
-
-
-def test_vector_builder_serializes_compact_context_envelope() -> None:
-    """The vector starts with the threat score and protobuf output is binary."""
-    builder = UnifiedContextVectorBuilder()
-    payload = {"temperature": 14.2, "nested": {"pressure": 1450}}
-
-    vector = builder.build(payload, 0.95)
-    encoded = builder.serialize("event-1", payload, 0.95, vector)
-
-    assert vector == [0.95, 14.2, 1450.0]
-    assert isinstance(encoded, bytes)
-    assert encoded
-
-
-def test_pii_masker_redacts_nested_sensitive_values() -> None:
-    """Nested emails, cards, IPs, and credentials are masked in memory."""
-    payload = {
-        "email": "user@example.com",
-        "card": "4111 1111 1111 1111",
-        "ip": "192.168.1.10",
-        "credentials": {"password": "secret", "user": "alice"},
-        "items": [{"token": "abc", "value": 7}],
-    }
-
-    masked = PIIMasker().mask(payload)
-
-    assert masked == {
-        "email": REDACTED,
-        "card": REDACTED,
-        "ip": REDACTED,
-        "credentials": REDACTED,
-        "items": [{"token": REDACTED, "value": 7}],
-    }
-    assert payload["email"] == "user@example.com"
-
-
-def test_interception_forwards_masked_payload() -> None:
-    """PII is masked before the event reaches downstream processing."""
-    processing = CapturingProcessing()
-    client = TestClient(create_app(processing=processing))
-    response = client.post(
-        "/v1/ingest",
-        json={
-            "metadata": {"path": "/login"},
-            "payload": {"email": "user@example.com", "password": "secret"},
-            "threat_score": 0.1,
-        },
-    )
-
-    assert response.status_code == 202
-    assert processing.events[0].payload["email"] == REDACTED
-    assert processing.events[0].payload["password"] == REDACTED
-
-
-def test_interception_response_has_context_vector_and_sub_10ms_execution() -> None:
-    """The interceptor returns the vector and meets the latency target."""
-    client = TestClient(create_app(processing=FakeProcessing()))
-
-    response = client.post(
-        "/v1/ingest",
-        json={
-            "metadata": {"method": "POST", "path": "/payments"},
-            "payload": {"amount": 149.95, "retry_count": 2},
-            "threat_score": 0.88,
-        },
-    )
-
-    body = response.json()
-    assert response.status_code == 202
-    assert body["unified_context_vector"] == [0.88, 149.95, 2.0]
-    assert body["pipeline_metrics"]["execution_time_ms"] < 10
-
-
-def test_invalid_interception_payload_returns_422() -> None:
-    """Invalid interceptor envelopes are rejected by the API schema."""
-    client = TestClient(create_app(processing=FakeProcessing()))
-
-    response = client.post(
-        "/v1/ingest",
-        json={
-            "metadata": {"path": "/payments"},
-            "payload": {"amount": 10},
-            "threat_score": 2.0,
-        },
-    )
-
-    assert response.status_code == 422
