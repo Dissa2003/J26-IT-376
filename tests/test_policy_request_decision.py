@@ -16,7 +16,8 @@ def _request(policy_texts, roles, action="Delete", resource="UserAccounts", subj
             effect = "Allow"
             interpretation = "only_role"
         elif " cannot " in text:
-            subject, action_text, resource_text = "Administrators", "Delete", "UserAccounts"
+            subject = "Auditors" if text.startswith("Auditors") else "Administrators"
+            action_text, resource_text = "Delete", "UserAccounts"
             effect = "Deny"
             interpretation = "role_prohibition"
         else:
@@ -144,6 +145,55 @@ def test_invalid_request_body_returns_422():
     assert client.post("/api/v1/verify-request", json=empty_subject).status_code == 422
     assert client.post("/api/v1/verify-request", json=empty_action).status_code == 422
     assert client.post("/api/v1/verify-request", json={"policies": []}).status_code == 422
+
+
+def test_raw_text_only_role_must_match_submitted_interpretation():
+    payload = {
+        "policies": [{
+            "policy_id": "only-mismatch",
+            "subject": "Administrators",
+            "action": "Delete",
+            "resource": "UserAccounts",
+            "effect": "Allow",
+            "raw_text": "Only administrators can delete user accounts.",
+        }],
+        "request": {
+            "subject_id": "subject-1",
+            "roles": ["Administrators"],
+            "action": "Delete",
+            "resource": "UserAccounts",
+        },
+    }
+    mismatch = client.post("/api/v1/verify-request", json=payload)
+    assert mismatch.status_code == 422
+    assert mismatch.json()["detail"]["code"] == "policy_field_mismatch"
+    assert mismatch.json()["detail"]["policies"] == [{
+        "policy_id": "only-mismatch",
+        "fields": ["interpretation"],
+    }]
+
+
+def test_matching_raw_text_policy_passes():
+    payload = {
+        "policies": [{
+            "policy_id": "only-match",
+            "subject": "Administrators",
+            "action": "Delete",
+            "resource": "UserAccounts",
+            "effect": "Allow",
+            "interpretation": "only_role",
+            "raw_text": "Only administrators can delete user accounts.",
+        }],
+        "request": {
+            "subject_id": "subject-1",
+            "roles": ["Guests"],
+            "action": "Delete",
+            "resource": "UserAccounts",
+        },
+    }
+    response = client.post("/api/v1/verify-request", json=payload)
+    assert response.status_code == 200
+    assert response.json()["decision"] == "DENIED"
 
 
 def test_legacy_endpoints_keep_their_existing_shapes():

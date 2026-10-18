@@ -105,6 +105,42 @@ def verify_text(request: PolicyTextRequest):
 
 @router.post("/api/v1/verify-request", response_model=RequestDecisionReport)
 def verify_request(body: IndependentRequestBody):
+    mismatches: list[dict[str, object]] = []
+    for policy in body.policies:
+        if not policy.raw_text.strip():
+            continue
+        try:
+            parsed = parser.parse_text(policy.raw_text, policy.policy_id)
+        except UnsupportedPolicyError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "code": "policy_raw_text_unsupported",
+                    "policy_id": policy.policy_id,
+                    "message": str(exc),
+                },
+            ) from exc
+        differing_fields = [
+            field
+            for field in ("subject", "action", "resource", "effect", "interpretation")
+            if getattr(policy, field) != getattr(parsed, field)
+        ]
+        if differing_fields:
+            mismatches.append(
+                {
+                    "policy_id": policy.policy_id,
+                    "fields": differing_fields,
+                }
+            )
+    if mismatches:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "code": "policy_field_mismatch",
+                "message": "Submitted policy fields do not match raw_text.",
+                "policies": mismatches,
+            },
+        )
     policies = [
         policy.model_copy(
             update={
