@@ -40,3 +40,9 @@ both enabled, a guest grant conflicts with `only administrators can ...`
 because the guest witness is permitted to act but cannot also be an
 administrator. With either assumption disabled, that conflict may have a
 countermodel.
+
+Independent request checking keeps the role-witness axiom enabled by default,
+so each role named by a policy or request has a witness. It deliberately
+disables the role-exclusivity axiom: a caller's complete role assignment is
+encoded directly for the requested subject, and roles may overlap unless a
+policy formula itself prohibits the combination.

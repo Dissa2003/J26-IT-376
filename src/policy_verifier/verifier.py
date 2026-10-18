@@ -5,7 +5,16 @@ from typing import Any
 
 import z3
 
-from .models import SecurityPolicy, SolverResult, VerificationReport, VerificationStatus
+from .models import (
+    FormalConstraint,
+    RequestDecision,
+    RequestDecisionReport,
+    RequestQueryResult,
+    SecurityPolicy,
+    SolverResult,
+    VerificationReport,
+    VerificationStatus,
+)
 
 
 class PolicyVerificationEngine:
@@ -129,6 +138,209 @@ class PolicyVerificationEngine:
             query_type="entailment",
             model={"counterexample": "premises do not entail the conclusion"},
             explanation="A model exists with the negated conclusion; entailment was not established.",
+        )
+
+    def check_request(
+        self,
+        policies: list[SecurityPolicy],
+        *,
+        subject_id: str,
+        roles: list[str],
+        action: str,
+        resource: str,
+        assume_role_witness: bool = True,
+    ) -> RequestDecisionReport:
+        import time
+
+        start = time.perf_counter()
+        individual_sort = z3.DeclareSort("PolicyIndividual")
+        subject = z3.Const(f"Subject_{_z3_name(subject_id)}", individual_sort)
+        role_names = sorted({policy.subject for policy in policies} | set(roles))
+        role_predicates = {
+            name: z3.Function(
+                f"Role_{_z3_name(name)}",
+                individual_sort,
+                z3.BoolSort(),
+            )
+            for name in role_names
+        }
+        action_predicates: dict[tuple[str, str], z3.FuncDeclRef] = {}
+
+        def action_predicate(
+            action_name: str, resource_name: str
+        ) -> z3.FuncDeclRef:
+            key = (action_name, resource_name)
+            return action_predicates.setdefault(
+                key,
+                z3.Function(
+                    f"Can_{_z3_name(action_name)}_{_z3_name(resource_name)}",
+                    individual_sort,
+                    z3.BoolSort(),
+                ),
+            )
+
+        policy_formulas: list[z3.BoolRef] = []
+        constraints: list[FormalConstraint] = []
+        for policy in policies:
+            role = role_predicates[policy.subject]
+            permission = action_predicate(policy.action, policy.resource)
+            if policy.interpretation.value == "only_role":
+                formula = z3.ForAll(
+                    [subject],
+                    z3.Implies(permission(subject), role(subject)),
+                )
+                expression = (
+                    f"∀x (Can{policy.action}(x, {policy.resource}) → "
+                    f"{policy.subject}(x))"
+                )
+            elif policy.effect.value == "Deny":
+                formula = z3.ForAll(
+                    [subject],
+                    z3.Implies(role(subject), z3.Not(permission(subject))),
+                )
+                expression = (
+                    f"∀x ({policy.subject}(x) → ¬Can{policy.action}"
+                    f"(x, {policy.resource}))"
+                )
+            else:
+                formula = z3.ForAll(
+                    [subject],
+                    z3.Implies(role(subject), permission(subject)),
+                )
+                expression = (
+                    f"∀x ({policy.subject}(x) → Can{policy.action}"
+                    f"(x, {policy.resource}))"
+                )
+            policy_formulas.append(formula)
+            constraints.append(
+                FormalConstraint(
+                    constraint_id=f"{policy.policy_id}:rule",
+                    expression=expression,
+                    kind="rule",
+                    source_policy_ids=[policy.policy_id],
+                )
+            )
+
+        request_roles = set(roles)
+        role_facts: list[z3.BoolRef] = []
+        for role_name in role_names:
+            listed = role_name in request_roles
+            role_facts.append(
+                role_predicates[role_name](subject)
+                if listed
+                else z3.Not(role_predicates[role_name](subject))
+            )
+            constraints.append(
+                FormalConstraint(
+                    constraint_id=f"request:role:{_z3_name(role_name)}",
+                    expression=(
+                        f"{role_name}({subject_id})"
+                        if listed
+                        else f"¬{role_name}({subject_id})"
+                    ),
+                    kind="fact",
+                )
+            )
+
+        if assume_role_witness:
+            for role_name in role_names:
+                witness = z3.Const(
+                    f"Witness_{_z3_name(role_name)}",
+                    individual_sort,
+                )
+                policy_formulas.append(role_predicates[role_name](witness))
+
+        requested_permission = action_predicate(action, resource)(subject)
+        q_expression = f"Can{action}({subject_id}, {resource})"
+        constraints.extend(
+            [
+                FormalConstraint(
+                    constraint_id="request:query",
+                    expression=q_expression,
+                    kind="query",
+                ),
+                FormalConstraint(
+                    constraint_id="request:negated-query",
+                    expression=f"¬{q_expression}",
+                    kind="negated_query",
+                ),
+            ]
+        )
+
+        def run_query(extra: z3.BoolRef | None = None) -> RequestQueryResult:
+            solver = self._solver_factory()
+            solver.add(*policy_formulas, *role_facts)
+            if extra is not None:
+                solver.add(extra)
+            result = solver.check()
+            raw_status = str(result)
+            if result == z3.unknown:
+                reason = (
+                    solver.reason_unknown()
+                    if hasattr(solver, "reason_unknown")
+                    else "solver returned unknown"
+                )
+                return RequestQueryResult(
+                    status="unknown",
+                    reason_unknown=reason,
+                )
+            return RequestQueryResult(status=raw_status)
+
+        consistency_query = run_query()
+        if consistency_query.status == "unsat":
+            decision = RequestDecision.NOT_DETERMINED
+            reason_code = "policy_set_contradictory"
+            explanation = "The submitted policies and complete request role assignment are inconsistent."
+            allow_query = run_query(z3.Not(requested_permission))
+            deny_query = run_query(requested_permission)
+        else:
+            allow_query = run_query(z3.Not(requested_permission))
+            deny_query = run_query(requested_permission)
+            queries = (consistency_query, allow_query, deny_query)
+            if any(query.status == "unknown" for query in queries):
+                decision = RequestDecision.NOT_DETERMINED
+                reason_code = "solver_unknown"
+                unknown_reasons = [
+                    query.reason_unknown
+                    for query in queries
+                    if query.status == "unknown" and query.reason_unknown
+                ]
+                explanation = (
+                    "Z3 returned unknown for at least one request decision query."
+                    + (f" Reasons: {'; '.join(unknown_reasons)}" if unknown_reasons else "")
+                )
+            elif allow_query.status == "unsat":
+                decision = RequestDecision.ALLOWED
+                reason_code = "request_entailed"
+                explanation = "The request is entailed by the submitted policies and role assignment."
+            elif deny_query.status == "unsat":
+                decision = RequestDecision.DENIED
+                reason_code = "request_prohibited"
+                explanation = "The negation of the request is entailed by the submitted policies and role assignment."
+            else:
+                decision = RequestDecision.NOT_DETERMINED
+                reason_code = "not_covered_by_policies"
+                explanation = "Neither the request nor its negation is entailed by the submitted policies."
+
+        return RequestDecisionReport(
+            decision=decision,
+            reason_code=reason_code,
+            explanation=explanation,
+            consistency_query=consistency_query,
+            allow_query=allow_query,
+            deny_query=deny_query,
+            constraints=constraints,
+            assumptions=[
+                "Role-witness axiom enabled."
+                if assume_role_witness
+                else "Role-witness axiom disabled.",
+                "Role-exclusivity axiom disabled for independent request checking.",
+            ],
+            execution_time_ms=(time.perf_counter() - start) * 1000,
+            limitations=[
+                "The request roles are a complete role assignment for the subject.",
+                "Policy conditions are outside the supported policy grammar.",
+            ],
         )
 
     def process_and_verify(self, policies: list[dict[str, Any] | SecurityPolicy]) -> VerificationReport:
