@@ -56,6 +56,7 @@ from __future__ import annotations
 import logging
 import re
 import urllib.parse
+import httpx
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
@@ -65,8 +66,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from shared_contracts.config import get_settings
 from shared_contracts.models import ErrorResponse
-from api.routes import router as policy_router
 
 from .adapters import InputContractError, to_unified_api_context, to_verified_rule_info
 from .dashboard import install_dashboard
@@ -321,7 +322,9 @@ _RULE_NOTES = {
 
 
 def create_app(
-    service: TokenizationAIService | None = None, model_note: str | None = None
+    service: TokenizationAIService | None = None,
+    model_note: str | None = None,
+    policy_url: str | None = None,
 ) -> FastAPI:
     """Build the app. ``service`` is injectable; the default is the PP1 demo service."""
     if service is None:
@@ -331,6 +334,7 @@ def create_app(
         note = model_note or INJECTED_MODEL_NOTE
 
     app = FastAPI(title="tokenization_ai")
+    policy_base_url = (policy_url or get_settings().policy_url).rstrip("/")
 
     def _ready() -> bool:
         return bool(service.tensorizer.vocabulary.is_fitted and service.model.is_trained)
@@ -461,7 +465,38 @@ def create_app(
         return _build_response(request.rule_source, rule_info, result, trace, note, service)
 
     install_dashboard(app)  # additive: GET /dashboard only; /demo and /v1/analyze unchanged
-    app.include_router(policy_router)
+
+    @app.api_route(
+        "/api/v1/{path:path}",
+        methods=["GET", "POST"],
+        include_in_schema=False,
+    )
+    async def policy_proxy(path: str, request: Request):
+        """Proxy dashboard policy calls to the standalone policy service."""
+        try:
+            body = await request.body()
+            async with httpx.AsyncClient() as client:
+                upstream = await client.request(
+                    request.method,
+                    f"{policy_base_url}/api/v1/{path}",
+                    params=request.query_params,
+                    content=body,
+                    headers={"content-type": request.headers.get("content-type", "")},
+                    timeout=10.0,
+                )
+        except httpx.HTTPError as exc:
+            log.exception("Policy verification service unavailable")
+            return _error(502, "policy_service_unavailable", "Policy verification service is unavailable.")
+        headers = {}
+        content_type = upstream.headers.get("content-type")
+        if content_type:
+            headers["content-type"] = content_type
+        return Response(
+            content=upstream.content,
+            status_code=upstream.status_code,
+            headers=headers,
+        )
+
     return app
 
 

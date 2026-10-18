@@ -1,0 +1,986 @@
+{
+  "version": "policy-verification-v1",
+  "title": "Reviewed deterministic policy verification cases",
+  "attribution": {
+    "primary_source": "LogiShield reviewed cases",
+    "abac_lab": "No ABAC Lab files were present in this repository at dataset creation time; no external records are claimed or copied.",
+    "adaptation_note": "The case schema is ABAC-compatible, but this dataset only uses the documented LogiShield grammar."
+  },
+  "cases": [
+    {
+      "id": "allow-01",
+      "source": "reviewed-core",
+      "domain": "access-control",
+      "input": "Administrators can read user profiles.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Administrators",
+          "action": "Read",
+          "resource": "UserProfiles",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (Administrators(x) → CanRead(x, UserProfiles))",
+        "inference_conclusions": [
+          "Administrators(Alice) → CanRead(Alice, UserProfiles)",
+          "CanRead(Alice, UserProfiles)"
+        ]
+      },
+      "rationale": "A role permission is entailed for the deterministic request individual."
+    },
+    {
+      "id": "allow-02",
+      "source": "reviewed-core",
+      "domain": "access-control",
+      "input": "Auditors can read audit logs.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Auditors",
+          "action": "Read",
+          "resource": "AuditLogs",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (Auditors(x) → CanRead(x, AuditLogs))",
+        "inference_conclusions": [
+          "Auditors(Alice) → CanRead(Alice, AuditLogs)",
+          "CanRead(Alice, AuditLogs)"
+        ]
+      },
+      "rationale": "Independent role, action, and resource scope."
+    },
+    {
+      "id": "allow-03",
+      "source": "reviewed-core",
+      "domain": "access-control",
+      "input": "Operators can restart services.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Operators",
+          "action": "Restart",
+          "resource": "Services",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (Operators(x) → CanRestart(x, Services))",
+        "inference_conclusions": [
+          "Operators(Alice) → CanRestart(Alice, Services)",
+          "CanRestart(Alice, Services)"
+        ]
+      },
+      "rationale": "Direct permission."
+    },
+    {
+      "id": "allow-04",
+      "source": "reviewed-core",
+      "domain": "access-control",
+      "input": "Support agents can view tickets.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "SupportAgents",
+          "action": "View",
+          "resource": "Tickets",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (SupportAgents(x) → CanView(x, Tickets))",
+        "inference_conclusions": [
+          "SupportAgents(Alice) → CanView(Alice, Tickets)",
+          "CanView(Alice, Tickets)"
+        ]
+      },
+      "rationale": "Direct permission with a multi-word role."
+    },
+    {
+      "id": "allow-05",
+      "source": "reviewed-core",
+      "domain": "access-control",
+      "input": "Data stewards can export reports.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "DataStewards",
+          "action": "Export",
+          "resource": "Reports",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (DataStewards(x) → CanExport(x, Reports))",
+        "inference_conclusions": [
+          "DataStewards(Alice) → CanExport(Alice, Reports)",
+          "CanExport(Alice, Reports)"
+        ]
+      },
+      "rationale": "Direct permission with a multi-word role and resource."
+    },
+    {
+      "id": "allow-06",
+      "source": "reviewed-core",
+      "domain": "access-control",
+      "input": "Administrators can delete user accounts.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Administrators",
+          "action": "Delete",
+          "resource": "UserAccounts",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (Administrators(x) → CanDelete(x, UserAccounts))",
+        "inference_conclusions": [
+          "Administrators(Alice) → CanDelete(Alice, UserAccounts)",
+          "CanDelete(Alice, UserAccounts)"
+        ]
+      },
+      "rationale": "The canonical example; UNSAT is the expected K and not C result."
+    },
+    {
+      "id": "allow-07",
+      "source": "reviewed-core",
+      "domain": "access-control",
+      "input": "Reviewers can approve documents.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Reviewers",
+          "action": "Approve",
+          "resource": "Documents",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (Reviewers(x) → CanApprove(x, Documents))",
+        "inference_conclusions": [
+          "Reviewers(Alice) → CanApprove(Alice, Documents)",
+          "CanApprove(Alice, Documents)"
+        ]
+      },
+      "rationale": "Direct permission."
+    },
+    {
+      "id": "allow-08",
+      "source": "reviewed-core",
+      "domain": "access-control",
+      "input": "Developers can deploy applications.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Developers",
+          "action": "Deploy",
+          "resource": "Applications",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (Developers(x) → CanDeploy(x, Applications))",
+        "inference_conclusions": [
+          "Developers(Alice) → CanDeploy(Alice, Applications)",
+          "CanDeploy(Alice, Applications)"
+        ]
+      },
+      "rationale": "Direct permission."
+    },
+    {
+      "id": "only-01",
+      "source": "reviewed-core",
+      "domain": "separation-of-duty",
+      "input": "Only administrators can delete user accounts.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Administrators",
+          "action": "Delete",
+          "resource": "UserAccounts",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "only_role"
+        },
+        "fol_formula": "∀x (CanDelete(x, UserAccounts) → Administrators(x))",
+        "inference_conclusions": [
+          "CanDelete(Alice, UserAccounts) → Administrators(Alice)",
+          "Administrators(Alice)"
+        ]
+      },
+      "rationale": "The implication direction is capability to role, not role to capability."
+    },
+    {
+      "id": "only-02",
+      "source": "reviewed-core",
+      "domain": "separation-of-duty",
+      "input": "Only auditors can read audit logs.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Auditors",
+          "action": "Read",
+          "resource": "AuditLogs",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "only_role"
+        },
+        "fol_formula": "∀x (CanRead(x, AuditLogs) → Auditors(x))",
+        "inference_conclusions": [
+          "CanRead(Alice, AuditLogs) → Auditors(Alice)",
+          "Auditors(Alice)"
+        ]
+      },
+      "rationale": "Only-role implication."
+    },
+    {
+      "id": "only-03",
+      "source": "reviewed-core",
+      "domain": "separation-of-duty",
+      "input": "Only operators can restart services.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Operators",
+          "action": "Restart",
+          "resource": "Services",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "only_role"
+        },
+        "fol_formula": "∀x (CanRestart(x, Services) → Operators(x))",
+        "inference_conclusions": [
+          "CanRestart(Alice, Services) → Operators(Alice)",
+          "Operators(Alice)"
+        ]
+      },
+      "rationale": "Only-role implication."
+    },
+    {
+      "id": "only-04",
+      "source": "reviewed-core",
+      "domain": "separation-of-duty",
+      "input": "Only support agents can view tickets.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "SupportAgents",
+          "action": "View",
+          "resource": "Tickets",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "only_role"
+        },
+        "fol_formula": "∀x (CanView(x, Tickets) → SupportAgents(x))",
+        "inference_conclusions": [
+          "CanView(Alice, Tickets) → SupportAgents(Alice)",
+          "SupportAgents(Alice)"
+        ]
+      },
+      "rationale": "Only-role implication."
+    },
+    {
+      "id": "deny-01",
+      "source": "reviewed-core",
+      "domain": "prohibition",
+      "input": "Administrators cannot delete user accounts.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Administrators",
+          "action": "Delete",
+          "resource": "UserAccounts",
+          "effect": "Deny",
+          "conditions": [],
+          "interpretation": "role_prohibition"
+        },
+        "fol_formula": "∀x (Administrators(x) → ¬CanDelete(x, UserAccounts))",
+        "inference_conclusions": [
+          "Administrators(Alice) → ¬CanDelete(Alice, UserAccounts)",
+          "¬CanDelete(Alice, UserAccounts)"
+        ]
+      },
+      "rationale": "The negative consequent is entailed."
+    },
+    {
+      "id": "deny-02",
+      "source": "reviewed-core",
+      "domain": "prohibition",
+      "input": "Auditors cannot modify audit logs.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Auditors",
+          "action": "Modify",
+          "resource": "AuditLogs",
+          "effect": "Deny",
+          "conditions": [],
+          "interpretation": "role_prohibition"
+        },
+        "fol_formula": "∀x (Auditors(x) → ¬CanModify(x, AuditLogs))",
+        "inference_conclusions": [
+          "Auditors(Alice) → ¬CanModify(Alice, AuditLogs)",
+          "¬CanModify(Alice, AuditLogs)"
+        ]
+      },
+      "rationale": "Negative permission."
+    },
+    {
+      "id": "deny-03",
+      "source": "reviewed-core",
+      "domain": "prohibition",
+      "input": "Operators cannot stop services.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Operators",
+          "action": "Stop",
+          "resource": "Services",
+          "effect": "Deny",
+          "conditions": [],
+          "interpretation": "role_prohibition"
+        },
+        "fol_formula": "∀x (Operators(x) → ¬CanStop(x, Services))",
+        "inference_conclusions": [
+          "Operators(Alice) → ¬CanStop(Alice, Services)",
+          "¬CanStop(Alice, Services)"
+        ]
+      },
+      "rationale": "Negative permission."
+    },
+    {
+      "id": "deny-04",
+      "source": "reviewed-core",
+      "domain": "prohibition",
+      "input": "Guests cannot export reports.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Guests",
+          "action": "Export",
+          "resource": "Reports",
+          "effect": "Deny",
+          "conditions": [],
+          "interpretation": "role_prohibition"
+        },
+        "fol_formula": "∀x (Guests(x) → ¬CanExport(x, Reports))",
+        "inference_conclusions": [
+          "Guests(Alice) → ¬CanExport(Alice, Reports)",
+          "¬CanExport(Alice, Reports)"
+        ]
+      },
+      "rationale": "Negative permission."
+    },
+    {
+      "id": "deny-05",
+      "source": "reviewed-core",
+      "domain": "prohibition",
+      "input": "Support agents cannot delete tickets.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "SupportAgents",
+          "action": "Delete",
+          "resource": "Tickets",
+          "effect": "Deny",
+          "conditions": [],
+          "interpretation": "role_prohibition"
+        },
+        "fol_formula": "∀x (SupportAgents(x) → ¬CanDelete(x, Tickets))",
+        "inference_conclusions": [
+          "SupportAgents(Alice) → ¬CanDelete(Alice, Tickets)",
+          "¬CanDelete(Alice, Tickets)"
+        ]
+      },
+      "rationale": "Negative permission."
+    },
+    {
+      "id": "conflict-01",
+      "source": "reviewed-core",
+      "domain": "conflict",
+      "input": [
+        "Administrators can delete user accounts.",
+        "Administrators cannot delete user accounts."
+      ],
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": true,
+        "attributes": {
+          "subject": "Administrators",
+          "action": "Delete",
+          "resource": "UserAccounts",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (Administrators(x) → CanDelete(x, UserAccounts))",
+        "inference_conclusions": [
+          "Administrators(Alice) → CanDelete(Alice, UserAccounts)",
+          "CanDelete(Alice, UserAccounts)"
+        ]
+      },
+      "rationale": "Same subject, action, resource, and empty conditions have opposite effects."
+    },
+    {
+      "id": "conflict-02",
+      "source": "reviewed-core",
+      "domain": "conflict",
+      "input": [
+        "Auditors can read audit logs.",
+        "Auditors cannot read audit logs."
+      ],
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": true,
+        "attributes": {
+          "subject": "Auditors",
+          "action": "Read",
+          "resource": "AuditLogs",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (Auditors(x) → CanRead(x, AuditLogs))",
+        "inference_conclusions": [
+          "Auditors(Alice) → CanRead(Alice, AuditLogs)",
+          "CanRead(Alice, AuditLogs)"
+        ]
+      },
+      "rationale": "Direct contradiction in one scope."
+    },
+    {
+      "id": "conflict-03",
+      "source": "reviewed-core",
+      "domain": "conflict",
+      "input": [
+        "Operators can restart services.",
+        "Operators cannot restart services."
+      ],
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": true,
+        "attributes": {
+          "subject": "Operators",
+          "action": "Restart",
+          "resource": "Services",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (Operators(x) → CanRestart(x, Services))",
+        "inference_conclusions": [
+          "Operators(Alice) → CanRestart(Alice, Services)",
+          "CanRestart(Alice, Services)"
+        ]
+      },
+      "rationale": "Direct contradiction in one scope."
+    },
+    {
+      "id": "scope-01",
+      "source": "reviewed-core",
+      "domain": "scope",
+      "input": [
+        "Administrators can delete user accounts.",
+        "Administrators cannot delete invoices."
+      ],
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Administrators",
+          "action": "Delete",
+          "resource": "UserAccounts",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (Administrators(x) → CanDelete(x, UserAccounts))",
+        "inference_conclusions": [
+          "Administrators(Alice) → CanDelete(Alice, UserAccounts)",
+          "CanDelete(Alice, UserAccounts)"
+        ]
+      },
+      "rationale": "Different resources are not conflicts."
+    },
+    {
+      "id": "scope-02",
+      "source": "reviewed-core",
+      "domain": "scope",
+      "input": [
+        "Administrators can delete user accounts.",
+        "Auditors cannot delete user accounts."
+      ],
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Administrators",
+          "action": "Delete",
+          "resource": "UserAccounts",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (Administrators(x) → CanDelete(x, UserAccounts))",
+        "inference_conclusions": [
+          "Administrators(Alice) → CanDelete(Alice, UserAccounts)",
+          "CanDelete(Alice, UserAccounts)"
+        ]
+      },
+      "rationale": "Different roles are not conflicts."
+    },
+    {
+      "id": "scope-03",
+      "source": "reviewed-core",
+      "domain": "scope",
+      "input": [
+        "Administrators can delete user accounts.",
+        "Administrators cannot read user accounts."
+      ],
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Administrators",
+          "action": "Delete",
+          "resource": "UserAccounts",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (Administrators(x) → CanDelete(x, UserAccounts))",
+        "inference_conclusions": [
+          "Administrators(Alice) → CanDelete(Alice, UserAccounts)",
+          "CanDelete(Alice, UserAccounts)"
+        ]
+      },
+      "rationale": "Different actions are not conflicts."
+    },
+    {
+      "id": "unsupported-01",
+      "source": "reviewed-negative",
+      "domain": "unsupported",
+      "input": "Maybe administrators should delete user accounts.",
+      "expected": {
+        "parsed": false,
+        "unsupported": true,
+        "rejection": "unsupported_policy",
+        "not_applicable": [
+          "attributes",
+          "fol_formula",
+          "inference_conclusions",
+          "query_type",
+          "solver_outcome",
+          "conflict"
+        ]
+      },
+      "rationale": "Modal and ambiguous language is outside the grammar."
+    },
+    {
+      "id": "unsupported-02",
+      "source": "reviewed-negative",
+      "domain": "unsupported",
+      "input": "Administrators may delete user accounts.",
+      "expected": {
+        "parsed": false,
+        "unsupported": true,
+        "rejection": "unsupported_policy",
+        "not_applicable": [
+          "attributes",
+          "fol_formula",
+          "inference_conclusions",
+          "query_type",
+          "solver_outcome",
+          "conflict"
+        ]
+      },
+      "rationale": "May is not one of the supported operators."
+    },
+    {
+      "id": "unsupported-03",
+      "source": "reviewed-negative",
+      "domain": "unsupported",
+      "input": "If administrators are on call, they can delete user accounts.",
+      "expected": {
+        "parsed": false,
+        "unsupported": true,
+        "rejection": "unsupported_policy",
+        "not_applicable": [
+          "attributes",
+          "fol_formula",
+          "inference_conclusions",
+          "query_type",
+          "solver_outcome",
+          "conflict"
+        ]
+      },
+      "rationale": "Conditions are not parsed from natural language."
+    },
+    {
+      "id": "unsupported-04",
+      "source": "reviewed-negative",
+      "domain": "unsupported",
+      "input": "Users with clearance level 3 can export reports.",
+      "expected": {
+        "parsed": false,
+        "unsupported": true,
+        "rejection": "unsupported_policy",
+        "not_applicable": [
+          "attributes",
+          "fol_formula",
+          "inference_conclusions",
+          "query_type",
+          "solver_outcome",
+          "conflict"
+        ]
+      },
+      "rationale": "Attribute conditions are not parsed from natural language."
+    },
+    {
+      "id": "unsupported-05",
+      "source": "reviewed-negative",
+      "domain": "unsupported",
+      "input": "",
+      "expected": {
+        "parsed": false,
+        "unsupported": true,
+        "rejection": "unsupported_policy",
+        "not_applicable": [
+          "attributes",
+          "fol_formula",
+          "inference_conclusions",
+          "query_type",
+          "solver_outcome",
+          "conflict"
+        ]
+      },
+      "rationale": "Empty input is rejected before solver execution."
+    },
+    {
+      "id": "case-01",
+      "source": "reviewed-normalization",
+      "domain": "normalization",
+      "input": "administrators can delete user accounts.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Administrators",
+          "action": "Delete",
+          "resource": "UserAccounts",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (Administrators(x) → CanDelete(x, UserAccounts))",
+        "inference_conclusions": [
+          "Administrators(Alice) → CanDelete(Alice, UserAccounts)",
+          "CanDelete(Alice, UserAccounts)"
+        ]
+      },
+      "rationale": "Case normalization does not change semantics."
+    },
+    {
+      "id": "case-02",
+      "source": "reviewed-normalization",
+      "domain": "normalization",
+      "input": "Only data stewards can export reports.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "DataStewards",
+          "action": "Export",
+          "resource": "Reports",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "only_role"
+        },
+        "fol_formula": "∀x (CanExport(x, Reports) → DataStewards(x))",
+        "inference_conclusions": [
+          "CanExport(Alice, Reports) → DataStewards(Alice)",
+          "DataStewards(Alice)"
+        ]
+      },
+      "rationale": "Only-role semantics with multi-word names."
+    },
+    {
+      "id": "case-03",
+      "source": "reviewed-normalization",
+      "domain": "normalization",
+      "input": "Guests cannot view tickets.",
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Guests",
+          "action": "View",
+          "resource": "Tickets",
+          "effect": "Deny",
+          "conditions": [],
+          "interpretation": "role_prohibition"
+        },
+        "fol_formula": "∀x (Guests(x) → ¬CanView(x, Tickets))",
+        "inference_conclusions": [
+          "Guests(Alice) → ¬CanView(Alice, Tickets)",
+          "¬CanView(Alice, Tickets)"
+        ]
+      },
+      "rationale": "Negative consequent remains entailed."
+    },
+    {
+      "id": "case-04",
+      "source": "reviewed-scoping",
+      "domain": "scope",
+      "input": [
+        "Administrators can read user profiles.",
+        "Administrators cannot read audit logs."
+      ],
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Administrators",
+          "action": "Read",
+          "resource": "UserProfiles",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (Administrators(x) → CanRead(x, UserProfiles))",
+        "inference_conclusions": [
+          "Administrators(Alice) → CanRead(Alice, UserProfiles)",
+          "CanRead(Alice, UserProfiles)"
+        ]
+      },
+      "rationale": "Resource separation prevents a false conflict."
+    },
+    {
+      "id": "case-05",
+      "source": "reviewed-scoping",
+      "domain": "scope",
+      "input": [
+        "Support agents can view tickets.",
+        "Support agents cannot delete tickets."
+      ],
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "SupportAgents",
+          "action": "View",
+          "resource": "Tickets",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (SupportAgents(x) → CanView(x, Tickets))",
+        "inference_conclusions": [
+          "SupportAgents(Alice) → CanView(Alice, Tickets)",
+          "CanView(Alice, Tickets)"
+        ]
+      },
+      "rationale": "Action separation prevents a false conflict."
+    },
+    {
+      "id": "case-06",
+      "source": "reviewed-scoping",
+      "domain": "scope",
+      "input": [
+        "Auditors can read audit logs.",
+        "Only administrators can delete user accounts."
+      ],
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "UNSAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Auditors",
+          "action": "Read",
+          "resource": "AuditLogs",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (Auditors(x) → CanRead(x, AuditLogs))",
+        "inference_conclusions": [
+          "Auditors(Alice) → CanRead(Alice, AuditLogs)",
+          "CanRead(Alice, AuditLogs)"
+        ]
+      },
+      "rationale": "Role and resource separation prevents interaction."
+    },
+    {
+      "id": "consistency-01",
+      "source": "reviewed-solver",
+      "domain": "consistency",
+      "input": [
+        "Administrators can delete user accounts.",
+        "Administrators cannot delete user accounts."
+      ],
+      "query_type": "consistency",
+      "expected": {
+        "parsed": true,
+        "query_type": "consistency",
+        "solver_outcome": "UNSAT",
+        "conflict": true,
+        "attributes": {
+          "subject": "Administrators",
+          "action": "Delete",
+          "resource": "UserAccounts",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (Administrators(x) → CanDelete(x, UserAccounts))",
+        "inference_conclusions": [
+          "Administrators(Alice) → CanDelete(Alice, UserAccounts)",
+          "CanDelete(Alice, UserAccounts)"
+        ]
+      },
+      "rationale": "The complete policy set is inconsistent even though the first policy's entailment query is independently well-formed."
+    },
+    {
+      "id": "nonentail-01",
+      "source": "reviewed-solver",
+      "domain": "non-entailment",
+      "input": "Administrators can read user profiles.",
+      "query": {
+        "premises": [
+          "Administrators(Alice)"
+        ],
+        "conclusion": "CanDelete(Alice, UserAccounts)"
+      },
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "SAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Administrators",
+          "action": "Read",
+          "resource": "UserProfiles",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (Administrators(x) → CanRead(x, UserProfiles))",
+        "inference_conclusions": [
+          "Administrators(Alice) → CanRead(Alice, UserProfiles)",
+          "CanRead(Alice, UserProfiles)"
+        ]
+      },
+      "rationale": "The read permission does not entail a delete permission."
+    },
+    {
+      "id": "nonentail-02",
+      "source": "reviewed-solver",
+      "domain": "non-entailment",
+      "input": "Administrators can read user profiles.",
+      "query": {
+        "premises": [
+          "Auditors(Alice)"
+        ],
+        "conclusion": "CanRead(Alice, UserProfiles)"
+      },
+      "expected": {
+        "parsed": true,
+        "query_type": "entailment",
+        "solver_outcome": "SAT",
+        "conflict": false,
+        "attributes": {
+          "subject": "Administrators",
+          "action": "Read",
+          "resource": "UserProfiles",
+          "effect": "Allow",
+          "conditions": [],
+          "interpretation": "role_permission"
+        },
+        "fol_formula": "∀x (Administrators(x) → CanRead(x, UserProfiles))",
+        "inference_conclusions": [
+          "Administrators(Alice) → CanRead(Alice, UserProfiles)",
+          "CanRead(Alice, UserProfiles)"
+        ]
+      },
+      "rationale": "A fact about a different role does not entail the administrator permission."
+    }
+  ]
+}

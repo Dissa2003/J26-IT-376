@@ -10,3 +10,6 @@ htmlcov/
 .ruff_cache/
 .hypothesis/
 *.log
+
+# Generated modernization analysis artifacts
+.github/modernize/

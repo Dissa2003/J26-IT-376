@@ -40,6 +40,10 @@ class PolicyParser:
         cleaned = " ".join(text.strip().split())
         if not cleaned:
             raise UnsupportedPolicyError("Policy text must not be empty.")
+        if re.search(r"\b(with|level|if|when|where|whose)\b", cleaned, re.IGNORECASE):
+            raise UnsupportedPolicyError(
+                "Attribute conditions are outside the supported policy grammar."
+            )
         match = _ONLY.match(cleaned)
         interpretation = PolicyInterpretation.ONLY_ROLE
         effect = PolicyEffect.ALLOW

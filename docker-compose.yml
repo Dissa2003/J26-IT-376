@@ -12,12 +12,11 @@ services:
     <<: *svc
     build: { context: ., args: { MODULE: ingestion } }
     ports: ["8001:8001"]
-    depends_on: [processing, redis]
-  processing:
+    depends_on: [redis]
+  policy_verification:
     <<: *svc
-    build: { context: ., args: { MODULE: processing } }
+    build: { context: ., args: { MODULE: api } }
     ports: ["8002:8002"]
-    depends_on: [engine]
   engine:
     <<: *svc
     build: { context: ., args: { MODULE: engine } }
