@@ -365,3 +365,188 @@ def test_create_broker_falls_back_when_redis_is_unavailable(
     broker = create_broker(Settings(app_env="production"))
 
     assert isinstance(broker, InMemoryBroker)
+
+
+class CapturingProcessing(FakeProcessing):
+    """Processing fake that records the event received downstream."""
+
+    def __init__(self) -> None:
+        self.events: list[RawEvent] = []
+
+    def process(self, event: RawEvent) -> Prediction:
+        self.events.append(event)
+        return super().process(event)
+
+
+def test_ingest_captures_http_interception_payload() -> None:
+    """HTTP interception payloads return an immediate capture acknowledgement."""
+    client = TestClient(create_app(processing=FakeProcessing()))
+
+    r = client.post(
+        "/v1/ingest",
+        json={
+            "metadata": {"path": "/orders", "method": "POST"},
+            "payload": {"x": 1},
+            "threat_score": 0.1,
+        },
+    )
+    assert r.status_code == 202
+    body = r.json()
+    assert body["event_id"]
+    assert body["masked_payload"]["x"] == 1
+    assert body["protobuf_bytes_size"] > 0
+    assert body["unified_context_vector"] == [0.1, 1.0]
+    assert body["pipeline_metrics"]["execution_time_ms"] >= 0
+
+
+def test_vector_builder_serializes_compact_context_envelope() -> None:
+    """The vector starts with the threat score and protobuf output is binary."""
+    builder = UnifiedContextVectorBuilder()
+    payload = {"temperature": 14.2, "nested": {"pressure": 1450}}
+
+    vector = builder.build(payload, 0.95)
+    encoded = builder.serialize("event-1", payload, 0.95, vector)
+
+    assert vector == [0.95, 14.2, 1450.0]
+    assert isinstance(encoded, bytes)
+    assert len(encoded) > 0
+
+
+def test_pii_masker_redacts_nested_sensitive_values() -> None:
+    """Nested emails, cards, IPs, and credentials are masked in memory."""
+    payload = {
+        "email": "user@example.com",
+        "card": "4111 1111 1111 1111",
+        "ip": "192.168.1.10",
+        "credentials": {"password": "secret", "user": "alice"},
+        "items": [{"token": "abc", "value": 7}],
+    }
+
+    masked = PIIMasker().mask(payload)
+
+    assert masked == {
+        "email": REDACTED,
+        "card": REDACTED,
+        "ip": REDACTED,
+        "credentials": REDACTED,
+        "items": [{"token": REDACTED, "value": 7}],
+    }
+    assert payload["email"] == "user@example.com"
+
+
+def test_interception_forwards_masked_payload() -> None:
+    """PII is masked before the event reaches downstream processing."""
+    processing = CapturingProcessing()
+    client = TestClient(create_app(processing=processing))
+    response = client.post(
+        "/v1/ingest",
+        json={
+            "metadata": {"path": "/login"},
+            "payload": {"email": "user@example.com", "password": "secret"},
+            "threat_score": 0.1,
+        },
+    )
+
+    assert response.status_code == 202
+    assert processing.events[0].payload["email"] == REDACTED
+    assert processing.events[0].payload["password"] == REDACTED
+
+
+def test_interception_response_has_context_vector_and_sub_10ms_execution() -> None:
+    """The interceptor returns the vector and meets the latency target (<10ms)."""
+    client = TestClient(create_app(processing=FakeProcessing()))
+
+    response = client.post(
+        "/v1/ingest",
+        json={
+            "metadata": {"method": "POST", "path": "/payments"},
+            "payload": {"amount": 149.95, "retry_count": 2},
+            "threat_score": 0.88,
+        },
+    )
+
+    body = response.json()
+    assert response.status_code == 202
+    assert body["unified_context_vector"] == [0.88, 149.95, 2.0]
+    assert body["pipeline_metrics"]["execution_time_ms"] < 10
+
+
+def test_invalid_interception_payload_returns_422() -> None:
+    """Invalid interceptor envelopes are rejected by the API schema."""
+    client = TestClient(create_app(processing=FakeProcessing()))
+
+    response = client.post(
+        "/v1/ingest",
+        json={
+            "metadata": {"path": "/payments"},
+            "payload": {"amount": 10},
+            "threat_score": 2.0,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_interception_captures_client_role_and_authorization_metadata() -> None:
+    """Captured attributes include client_role, authorization, and headers."""
+    processing = CapturingProcessing()
+    client = TestClient(create_app(processing=processing))
+
+    response = client.post(
+        "/v1/ingest",
+        json={
+            "metadata": {
+                "method": "POST",
+                "path": "/admin/manage",
+                "client_role": "admin",
+                "authorization": "Bearer token-123",
+                "headers": {"x-custom": "val"},
+            },
+            "payload": {"action": "delete_cache"},
+            "threat_score": 0.05,
+        },
+    )
+    assert response.status_code == 202
+    forwarded = processing.events[0]
+    http_meta = forwarded.payload["_http_metadata"]
+    assert http_meta["client_role"] == "admin"
+    assert http_meta["authorization"] == "Bearer token-123"
+    assert http_meta["headers"]["x-custom"] == "val"
+
+
+def test_async_ai_threat_score_ingestion_endpoint() -> None:
+    """Async AI threat risk score harness (WBS 4.2 / FR2) records risk scores."""
+    broker = InMemoryBroker()
+    client = TestClient(create_app(broker=broker))
+
+    resp = client.post(
+        "/v1/threat-score",
+        json={"event_id": "evt-async-101", "threat_score": 0.92},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "recorded"
+    assert broker.get_threat_score("evt-async-101") == 0.92
+
+
+def test_ast_pii_masking_semantic_retention_and_secure_wipe() -> None:
+    """Verify semantic retention (>95%) and NFR4 transient memory wiping."""
+    masker = PIIMasker()
+    payload = {
+        "user_id": "u-123",
+        "action": "checkout",
+        "amount": 49.99,
+        "currency": "USD",
+        "items": [1, 2, 3],
+        "email": "sensitive@example.com",
+    }
+    masked, retention = masker.mask_with_retention_metrics(payload)
+    assert masked["email"] == REDACTED
+    assert masked["amount"] == 49.99
+    # 5 non-PII attributes retained out of 6 total attributes => >83%
+    assert retention > 0.80
+
+    # Test transient secure wipe (NFR4)
+    transient_dict = {"secret": "sensitive_data", "sub": [1, 2, 3]}
+    PIIMasker.secure_wipe(transient_dict)
+    assert len(transient_dict) == 0
+

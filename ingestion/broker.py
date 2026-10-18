@@ -54,6 +54,15 @@ class InMemoryBroker(EventProducer, EventConsumer):
         """Initialize an empty broker."""
         self._handlers: list[EventHandler] = []
         self.dead_letters: list[dict[str, Any]] = []
+        self.threat_scores: dict[str, float] = {}
+
+    def update_threat_score(self, event_id: str, score: float) -> None:
+        """Store or update the probabilistic AI risk score (y) for an event (WBS 4.2 / FR2)."""
+        self.threat_scores[event_id] = min(1.0, max(0.0, float(score)))
+
+    def get_threat_score(self, event_id: str) -> float | None:
+        """Lookup the cached threat score in RAM with sub-microsecond latency."""
+        return self.threat_scores.get(event_id)
 
     def subscribe(self, handler: EventHandler) -> None:
         """Register a consumer callback for future events."""
@@ -67,6 +76,7 @@ class InMemoryBroker(EventProducer, EventConsumer):
     def publish_dlq(self, payload: dict[str, Any], reason: str) -> None:
         """Store a malformed event for local inspection."""
         self.dead_letters.append({"payload": payload, "reason": reason})
+
 
 
 class RingBufferBroker(InMemoryBroker):

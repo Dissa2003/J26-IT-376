@@ -48,7 +48,17 @@ class HttpRequestMetadata(BaseModel):
     path: str = Field(default="/v1/ingest", min_length=1)
     content_type: str = Field(default="application/json", min_length=1)
     client_ip: str | None = None
+    client_role: str | None = None
+    authorization: str | None = None
     headers: dict[str, str] = Field(default_factory=dict)
+
+
+class ThreatScoreUpdate(BaseModel):
+    """Asynchronous risk score submission (y) from external AI models."""
+
+    event_id: str
+    threat_score: float = Field(ge=0.0, le=1.0)
+
 
 
 class InterceptionRequest(BaseModel):
@@ -219,6 +229,24 @@ def create_app(
     def health() -> dict[str, str]:
         """Return the service health status."""
         return {"status": "ok", "service": "ingestion"}
+
+    @app.post(
+        "/v1/threat-score",
+        tags=[INGESTION_TAG],
+        summary="Asynchronously ingest an AI threat risk score (y)",
+        description="Non-blocking ingestion harness for probabilistic AI threat scores [0.0, 1.0].",
+        status_code=200,
+    )
+    def submit_threat_score(update: ThreatScoreUpdate) -> dict[str, Any]:
+        """Record or update the async probabilistic threat score for an event."""
+        if hasattr(event_broker, "update_threat_score"):
+            event_broker.update_threat_score(update.event_id, update.threat_score)
+        return {
+            "status": "recorded",
+            "event_id": update.event_id,
+            "threat_score": update.threat_score,
+        }
+
 
     @app.post(
         "/v1/ingest",
