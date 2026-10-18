@@ -1,0 +1,168 @@
+{
+  "version": "policy-verification-v2",
+  "title": "Independent policy verification evaluation cases",
+  "cases": [
+    {
+      "id": "v2-consistency-01",
+      "source": "evaluation-v2",
+      "policy_texts": ["Administrators can read user profiles."],
+      "query_type": "consistency",
+      "premises": [],
+      "expected_solver_outcome": "SAT",
+      "justification": "A permission rule is an implication and does not contradict itself, so the policy set has a model."
+    },
+    {
+      "id": "v2-consistency-02",
+      "source": "evaluation-v2",
+      "policy_texts": ["Auditors can read audit logs.", "Operators can restart services."],
+      "query_type": "consistency",
+      "premises": [],
+      "expected_solver_outcome": "SAT",
+      "justification": "Independent permission implications constrain different predicates, so both can hold in one model."
+    },
+    {
+      "id": "v2-consistency-03",
+      "source": "evaluation-v2",
+      "policy_texts": ["Administrators can delete user accounts.", "Administrators cannot delete user accounts."],
+      "query_type": "consistency",
+      "premises": [],
+      "expected_solver_outcome": "UNSAT",
+      "justification": "The same role-action-resource predicate is required and prohibited, so the constraints cannot share a model."
+    },
+    {
+      "id": "v2-consistency-04",
+      "source": "evaluation-v2",
+      "policy_texts": ["Operators can restart services.", "Operators cannot restart services."],
+      "query_type": "consistency",
+      "premises": [],
+      "expected_solver_outcome": "UNSAT",
+      "justification": "The permission and prohibition impose opposite truth values on the same predicate, making the set unsatisfiable."
+    },
+    {
+      "id": "v2-consistency-05",
+      "source": "evaluation-v2",
+      "policy_texts": ["Only administrators can delete user accounts.", "Administrators can delete user accounts."],
+      "query_type": "consistency",
+      "premises": [],
+      "expected_solver_outcome": "SAT",
+      "justification": "The exclusivity implication and the administrators permission agree on the permitted role, so a model exists."
+    },
+    {
+      "id": "v2-consistency-06",
+      "source": "evaluation-v2",
+      "policy_texts": ["Only administrators can delete user accounts.", "Guests can delete user accounts."],
+      "query_type": "consistency",
+      "premises": [],
+      "expected_solver_outcome": "UNSAT",
+      "justification": "Under the documented assumptions that roles are mutually exclusive and each named role has a witness, the guest witness is permitted to delete but cannot be an administrator, contradicting the only-role implication."
+    },
+    {
+      "id": "v2-consistency-07",
+      "source": "evaluation-v2",
+      "policy_texts": ["Support agents can view tickets.", "Data stewards can export reports."],
+      "query_type": "consistency",
+      "premises": [],
+      "expected_solver_outcome": "SAT",
+      "justification": "The two permission implications concern distinct role-action-resource predicates and therefore are jointly satisfiable."
+    },
+    {
+      "id": "v2-consistency-08",
+      "source": "evaluation-v2",
+      "policy_texts": ["Only auditors can read audit logs.", "Auditors cannot read audit logs."],
+      "query_type": "consistency",
+      "premises": [],
+      "expected_solver_outcome": "SAT",
+      "justification": "The only-role implication does not assert that an auditor exists, so it can coexist with the auditor prohibition."
+    },
+    {
+      "id": "v2-entailment-01",
+      "source": "evaluation-v2",
+      "policy_texts": ["Administrators can read user profiles."],
+      "query_type": "entailment",
+      "premises": ["Administrators(Alice)", "Administrators(Alice) → CanRead(Alice, UserProfiles)"],
+      "conclusion": "CanRead(Alice, UserProfiles)",
+      "expected_solver_outcome": "UNSAT",
+      "justification": "The supplied administrator fact and permission implication force the conclusion, so premises with its negation are unsatisfiable."
+    },
+    {
+      "id": "v2-entailment-02",
+      "source": "evaluation-v2",
+      "policy_texts": ["Auditors can read audit logs."],
+      "query_type": "entailment",
+      "premises": ["Auditors(Bob)", "Auditors(Bob) → CanRead(Bob, AuditLogs)"],
+      "conclusion": "CanRead(Bob, AuditLogs)",
+      "expected_solver_outcome": "UNSAT",
+      "justification": "The independent Bob auditor fact activates the supplied implication and entails reading audit logs."
+    },
+    {
+      "id": "v2-entailment-03",
+      "source": "evaluation-v2",
+      "policy_texts": ["Only administrators can delete user accounts."],
+      "query_type": "entailment",
+      "premises": ["CanDelete(Carol, UserAccounts)", "CanDelete(Carol, UserAccounts) → Administrators(Carol)"],
+      "conclusion": "Administrators(Carol)",
+      "expected_solver_outcome": "UNSAT",
+      "justification": "The only-role implication has an independent Carol deletion fact as its antecedent, so Carol must be an administrator."
+    },
+    {
+      "id": "v2-entailment-04",
+      "source": "evaluation-v2",
+      "policy_texts": ["Operators can restart services."],
+      "query_type": "entailment",
+      "premises": ["Operators(Dana)", "Operators(Dana) → CanRestart(Dana, Services)"],
+      "conclusion": "CanRestart(Dana, Services)",
+      "expected_solver_outcome": "UNSAT",
+      "justification": "The supplied operator fact and permission implication entail the restart predicate for Dana."
+    },
+    {
+      "id": "v2-entailment-05",
+      "source": "evaluation-v2",
+      "policy_texts": ["Administrators can read user profiles."],
+      "query_type": "entailment",
+      "premises": ["Guests(Alice)", "Administrators(Alice) → CanRead(Alice, UserProfiles)"],
+      "conclusion": "CanRead(Alice, UserProfiles)",
+      "expected_solver_outcome": "SAT",
+      "justification": "Guest membership does not establish administrator membership, so a model can satisfy the premises while negating the conclusion."
+    },
+    {
+      "id": "v2-entailment-06",
+      "source": "evaluation-v2",
+      "policy_texts": ["Auditors can read audit logs."],
+      "query_type": "entailment",
+      "premises": ["Auditors(Bob)"],
+      "conclusion": "CanExport(Bob, AuditLogs)",
+      "expected_solver_outcome": "SAT",
+      "justification": "The auditor fact concerns reading, not exporting, so the premises have a countermodel in which export is false."
+    },
+    {
+      "id": "v2-entailment-07",
+      "source": "evaluation-v2",
+      "policy_texts": ["Operators can restart services."],
+      "query_type": "entailment",
+      "premises": ["Operators(Dana) → CanRestart(Dana, Services)"],
+      "conclusion": "CanRestart(Dana, Services)",
+      "expected_solver_outcome": "SAT",
+      "justification": "An implication alone does not assert its antecedent, so the conclusion is not entailed and a countermodel exists."
+    },
+    {
+      "id": "v2-entailment-08",
+      "source": "evaluation-v2",
+      "policy_texts": ["Administrators cannot delete user accounts."],
+      "query_type": "entailment",
+      "premises": ["Administrators(Alice)", "Administrators(Alice) → ¬CanDelete(Alice, UserAccounts)"],
+      "conclusion": "CanDelete(Alice, UserAccounts)",
+      "expected_solver_outcome": "SAT",
+      "justification": "The premises entail the negation of the requested permission, so they are satisfiable with the positive conclusion false."
+    },
+    {
+      "id": "v2-entailment-09",
+      "source": "evaluation-v2",
+      "policy_texts": ["Only auditors can read audit logs."],
+      "query_type": "entailment",
+      "premises": ["CanRead(Bob, AuditLogs)", "CanRead(Bob, AuditLogs) → Auditors(Bob)"],
+      "conclusion": "Administrators(Bob)",
+      "expected_solver_outcome": "SAT",
+      "justification": "The only-auditors implication establishes auditor status but says nothing about administrator status, leaving a countermodel."
+    }
+  ]
+}

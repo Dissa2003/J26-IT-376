@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from .conflict_detector import ConflictDetector
 from .logic import to_fol
@@ -47,6 +47,52 @@ NOT_APPLICABLE_FIELDS = {
 }
 SOLVER_OUTCOMES = {"SAT", "UNSAT", "UNKNOWN"}
 QUERY_TYPES = {"consistency", "entailment"}
+VERIFICATION_MEANINGS = {
+    "ENTAILED",
+    "NOT_ENTAILED",
+    "CONSISTENT",
+    "CONTRADICTORY",
+    "UNKNOWN",
+    "UNSUPPORTED",
+}
+
+
+def _verification_meaning(query_type: str | None, solver_outcome: str | None) -> str:
+    if solver_outcome == "UNKNOWN":
+        return "UNKNOWN"
+    if query_type == "entailment":
+        return {"UNSAT": "ENTAILED", "SAT": "NOT_ENTAILED"}.get(
+            solver_outcome, "UNSUPPORTED"
+        )
+    if query_type == "consistency":
+        return {"SAT": "CONSISTENT", "UNSAT": "CONTRADICTORY"}.get(
+            solver_outcome, "UNSUPPORTED"
+        )
+    return "UNSUPPORTED"
+
+
+def _is_v2_record(record: dict[str, Any]) -> bool:
+    return "policy_texts" in record
+
+
+def _inputs(record: dict[str, Any]) -> list[str]:
+    if _is_v2_record(record):
+        return record["policy_texts"]
+    value = record["input"]
+    return value if isinstance(value, list) else [value]
+
+
+def _expected_fields(record: dict[str, Any]) -> dict[str, Any]:
+    if not _is_v2_record(record):
+        return record["expected"]
+    query_type = record["query_type"]
+    outcome = record["expected_solver_outcome"]
+    return {
+        "parsed": True,
+        "query_type": query_type,
+        "solver_outcome": outcome,
+        "verification_meaning": _verification_meaning(query_type, outcome),
+    }
 
 
 def _validate_dataset(dataset: Any) -> None:
@@ -73,6 +119,43 @@ def _validate_dataset(dataset: Any) -> None:
                 errors.append(f"{case_id}.id: duplicate case ID")
             else:
                 seen_ids.add(case_id)
+            if _is_v2_record(record):
+                policy_texts = record.get("policy_texts")
+                if (
+                    not isinstance(policy_texts, list)
+                    or not policy_texts
+                    or not all(isinstance(item, str) and item for item in policy_texts)
+                ):
+                    errors.append(
+                        f"{label}.policy_texts: expected a non-empty list of strings"
+                    )
+                query_type = record.get("query_type")
+                if query_type not in QUERY_TYPES:
+                    errors.append(f"{label}.query_type: invalid query type")
+                if not isinstance(record.get("premises"), list) or not all(
+                    isinstance(item, str) and item for item in record.get("premises", [])
+                ):
+                    errors.append(
+                        f"{label}.premises: expected a list of non-empty strings"
+                    )
+                if query_type == "entailment" and not isinstance(
+                    record.get("conclusion"), str
+                ):
+                    errors.append(
+                        f"{label}.conclusion: required for entailment cases"
+                    )
+                if record.get("expected_solver_outcome") not in SOLVER_OUTCOMES:
+                    errors.append(
+                        f"{label}.expected_solver_outcome: invalid solver outcome"
+                    )
+                if (
+                    not isinstance(record.get("justification"), str)
+                    or "\n" in record.get("justification", "")
+                ):
+                    errors.append(
+                        f"{label}.justification: expected a one-line string"
+                    )
+                continue
             if "input" not in record:
                 errors.append(f"{label}.input: required field is missing")
             elif not isinstance(record["input"], (str, list)):
@@ -163,7 +246,7 @@ def _structured(policy: Any) -> StructuredPolicy:
 
 def _actual(record: dict[str, Any], pipeline: VerificationPipeline) -> dict[str, Any]:
     parser = PolicyParser()
-    inputs = record["input"] if isinstance(record["input"], list) else [record["input"]]
+    inputs = _inputs(record)
     try:
         policies = [parser.parse_text(text, f"{record['id']}-{index}") for index, text in enumerate(inputs)]
     except UnsupportedPolicyError as exc:
@@ -178,8 +261,8 @@ def _actual(record: dict[str, Any], pipeline: VerificationPipeline) -> dict[str,
     fol = to_fol(_structured(policies[0]))
     if record.get("query_type") == "consistency":
         solver_result = PolicyVerificationEngine().check_consistency(policies)
-    elif record.get("query"):
-        query = record["query"]
+    elif record.get("query") or _is_v2_record(record):
+        query = record.get("query", record)
         solver_result = PolicyVerificationEngine().check_entailment(
             query["premises"], query["conclusion"]
         )
@@ -193,6 +276,10 @@ def _actual(record: dict[str, Any], pipeline: VerificationPipeline) -> dict[str,
         "inference_conclusions": [step.conclusion for step in report.inference_trace],
         "query_type": solver_result.query_type if solver_result else None,
         "solver_outcome": solver_result.status.value if solver_result else None,
+        "verification_meaning": _verification_meaning(
+            solver_result.query_type if solver_result else None,
+            solver_result.status.value if solver_result else None,
+        ),
         "rule_status": report.rule_status,
         "conflict": bool(conflicts),
         "conflict_count": len(conflicts),
@@ -202,7 +289,7 @@ def _actual(record: dict[str, Any], pipeline: VerificationPipeline) -> dict[str,
 def _baseline(record: dict[str, Any]) -> dict[str, Any]:
     """Comparable verifier that bypasses the explicit calculus trace."""
     parser = PolicyParser()
-    inputs = record["input"] if isinstance(record["input"], list) else [record["input"]]
+    inputs = _inputs(record)
     try:
         policies = [parser.parse_text(text, f"baseline-{record['id']}-{index}") for index, text in enumerate(inputs)]
     except UnsupportedPolicyError:
@@ -215,9 +302,10 @@ def _baseline(record: dict[str, Any]) -> dict[str, Any]:
     rule = f"{antecedent} → {consequent}"
     if record.get("query_type") == "consistency":
         result = PolicyVerificationEngine().check_consistency(policies)
-    elif record.get("query"):
+    elif record.get("query") or _is_v2_record(record):
+        query = record.get("query", record)
         result = PolicyVerificationEngine().check_entailment(
-            record["query"]["premises"], record["query"]["conclusion"]
+            query["premises"], query["conclusion"]
         )
     else:
         result = PolicyVerificationEngine().check_entailment([antecedent, rule], consequent)
@@ -228,6 +316,9 @@ def _baseline(record: dict[str, Any]) -> dict[str, Any]:
         "fol_formula": formula.formula,
         "query_type": result.query_type,
         "solver_outcome": result.status.value,
+        "verification_meaning": _verification_meaning(
+            result.query_type, result.status.value
+        ),
         "conflict": bool(conflicts),
     }
 
@@ -249,18 +340,31 @@ def _checks_for_record(actual: dict[str, Any], expected: dict[str, Any]) -> dict
     }
 
 
-def evaluate_dataset(path: str | Path) -> dict[str, Any]:
+def _load_dataset(path: str | Path) -> dict[str, Any]:
     dataset = json.loads(Path(path).read_text(encoding="utf-8"))
     _validate_dataset(dataset)
+    return dataset
+
+
+def evaluate_dataset(path: str | Path | Iterable[str | Path]) -> dict[str, Any]:
+    paths = [path] if isinstance(path, (str, Path)) else list(path)
+    datasets = [_load_dataset(item) for item in paths]
+    records = [
+        (dataset, record)
+        for dataset in datasets
+        for record in dataset["cases"]
+    ]
     pipeline = VerificationPipeline()
     rows: list[dict[str, Any]] = []
-    for record in dataset["cases"]:
+    for dataset, record in records:
         actual = _actual(record, pipeline)
-        expected = record["expected"]
+        expected = _expected_fields(record)
         checks = _checks_for_record(actual, expected)
         rows.append({
             "id": record["id"],
             "source": record["source"],
+            "dataset_version": dataset["version"],
+            "justification": record.get("justification"),
             "checks": checks,
             "passed": bool(checks) and all(checks.values()),
             "actual": actual,
@@ -280,9 +384,37 @@ def evaluate_dataset(path: str | Path) -> dict[str, Any]:
             if applicable
             else 0.0
         )
-    baseline = [_baseline(record) for record in dataset["cases"]]
+    baseline = [_baseline(record) for _, record in records]
+    by_query_type: dict[str, dict[str, Any]] = {}
+    for query_type in sorted(QUERY_TYPES):
+        typed_rows = [
+            row for row in rows if row["actual"].get("query_type") == query_type
+        ]
+        by_query_type[query_type] = {
+            "case_count": len(typed_rows),
+            "passed_cases": sum(row["passed"] for row in typed_rows),
+            "verification_outcome_accuracy": (
+                sum(row["checks"].get("solver_outcome", False) for row in typed_rows)
+                / len(typed_rows)
+                if typed_rows
+                else 0.0
+            ),
+            "verification_meaning_accuracy": (
+                sum(
+                    row["checks"].get("verification_meaning", False)
+                    for row in typed_rows
+                )
+                / len(typed_rows)
+                if typed_rows
+                else 0.0
+            ),
+        }
     return {
-        "dataset_version": dataset["version"],
+        "dataset_version": (
+            datasets[0]["version"]
+            if len(datasets) == 1
+            else [dataset["version"] for dataset in datasets]
+        ),
         "case_count": len(rows),
         "passed_cases": sum(row["passed"] for row in rows),
         "metrics": {
@@ -293,6 +425,7 @@ def evaluate_dataset(path: str | Path) -> dict[str, Any]:
             "conflict_precision": precision,
             "conflict_recall": recall,
             "conflict_f1": f1,
+            "by_query_type": by_query_type,
         },
         "baseline": {
             "cases": len(baseline),

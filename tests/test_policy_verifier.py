@@ -81,6 +81,39 @@ def test_z3_distinguishes_consistency_and_entailment():
     assert engine.check_entailment(["Administrators(Alice)"], "CanRead(Alice, UserProfiles)").status is VerificationStatus.SAT
 
 
+def test_consistency_uses_grammar_direction_for_only_role_rules():
+    parser = PolicyParser()
+    policies = [
+        parser.parse_text("Only auditors can read audit logs.", "only"),
+        parser.parse_text("Auditors cannot read audit logs.", "deny"),
+    ]
+
+    result = PolicyVerificationEngine().check_consistency(policies)
+
+    assert result.status is VerificationStatus.SAT
+
+
+def test_consistency_role_assumptions_can_be_toggled():
+    parser = PolicyParser()
+    policies = [
+        parser.parse_text("Only administrators can delete user accounts.", "only"),
+        parser.parse_text("Guests can delete user accounts.", "grant"),
+    ]
+    engine = PolicyVerificationEngine()
+
+    with_assumptions = engine.check_consistency(policies)
+    without_role_witness = engine.check_consistency(
+        policies, assume_role_witness=False
+    )
+    without_exclusivity = engine.check_consistency(
+        policies, assume_mutually_exclusive_roles=False
+    )
+
+    assert with_assumptions.status is VerificationStatus.UNSAT
+    assert without_role_witness.status is VerificationStatus.SAT
+    assert without_exclusivity.status is VerificationStatus.SAT
+
+
 def test_unknown_is_preserved_from_an_isolated_solver_response():
     class UnknownSolver:
         def add(self, *constraints):
