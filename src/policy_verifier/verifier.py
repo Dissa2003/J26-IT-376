@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import z3
@@ -10,8 +11,11 @@ from .models import SecurityPolicy, SolverResult, VerificationReport, Verificati
 class PolicyVerificationEngine:
     """Z3 adapter; parsing and the explicit calculus remain separate."""
 
+    def __init__(self, solver_factory: Callable[[], z3.Solver] = z3.Solver) -> None:
+        self._solver_factory = solver_factory
+
     def check_consistency(self, policies: list[SecurityPolicy]) -> SolverResult:
-        solver = z3.Solver()
+        solver = self._solver_factory()
         symbols: dict[str, z3.BoolRef] = {}
         for policy in policies:
             key = f"{policy.subject}:{policy.action}:{policy.resource}"
@@ -26,13 +30,29 @@ class PolicyVerificationEngine:
         }[status]
         return SolverResult(status=status, query_type="consistency", explanation=message)
 
-    def check_entailment(self, antecedent_key: str, conclusion_key: str) -> SolverResult:
-        antecedent = z3.Bool(antecedent_key.replace(":", "_"))
-        conclusion = z3.Bool(conclusion_key.replace(":", "_"))
-        solver = z3.Solver()
-        solver.add(antecedent)
-        solver.add(z3.Implies(antecedent, conclusion))
-        solver.add(z3.Not(conclusion))
+    def check_entailment(
+        self,
+        premises: Sequence[str] | str,
+        conclusion_key: str,
+        rule_key: str | None = None,
+    ) -> SolverResult:
+        """Check whether K entails C by solving K ∧ ¬C.
+
+        The two-string form is retained for legacy callers: it represents the
+        common K = {antecedent, antecedent -> conclusion} case.
+        """
+        if isinstance(premises, str):
+            premise_values = [premises]
+            if rule_key is None:
+                rule_key = f"{premises} → {conclusion_key}"
+        else:
+            premise_values = list(premises)
+        solver = self._solver_factory()
+        for premise in premise_values:
+            solver.add(_parse_expression(premise))
+        if rule_key is not None and rule_key not in premise_values:
+            solver.add(_parse_expression(rule_key))
+        solver.add(z3.Not(_parse_expression(conclusion_key)))
         result = solver.check()
         if result == z3.unsat:
             return SolverResult(
@@ -73,3 +93,17 @@ def _status(result: z3.CheckSatResult) -> VerificationStatus:
     if result == z3.unsat:
         return VerificationStatus.UNSAT
     return VerificationStatus.UNKNOWN
+
+
+def _symbol(value: str) -> z3.BoolRef:
+    return z3.Bool(value.replace(":", "_").replace(" ", "_"))
+
+
+def _parse_expression(value: str) -> z3.BoolRef:
+    expression = value.strip()
+    if "→" in expression:
+        left, right = expression.split("→", 1)
+        return z3.Implies(_parse_expression(left), _parse_expression(right))
+    if expression.startswith("¬"):
+        return z3.Not(_parse_expression(expression[1:]))
+    return _symbol(expression)

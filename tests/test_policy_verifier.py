@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import z3
 
 from api.routes import app
 from src.policy_verifier.cache import LocalRuleCache
@@ -62,6 +63,10 @@ def test_inference_trace_is_auditable():
     ]
     assert report.inference_trace[-1].premises
     assert report.inference_trace[-1].conclusion
+    assert [constraint.kind for constraint in report.constraints] == [
+        "rule", "fact", "query", "negated_query"
+    ]
+    assert report.rule_status == "eligible"
 
 
 def test_z3_distinguishes_consistency_and_entailment():
@@ -73,6 +78,23 @@ def test_z3_distinguishes_consistency_and_entailment():
     entailment = engine.check_entailment("Administrators(Alice)", "CanDelete(Alice, UserAccounts)")
     assert entailment.status is VerificationStatus.UNSAT
     assert entailment.is_entailment is True
+    assert engine.check_entailment(["Administrators(Alice)"], "CanRead(Alice, UserProfiles)").status is VerificationStatus.SAT
+
+
+def test_unknown_is_preserved_from_an_isolated_solver_response():
+    class UnknownSolver:
+        def add(self, *constraints):
+            pass
+
+        def check(self):
+            return z3.unknown
+
+    result = PolicyVerificationEngine(solver_factory=UnknownSolver).check_entailment(
+        ["Administrators(Alice)"],
+        "CanDelete(Alice, UserAccounts)",
+    )
+    assert result.status is VerificationStatus.UNKNOWN
+    assert result.is_entailment is False
 
 
 def test_conflicts_are_scoped_by_resource_and_conditions():
@@ -83,6 +105,15 @@ def test_conflicts_are_scoped_by_resource_and_conditions():
         parser.parse_text("Administrators cannot delete invoices.", "different-resource"),
     ]
     assert detector.find_conflicts(policies) == []
+
+
+def test_conditions_are_part_of_conflict_scope():
+    parser = PolicyParser()
+    detector = ConflictDetector()
+    allow = parser.parse_text("Administrators can read user profiles.", "allow")
+    deny = parser.parse_text("Administrators cannot read user profiles.", "deny")
+    deny.conditions = [{"attribute": "environment", "value": "test"}]
+    assert detector.find_conflicts([allow, deny]) == []
 
 
 def test_cache_accepts_only_eligible_pipeline_reports():

@@ -41,9 +41,30 @@ class VerificationPipeline:
         formula = to_fol(structured)
         trace = infer(formula, individual)
         constraints = generate_constraints(structured, formula)
-        antecedent_key = trace[1].premises[0]
+        instantiated_rule = trace[0].conclusion
+        request_fact = trace[1].premises[0]
         conclusion_key = trace[-1].conclusion
-        solver_result = self.engine.check_entailment(antecedent_key, conclusion_key)
+        constraints.extend([
+            constraints[0].model_copy(update={
+                "constraint_id": f"{policy.policy_id}:fact",
+                "expression": request_fact,
+                "kind": "fact",
+            }),
+            constraints[0].model_copy(update={
+                "constraint_id": f"{policy.policy_id}:query",
+                "expression": conclusion_key,
+                "kind": "query",
+            }),
+            constraints[0].model_copy(update={
+                "constraint_id": f"{policy.policy_id}:negated-query",
+                "expression": f"¬{conclusion_key}",
+                "kind": "negated_query",
+            }),
+        ])
+        solver_result = self.engine.check_entailment(
+            [request_fact, instantiated_rule],
+            conclusion_key,
+        )
         conflicts = self.conflict_detector.find_conflicts([policy])
         eligible = (
             solver_result.is_entailment
