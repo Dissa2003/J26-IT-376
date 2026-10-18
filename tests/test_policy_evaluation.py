@@ -30,6 +30,33 @@ def test_evaluation_baseline_uses_same_cases():
     assert result["baseline"]["cases"] == result["case_count"]
 
 
+def test_v2_dataset_reports_independent_cases_and_meanings():
+    path = Path(__file__).parents[1] / "src" / "policy_verifier" / "evaluation_dataset_v2.json"
+    result = evaluate_dataset(path)
+
+    assert result["case_count"] == 17
+    assert result["metrics"]["by_query_type"]["consistency"]["case_count"] == 8
+    assert result["metrics"]["by_query_type"]["entailment"]["case_count"] == 9
+    assert result["results"][0]["actual"]["verification_meaning"] == "CONSISTENT"
+    assert result["results"][2]["actual"]["verification_meaning"] == "CONTRADICTORY"
+    assert result["results"][8]["actual"]["verification_meaning"] == "ENTAILED"
+    assert result["results"][12]["actual"]["verification_meaning"] == "NOT_ENTAILED"
+
+
+def test_evaluation_can_load_baseline_and_v2_together():
+    root = Path(__file__).parents[1] / "src" / "policy_verifier"
+    result = evaluate_dataset([
+        root / "evaluation_dataset.json",
+        root / "evaluation_dataset_v2.json",
+    ])
+
+    assert result["case_count"] == 54
+    assert result["dataset_version"] == [
+        "policy-verification-v1",
+        "policy-verification-v2",
+    ]
+
+
 def test_missing_actual_fields_fail_instead_of_being_skipped(monkeypatch):
     path = Path(__file__).parents[1] / "src" / "policy_verifier" / "evaluation_dataset.json"
     monkeypatch.setattr(evaluation, "_actual", lambda record, pipeline: {"parsed": True})

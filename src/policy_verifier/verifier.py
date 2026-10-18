@@ -14,13 +14,70 @@ class PolicyVerificationEngine:
     def __init__(self, solver_factory: Callable[[], z3.Solver] = z3.Solver) -> None:
         self._solver_factory = solver_factory
 
-    def check_consistency(self, policies: list[SecurityPolicy]) -> SolverResult:
+    def check_consistency(
+        self,
+        policies: list[SecurityPolicy],
+        *,
+        assume_mutually_exclusive_roles: bool = True,
+        assume_role_witness: bool = True,
+    ) -> SolverResult:
         solver = self._solver_factory()
-        symbols: dict[str, z3.BoolRef] = {}
+        individual_sort = z3.DeclareSort("PolicyIndividual")
+        individual = z3.Const("individual", individual_sort)
+        role_predicates: dict[str, z3.FuncDeclRef] = {}
+        action_predicates: dict[tuple[str, str], z3.FuncDeclRef] = {}
+
+        def role_predicate(subject: str) -> z3.FuncDeclRef:
+            return role_predicates.setdefault(
+                subject,
+                z3.Function(
+                    f"Role_{_z3_name(subject)}",
+                    individual_sort,
+                    z3.BoolSort(),
+                ),
+            )
+
+        def action_predicate(action: str, resource: str) -> z3.FuncDeclRef:
+            key = (action, resource)
+            return action_predicates.setdefault(
+                key,
+                z3.Function(
+                    f"Can_{_z3_name(action)}_{_z3_name(resource)}",
+                    individual_sort,
+                    z3.BoolSort(),
+                ),
+            )
+
         for policy in policies:
-            key = f"{policy.subject}:{policy.action}:{policy.resource}"
-            symbol = symbols.setdefault(key, z3.Bool(key.replace(":", "_")))
-            solver.add(symbol if policy.effect.value == "Allow" else z3.Not(symbol))
+            role = role_predicate(policy.subject)
+            permission = action_predicate(policy.action, policy.resource)
+            if policy.interpretation.value == "only_role":
+                formula = z3.Implies(permission(individual), role(individual))
+            elif policy.effect.value == "Deny":
+                formula = z3.Implies(role(individual), z3.Not(permission(individual)))
+            else:
+                formula = z3.Implies(role(individual), permission(individual))
+            solver.add(z3.ForAll([individual], formula))
+
+        subjects = sorted(role_predicates)
+        if assume_role_witness:
+            for subject in subjects:
+                witness = z3.Const(f"Witness_{_z3_name(subject)}", individual_sort)
+                solver.add(role_predicates[subject](witness))
+        if assume_mutually_exclusive_roles and len(subjects) > 1:
+            for index, left_subject in enumerate(subjects):
+                for right_subject in subjects[index + 1 :]:
+                    solver.add(
+                        z3.ForAll(
+                            [individual],
+                            z3.Not(
+                                z3.And(
+                                    role_predicates[left_subject](individual),
+                                    role_predicates[right_subject](individual),
+                                )
+                            ),
+                        )
+                    )
         result = solver.check()
         status = _status(result)
         message = {
@@ -97,6 +154,10 @@ def _status(result: z3.CheckSatResult) -> VerificationStatus:
 
 def _symbol(value: str) -> z3.BoolRef:
     return z3.Bool(value.replace(":", "_").replace(" ", "_"))
+
+
+def _z3_name(value: str) -> str:
+    return "".join(character if character.isalnum() else "_" for character in value)
 
 
 def _parse_expression(value: str) -> z3.BoolRef:
