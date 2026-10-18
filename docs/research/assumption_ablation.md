@@ -2,6 +2,8 @@
 
 This report evaluates the original baseline dataset, the v2 dataset, and their combined 54 cases under four consistency-assumption settings.
 
+Consistency cases evaluated: 12. Changes versus both axioms on: witness off 7, exclusivity off 1, both off 7.
+
 | Case ID | Expected | Both on | Witness off | Exclusivity off | Both off |
 |---|---:|---:|---:|---:|---:|
 | `allow-01` | UNSAT | UNSAT | UNSAT | UNSAT | UNSAT |
@@ -21,9 +23,9 @@ This report evaluates the original baseline dataset, the v2 dataset, and their c
 | `deny-03` | UNSAT | UNSAT | UNSAT | UNSAT | UNSAT |
 | `deny-04` | UNSAT | UNSAT | UNSAT | UNSAT | UNSAT |
 | `deny-05` | UNSAT | UNSAT | UNSAT | UNSAT | UNSAT |
-| `conflict-01` | UNSAT | UNSAT | UNSAT | UNSAT | UNSAT |
-| `conflict-02` | UNSAT | UNSAT | UNSAT | UNSAT | UNSAT |
-| `conflict-03` | UNSAT | UNSAT | UNSAT | UNSAT | UNSAT |
+| `conflict-01` | UNSAT | UNSAT | SAT | UNSAT | SAT |
+| `conflict-02` | UNSAT | UNSAT | SAT | UNSAT | SAT |
+| `conflict-03` | UNSAT | UNSAT | SAT | UNSAT | SAT |
 | `scope-01` | UNSAT | UNSAT | UNSAT | UNSAT | UNSAT |
 | `scope-02` | UNSAT | UNSAT | UNSAT | UNSAT | UNSAT |
 | `scope-03` | UNSAT | UNSAT | UNSAT | UNSAT | UNSAT |
@@ -63,9 +65,12 @@ This report evaluates the original baseline dataset, the v2 dataset, and their c
 
 | Case ID | Results by setting | Assumption dependency |
 |---|---|---|
-| `consistency-01` | both_on=UNSAT, witness_off=SAT, exclusivity_off=UNSAT, both_off=SAT | Result depends on the role-witness assumption. |
-| `v2-consistency-03` | both_on=UNSAT, witness_off=SAT, exclusivity_off=UNSAT, both_off=SAT | Result depends on the role-witness assumption. |
-| `v2-consistency-04` | both_on=UNSAT, witness_off=SAT, exclusivity_off=UNSAT, both_off=SAT | Result depends on the role-witness assumption. |
-| `v2-consistency-06` | both_on=UNSAT, witness_off=SAT, exclusivity_off=SAT, both_off=SAT | Result depends on both assumptions; disabling either one changes the result. |
+| `conflict-01` | both_on=UNSAT, witness_off=SAT, exclusivity_off=UNSAT, both_off=SAT | Depends on the witness assumption only. |
+| `conflict-02` | both_on=UNSAT, witness_off=SAT, exclusivity_off=UNSAT, both_off=SAT | Depends on the witness assumption only. |
+| `conflict-03` | both_on=UNSAT, witness_off=SAT, exclusivity_off=UNSAT, both_off=SAT | Depends on the witness assumption only. |
+| `consistency-01` | both_on=UNSAT, witness_off=SAT, exclusivity_off=UNSAT, both_off=SAT | Depends on the witness assumption only. |
+| `v2-consistency-03` | both_on=UNSAT, witness_off=SAT, exclusivity_off=UNSAT, both_off=SAT | Depends on the witness assumption only. |
+| `v2-consistency-04` | both_on=UNSAT, witness_off=SAT, exclusivity_off=UNSAT, both_off=SAT | Depends on the witness assumption only. |
+| `v2-consistency-06` | both_on=UNSAT, witness_off=SAT, exclusivity_off=SAT, both_off=SAT | Depends on both assumptions; disabling either one changes the result. |
 
 No labels were modified. `UNSUPPORTED` means the original dataset case was explicitly marked unsupported.

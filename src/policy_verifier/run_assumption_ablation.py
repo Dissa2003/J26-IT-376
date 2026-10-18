@@ -27,6 +27,22 @@ def _expected(record: dict[str, Any]) -> str:
     return expected["solver_outcome"]
 
 
+def _query_type(record: dict[str, Any]) -> str | None:
+    if _is_v2_record(record):
+        return record.get("query_type")
+    return record.get("query_type", record.get("expected", {}).get("query_type"))
+
+
+def _is_consistency_ablation_case(record: dict[str, Any]) -> bool:
+    if _query_type(record) == "consistency":
+        return True
+    expected = record.get("expected", {})
+    return bool(
+        expected.get("conflict") is True
+        and len(_inputs(record)) > 1
+    )
+
+
 def _actual(
     record: dict[str, Any],
     engine: PolicyVerificationEngine,
@@ -43,7 +59,7 @@ def _actual(
 
     name, witness, exclusivity = setting
     del name
-    if record.get("query_type") == "consistency":
+    if _is_consistency_ablation_case(record):
         return engine.check_consistency(
             policies,
             assume_role_witness=witness,
@@ -83,14 +99,13 @@ def _dependency_explanation(values: dict[str, str]) -> str:
     changed_exclusivity = values["both_on"] != values["exclusivity_off"]
     if changed_witness and changed_exclusivity:
         return (
-            "Result depends on both assumptions; disabling either one changes "
-            "the result."
+            "Depends on both assumptions; disabling either one changes the result."
         )
     if changed_witness:
-        return "Result depends on the role-witness assumption."
+        return "Depends on the witness assumption only."
     if changed_exclusivity:
-        return "Result depends on the mutual-exclusivity assumption."
-    return "Result changes only when both assumptions are disabled together."
+        return "Depends on the exclusivity assumption only."
+    return "Changes only when both assumptions are disabled together."
 
 
 def run(paths: list[Path]) -> str:
@@ -116,12 +131,46 @@ def run(paths: list[Path]) -> str:
         for row in rows
         if len(set(row["actual"].values())) > 1
     ]
+    consistency_rows = [
+        row
+        for item, row in zip(records, rows)
+        if _is_consistency_ablation_case(item["record"])
+    ]
+    if len(consistency_rows) == 0:
+        raise AssertionError("No consistency cases were evaluated.")
+    consistency_check = next(
+        (row for row in consistency_rows if row["id"] == "consistency-01"),
+        None,
+    )
+    if consistency_check is None:
+        raise AssertionError("Baseline consistency-01 was not evaluated.")
+    if (
+        consistency_check["actual"]["both_on"] != "UNSAT"
+        or consistency_check["actual"]["both_off"] != "SAT"
+    ):
+        raise AssertionError(
+            "Baseline consistency-01 must be UNSAT with both axioms on "
+            "and SAT with both axioms off."
+        )
+    change_counts = {
+        setting[0]: sum(
+            row["actual"][setting[0]] != row["actual"]["both_on"]
+            for row in consistency_rows
+        )
+        for setting in SETTINGS
+        if setting[0] != "both_on"
+    }
 
     lines = [
         "# Policy verification assumption ablation",
         "",
         "This report evaluates the original baseline dataset, the v2 dataset, "
         "and their combined 54 cases under four consistency-assumption settings.",
+        "",
+        f"Consistency cases evaluated: {len(consistency_rows)}. "
+        f"Changes versus both axioms on: witness off {change_counts['witness_off']}, "
+        f"exclusivity off {change_counts['exclusivity_off']}, "
+        f"both off {change_counts['both_off']}.",
         "",
         "| Case ID | Expected | Both on | Witness off | Exclusivity off | Both off |",
         "|---|---:|---:|---:|---:|---:|",
