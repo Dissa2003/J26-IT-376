@@ -3,6 +3,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY shared_contracts ./shared_contracts
+COPY src ./src
 ARG MODULE
 COPY ${MODULE} ./${MODULE}
 ENV MODULE=${MODULE} PYTHONUNBUFFERED=1

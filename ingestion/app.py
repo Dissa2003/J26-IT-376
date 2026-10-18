@@ -16,7 +16,6 @@ from pydantic import BaseModel, Field
 from redis.exceptions import RedisError
 
 from shared_contracts.config import get_settings
-from shared_contracts.http_clients import HttpProcessingClient
 from shared_contracts.interfaces import EventConsumer, EventProducer, ProcessingClient
 from shared_contracts.models import ErrorResponse, Prediction, RawEvent
 
@@ -169,25 +168,26 @@ def create_app(
     broker: EventProducer & EventConsumer | None = None,
     processing_timeout: float = 5.0,
 ) -> FastAPI:
-    """Create the ingestion API with injectable processing and broker clients."""
+    """Create the ingestion API with optional downstream processing and broker clients."""
     settings = get_settings()
     logging.basicConfig(level=settings.log_level)
-    processing_client = processing or HttpProcessingClient(settings.processing_url)
     event_broker = broker or create_broker(settings)
     validator = IngestionValidator()
     pii_masker = PIIMasker()
     vector_builder = UnifiedContextVectorBuilder()
-    dispatcher = _ProcessingDispatcher(processing_client)
+    dispatcher = _ProcessingDispatcher(processing) if processing is not None else None
     pending: dict[str, Future[Prediction]] = {}
 
     def forward(event: RawEvent) -> None:
         """Queue a consumed event for asynchronous processing."""
+        if dispatcher is None:
+            return
         result = pending.get(event.event_id)
         pending[event.event_id] = dispatcher.submit(event, result)
 
-    if isinstance(event_broker, InMemoryBroker):
+    if isinstance(event_broker, InMemoryBroker) and dispatcher is not None:
         event_broker.subscribe(forward)
-    else:
+    elif dispatcher is not None:
         threading.Thread(
             target=event_broker.subscribe,
             args=(forward,),
@@ -199,7 +199,7 @@ def create_app(
         title="Dissanayaka Ingestion API",
         description=(
             "Validates incoming real-time events, publishes them to the configured "
-            "stream broker, and forwards them to the processing pipeline."
+            "stream broker and optionally forwards events to a downstream processor."
         ),
         version="1.0.0",
         openapi_tags=[
@@ -375,6 +375,14 @@ def create_app(
         event = event.model_copy(
             update={"payload": pii_masker.mask(event.payload)}
         )
+
+        if dispatcher is None:
+            try:
+                event_broker.publish(event)
+            except (httpx.HTTPError, RedisError, OSError) as exc:
+                log.exception("Unable to publish event %s", event.event_id)
+                raise HTTPException(502, f"ingestion broker unavailable: {exc}") from exc
+            return AcceptedEvent(event_id=event.event_id)
 
         result: Future[Prediction] = Future()
         pending[event.event_id] = result

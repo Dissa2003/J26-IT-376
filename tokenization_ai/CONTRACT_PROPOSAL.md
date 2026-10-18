@@ -69,7 +69,7 @@ POST /api/v1/verify-policies
 | 3 | **Identity naming** | `rule_id` | `policy_id` (inputs); embedded inside FOL strings in outputs | Preservation of policy identity must be decided (§3.2) |
 | 4 | **Applicability to a request** | Rules are assumed to apply to the event they accompany | No mapping from an HTTP request (`method`, `path`, headers, payload) to a policy's `subject`/`action`/`resource` | Nobody currently decides *which* policies are relevant to *this* request |
 | 5 | **Verdict semantics** | None; rules are inert tokens | `is_valid` / `status` for the whole set; `UNSAT` returns HTTP 400 | Unclear whether LogiShield ever sees an `UNSAT` report, and what it would mean |
-| 6 | **Pipeline wiring** | consumed by an adapter | separate FastAPI app (`api/routes.py`) not wired into the legacy `processing/` stage | Delivery mechanism undecided |
+| 6 | **Pipeline wiring** | consumed by an adapter | standalone FastAPI policy service (`api/routes.py`) on port 8002; the LogiShield app proxies its dashboard policy calls to that service | Cross-component rule delivery remains a separate contract |
 
 Observations Formal Verification should confirm (read from the code; not asserted as defects): the path
 used by `routes.py` (`PolicyVerificationEngine.process_and_verify`) derives SAT/UNSAT from the

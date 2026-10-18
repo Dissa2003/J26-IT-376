@@ -22,7 +22,7 @@ class Settings:
     app_env: str = "local"
     log_level: str = "INFO"
     ingestion_url: str = "http://localhost:8001"
-    processing_url: str = "http://localhost:8002"
+    policy_url: str = "http://localhost:8002"
     engine_url: str = "http://localhost:8003"
     gateway_url: str = "http://localhost:8000"
     redis_url: str = "redis://localhost:6379/0"
@@ -40,7 +40,7 @@ def get_settings() -> Settings:
         app_env=e("APP_ENV", d.app_env),
         log_level=e("LOG_LEVEL", d.log_level),
         ingestion_url=e("INGESTION_URL", d.ingestion_url),
-        processing_url=e("PROCESSING_URL", d.processing_url),
+        policy_url=e("POLICY_URL", d.policy_url),
         engine_url=e("ENGINE_URL", d.engine_url),
         gateway_url=e("GATEWAY_URL", d.gateway_url),
         redis_url=e("REDIS_URL", d.redis_url),
