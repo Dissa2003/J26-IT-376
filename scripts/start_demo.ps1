@@ -35,15 +35,9 @@ foreach ($port in @(8002, 8010)) {
     }
 }
 
-function Encode-PowerShellCommand($command) {
-    $bytes = [System.Text.Encoding]::Unicode.GetBytes($command)
-    return [Convert]::ToBase64String($bytes)
-}
-
 function Start-VisibleService($title, $command) {
-    $encoded = Encode-PowerShellCommand $command
     return Start-Process -FilePath "powershell.exe" -ArgumentList @(
-        "-NoExit", "-ExecutionPolicy", "Bypass", "-EncodedCommand", $encoded
+        "-NoExit", "-ExecutionPolicy", "Bypass", "-Command", $command
     ) -PassThru
 }
 
