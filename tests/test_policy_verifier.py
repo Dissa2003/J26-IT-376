@@ -172,9 +172,13 @@ def test_api_returns_complete_pipeline_and_rejects_conflict():
     }])
     assert response.status_code == 200
     body = response.json()
-    assert body["fol_formula"]["formula"]
-    assert len(body["inference_trace"]) == 2
-    assert body["solver_result"]["query_type"] == "entailment"
+    assert body["overall_valid"] is True
+    assert len(body["reports"]) == 1
+    report = body["reports"][0]
+    assert report["fol_formula"]["formula"]
+    assert len(report["inference_trace"]) == 2
+    assert report["solver_result"]["query_type"] == "entailment"
+    assert report["submission"] is None
 
     conflict = client.post("/api/v1/verify-policies", json=[
         {
@@ -187,7 +191,40 @@ def test_api_returns_complete_pipeline_and_rejects_conflict():
         },
     ])
     assert conflict.status_code == 400
-    assert conflict.json()["detail"]["report"]["conflicting_policies"] == ["p1", "p2"]
+    detail = conflict.json()["detail"]["report"]
+    assert detail["overall_valid"] is False
+    assert [item["conflict_id"] for item in detail["conflicts"]] == ["p1:p2"]
+    assert [report["conflicting_policies"] for report in detail["reports"]] == [
+        ["p1", "p2"], ["p1", "p2"]
+    ]
+
+
+def test_api_verifies_every_submitted_policy():
+    client = TestClient(app)
+    response = client.post("/api/v1/verify-policies", json=[
+        {
+            "policy_id": "multi-only", "subject": "Administrators", "action": "Delete",
+            "resource": "UserAccounts", "effect": "Allow", "interpretation": "only_role",
+            "raw_text": "Only administrators can delete user accounts.",
+        },
+        {
+            "policy_id": "multi-guest", "subject": "Guests", "action": "Delete",
+            "resource": "UserAccounts", "effect": "Allow",
+            "raw_text": "Guests can delete user accounts.",
+        },
+    ])
+    assert response.status_code == 200
+    body = response.json()
+    assert body["overall_valid"] is False
+    assert body["consistency_result"]["status"] == "UNSAT"
+    assert [report["policy_id"] for report in body["reports"]] == ["multi-only", "multi-guest"]
+    assert all(report["rule_status"] == "contradictory" for report in body["reports"])
+    assert [report["submission"]["index"] for report in body["reports"]] == [1, 2]
+    assert len({report["submission"]["submission_id"] for report in body["reports"]}) == 1
+    records = client.get("/api/v1/verification-records").json()
+    assert [record["policy_id"] for record in records[:2]] == ["multi-only", "multi-guest"]
+    cached = [report["policy_id"] for report in client.get("/api/v1/rule-cache").json()]
+    assert "multi-only" not in cached and "multi-guest" not in cached
 
 
 def test_api_treats_unknown_consistency_as_not_valid(monkeypatch):
@@ -211,8 +248,9 @@ def test_api_treats_unknown_consistency_as_not_valid(monkeypatch):
     }])
     assert response.status_code == 200
     body = response.json()
-    assert body["is_valid"] is False
-    assert body["rule_status"] == "contradictory"
+    assert body["overall_valid"] is False
+    assert body["reports"][0]["is_valid"] is False
+    assert body["reports"][0]["rule_status"] == "contradictory"
     assert body["consistency_result"]["status"] == "UNKNOWN"
     assert "unknown-consistency" not in [
         report["policy_id"] for report in client.get("/api/v1/rule-cache").json()

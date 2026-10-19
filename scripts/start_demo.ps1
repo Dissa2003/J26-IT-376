@@ -135,10 +135,11 @@ try {
     $policiesBody = ConvertTo-Json -InputObject @($smokePolicy) -Depth 5 -Compress
     $policiesResult = Invoke-RestMethod -Uri "http://127.0.0.1:8010/api/v1/verify-policies" `
         -Method Post -ContentType "application/json" -Body $policiesBody -TimeoutSec 10
-    if ($policiesResult.rule_status -eq "eligible") {
+    $policyStatus = $policiesResult.reports[0].rule_status
+    if ($policiesResult.overall_valid -and $policyStatus -eq "eligible") {
         Write-Host "PASS: verify-policies returned rule_status 'eligible'." -ForegroundColor Green
     } else {
-        Write-Host ("FAIL: verify-policies returned rule_status '{0}', expected 'eligible'." -f $policiesResult.rule_status) -ForegroundColor Red
+        Write-Host ("FAIL: verify-policies returned rule_status '{0}' (overall_valid {1}), expected 'eligible'." -f $policyStatus, $policiesResult.overall_valid) -ForegroundColor Red
     }
 } catch {
     $status = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { "no response" }

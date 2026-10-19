@@ -33,10 +33,21 @@ function reportList(root, records, query = "") {
     return;
   }
   const table = el("div", "data-list");
+  let currentSubmission = null;
   filtered.forEach((report) => {
+    const submission = report.submission && report.submission.size > 1 ? report.submission : null;
+    if (submission && submission.submission_id !== currentSubmission) {
+      const consistency = report.consistency_result ? report.consistency_result.status : "not returned";
+      table.appendChild(el("p", "card-note", "Multi-policy submission " + submission.submission_id
+        + " · " + submission.size + " policies · consistency " + consistency));
+    }
+    currentSubmission = submission ? submission.submission_id : null;
     const row = el("article", "data-row");
     const main = el("div");
     main.appendChild(linkFor(report));
+    if (submission) {
+      main.appendChild(el("span", "muted", " Policy " + submission.index + " of " + submission.size));
+    }
     main.appendChild(el("p", "card-note", report.original_policy || "No original policy returned."));
     row.appendChild(main);
     const meta = el("div", "data-row-meta");

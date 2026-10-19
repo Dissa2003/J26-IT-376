@@ -219,4 +219,4 @@ def test_legacy_endpoints_keep_their_existing_shapes():
         }],
     )
     assert policies_response.status_code == 200
-    assert policies_response.json()["solver_result"]["query_type"] == "entailment"
+    assert policies_response.json()["reports"][0]["solver_result"]["query_type"] == "entailment"

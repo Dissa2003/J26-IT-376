@@ -125,6 +125,14 @@ class VerificationExplanation(BaseModel):
     limitations: list[str] = Field(default_factory=list)
 
 
+class SubmissionInfo(BaseModel):
+    """Position of a report within a multi-policy verify-policies submission."""
+
+    submission_id: str
+    index: int
+    size: int
+
+
 class VerificationReport(BaseModel):
     # Legacy fields retained for existing callers.
     is_valid: bool
@@ -148,6 +156,14 @@ class VerificationReport(BaseModel):
         "eligible", "rejected", "unsupported", "conflicted", "contradictory"
     ] = "rejected"
     limitations: list[str] = Field(default_factory=list)
+    submission: SubmissionInfo | None = None
+
+
+class MultiPolicyVerificationReport(BaseModel):
+    reports: list[VerificationReport]
+    conflicts: list[ConflictFinding] = Field(default_factory=list)
+    consistency_result: SolverResult | None = None
+    overall_valid: bool
 
 
 class RequestQueryResult(BaseModel):

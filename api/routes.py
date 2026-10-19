@@ -1,9 +1,13 @@
+import uuid
+
 from fastapi import APIRouter, FastAPI, HTTPException, status
 from typing import List
 from pydantic import BaseModel, Field, field_validator
 from src.policy_verifier.models import (
+    MultiPolicyVerificationReport,
     RequestDecisionReport,
     SecurityPolicy,
+    SubmissionInfo,
     VerificationReport,
     VerificationStatus,
 )
@@ -60,21 +64,32 @@ class IndependentRequestBody(BaseModel):
 def root():
     return {"status": "active", "message": "Policy Verification API is running"}
 
-@router.post("/api/v1/verify-policies", response_model=VerificationReport)
+@router.post("/api/v1/verify-policies", response_model=MultiPolicyVerificationReport)
 def verify_policies(policies: List[SecurityPolicy]):
     if not policies:
         raise HTTPException(status_code=422, detail="At least one policy is required.")
-    report = pipeline.verify(policies[0])
-    report.conflicts = conflict_detector.find_conflicts(policies)
-    if report.conflicts:
-        report.is_valid = False
-        report.status = "UNSAT"
-        report.rule_status = "conflicted"
-        report.conflicting_policies = [
-            policy_id
-            for conflict in report.conflicts
-            for policy_id in conflict.policy_ids
+    reports = [pipeline.verify(policy) for policy in policies]
+    if len(policies) > 1:
+        submission_id = uuid.uuid4().hex[:8]
+        for index, report in enumerate(reports, 1):
+            report.submission = SubmissionInfo(
+                submission_id=submission_id, index=index, size=len(reports)
+            )
+    conflicts = conflict_detector.find_conflicts(policies)
+    for report in reports:
+        report.conflicts = [
+            conflict for conflict in conflicts
+            if report.policy_id in conflict.policy_ids
         ]
+        if report.conflicts:
+            report.is_valid = False
+            report.status = "UNSAT"
+            report.rule_status = "conflicted"
+            report.conflicting_policies = [
+                policy_id
+                for conflict in report.conflicts
+                for policy_id in conflict.policy_ids
+            ]
     consistency = pipeline.engine.check_consistency(
         policies,
         assume_role_witness=True,
@@ -85,9 +100,6 @@ def verify_policies(policies: List[SecurityPolicy]):
             "explanation": "The submitted policies are logically contradictory under "
             "the role-witness and exclusive-roles assumptions.",
         })
-        report.is_valid = False
-        if not report.conflicts:
-            report.rule_status = "contradictory"
     elif consistency.status is VerificationStatus.SAT:
         consistency = consistency.model_copy(update={
             "explanation": "The submitted policies are mutually consistent.",
@@ -97,21 +109,36 @@ def verify_policies(policies: List[SecurityPolicy]):
             "explanation": "Z3 returned an indeterminate result for consistency "
             "— treating as not valid for safety.",
         })
-        report.is_valid = False
-        if not report.conflicts:
-            report.rule_status = "contradictory"
-    report.consistency_result = consistency
-    verification_records.insert(0, report)
+    for report in reports:
+        report.consistency_result = consistency
+        # Consistency is a property of the whole set, so a contradictory or
+        # indeterminate set makes every policy in it ineligible.
+        if consistency.status is not VerificationStatus.SAT:
+            report.is_valid = False
+            if not report.conflicts:
+                report.rule_status = "contradictory"
+    verification_records[0:0] = reports
     del verification_records[100:]
-    rule_cache.put_if_eligible(report)
-    
-    if report.conflicts:
+    for report in reports:
+        rule_cache.put_if_eligible(report)
+
+    result = MultiPolicyVerificationReport(
+        reports=reports,
+        conflicts=conflicts,
+        consistency_result=consistency,
+        overall_valid=(
+            all(report.is_valid for report in reports)
+            and not conflicts
+            and consistency.status is VerificationStatus.SAT
+        ),
+    )
+    if conflicts:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"message": "Policy conflict detected (UNSAT)", "report": report.model_dump()}
+            detail={"message": "Policy conflict detected (UNSAT)", "report": result.model_dump()}
         )
-    
-    return report
+
+    return result
 
 
 @router.post("/api/v1/verify-text", response_model=VerificationReport)
@@ -201,7 +228,17 @@ def list_cached_rules():
 
 @router.get("/api/v1/conflicts")
 def list_conflicts():
-    return [conflict for report in verification_records for conflict in report.conflicts]
+    # A conflict is attached to every report it involves; list it once per submission.
+    seen: set[tuple[str, str]] = set()
+    conflicts = []
+    for report in verification_records:
+        submission = report.submission.submission_id if report.submission else str(id(report))
+        for conflict in report.conflicts:
+            key = (submission, conflict.conflict_id)
+            if key not in seen:
+                seen.add(key)
+                conflicts.append(conflict)
+    return conflicts
 
 
 app.include_router(router)
