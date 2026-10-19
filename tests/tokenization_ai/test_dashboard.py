@@ -146,6 +146,28 @@ def test_response_has_every_field_the_dashboard_reads(client):
         assert key in js
 
 
+def test_policy_page_supports_independent_request_checks_without_unsafe_dom():
+    api = _read("api.js")
+    page = _read("page-policy.js")
+    assert 'fetch("/api/v1/verify-request"' in api
+    for key in ("subject_id", "roles", "action", "resource", "consistency_query", "allow_query", "deny_query"):
+        assert key in page
+    assert "Policies do not decide this request" in page
+    assert "innerHTML" not in page
+    assert "textContent" in page
+
+
+def test_policy_page_explains_legacy_demonstration_and_preserves_raw_status():
+    page = _read("page-policy.js")
+    assert "Verified – conclusion entailed" in page
+    assert "Raw solver status:" in page
+    assert "Demonstration check (synthetic request)" in page
+    assert "The request here is generated from the policy itself." in page
+    assert "Use 'Check a request' below for an independent request." in page
+    assert 'workspaceBadge.textContent = "COMPLETE"' in page
+    assert 'workspaceBadge.textContent = "AWAITING SUBMISSION"' in page
+
+
 # --- client source discipline --------------------------------------------------
 
 

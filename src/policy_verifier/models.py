@@ -25,6 +25,12 @@ class VerificationStatus(str, Enum):
     INVALID = "INVALID"
 
 
+class RequestDecision(str, Enum):
+    ALLOWED = "ALLOWED"
+    DENIED = "DENIED"
+    NOT_DETERMINED = "NOT_DETERMINED"
+
+
 class PolicyCondition(BaseModel):
     attribute: str
     operator: Literal["equals"] = "equals"
@@ -138,4 +144,28 @@ class VerificationReport(BaseModel):
     conflicts: list[ConflictFinding] = Field(default_factory=list)
     explanation: VerificationExplanation | None = None
     rule_status: Literal["eligible", "rejected", "unsupported", "conflicted"] = "rejected"
+    limitations: list[str] = Field(default_factory=list)
+
+
+class RequestQueryResult(BaseModel):
+    status: Literal["sat", "unsat", "unknown"]
+    reason_unknown: str | None = None
+
+
+class RequestDecisionReport(BaseModel):
+    decision: RequestDecision
+    reason_code: Literal[
+        "policy_set_contradictory",
+        "solver_unknown",
+        "not_covered_by_policies",
+        "request_entailed",
+        "request_prohibited",
+    ]
+    explanation: str
+    consistency_query: RequestQueryResult
+    allow_query: RequestQueryResult
+    deny_query: RequestQueryResult
+    constraints: list[FormalConstraint] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
+    execution_time_ms: float
     limitations: list[str] = Field(default_factory=list)

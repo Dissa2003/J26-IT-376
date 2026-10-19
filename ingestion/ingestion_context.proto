@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package dissanayaka.ingestion;
+
+import "google/protobuf/struct.proto";
+
+message HttpMetadata {
+  string method = 1;
+  string path = 2;
+  string content_type = 3;
+  string client_ip = 4;
+  string client_role = 5;
+  string authorization = 6;
+  map<string, string> headers = 7;
+}
+
+message ContextEnvelope {
+  string event_id = 1;
+  double threat_score = 2;
+  repeated double unified_context_vector = 3;
+  google.protobuf.Struct masked_payload = 4;
+  HttpMetadata http_metadata = 5;
+  int64 timestamp_ns = 6;
+}
