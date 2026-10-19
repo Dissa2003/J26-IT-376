@@ -84,6 +84,11 @@ function renderReport(root, report) {
   solverBody.appendChild(el("p", "card-note", solver.explanation || "No solver explanation was returned."));
   if (solver.model) { solverBody.appendChild(codeBlock(solver.model)); }
   stages.appendChild(stage("Demonstration check (synthetic request)", "shield", solverBody, resultTone));
+  if (solver.is_entailment === true) {
+    const caveat = el("div", "caveat", "Note: This proof uses a fixed demonstration individual (Alice) derived from the policy itself. The entailment holds by construction. Use the 'Check a request' form below to evaluate real access decisions.");
+    caveat.setAttribute("role", "note");
+    stages.appendChild(caveat);
+  }
 
   const explanation = report.explanation || {};
   stages.appendChild(stage("Explanation", "info", codeBlock(explanation), "info"));
