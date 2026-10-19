@@ -20,6 +20,23 @@ export async function verifyPolicyText(policyText, policyId) {
   return { ok: response.ok, status: response.status, payload };
 }
 
+export async function verifyRequest(request) {
+  try {
+    const response = await fetch("/api/v1/verify-request", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+      credentials: "same-origin",
+      cache: "no-store"
+    });
+    let payload = null;
+    try { payload = await response.json(); } catch (error) { payload = null; }
+    return { ok: response.ok, status: response.status, payload };
+  } catch (error) {
+    return { ok: false, status: 0, payload: null, networkError: true };
+  }
+}
+
 async function getPolicyData(path) {
   try {
     const response = await fetch(path, { cache: "no-store", credentials: "same-origin" });

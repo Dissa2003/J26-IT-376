@@ -1,5 +1,5 @@
 import { el, clear, card, badge, button, field, icon } from "./ui.js";
-import { verifyPolicyText } from "./api.js";
+import { verifyPolicyText, verifyRequest } from "./api.js";
 
 const EXAMPLE = "Only administrators can delete user accounts.";
 let mounted = false;
@@ -32,12 +32,20 @@ function stage(title, iconName, content, tone = "info") {
 
 function renderReport(root, report) {
   clear(root);
-  const resultTone = statusTone(report.status);
+  const hasConflict = Array.isArray(report.conflicts) && report.conflicts.length > 0;
+  const isEntailed = report.status === "UNSAT"
+    && report.solver_result
+    && report.solver_result.is_entailment === true;
+  const resultTone = hasConflict ? "bad" : isEntailed ? "live" : "pending";
   const result = el("div", "policy-result " + resultTone);
-  result.appendChild(el("div", "policy-result-status", report.status));
-  const resultText = report.solver_result && report.solver_result.is_entailment
-    ? "Entailment established by the negated-conclusion query."
-    : "The solver status is not, by itself, proof that the policy is valid.";
+  result.appendChild(el("div", "policy-result-status", isEntailed
+    ? "Verified – conclusion entailed"
+    : hasConflict ? "Policy conflict detected" : "Verification returned"));
+  const resultText = isEntailed
+    ? "Raw solver status: " + report.status
+    : report.solver_result && report.solver_result.is_entailment
+      ? "Raw solver status: " + report.status + ". Entailment established by the negated-conclusion query."
+      : "Raw solver status: " + report.status + ". The solver status is not, by itself, proof that the policy is valid.";
   result.appendChild(el("p", null, resultText));
   root.appendChild(result);
 
@@ -70,11 +78,12 @@ function renderReport(root, report) {
 
   const solver = report.solver_result || {};
   const solverBody = el("div", "solver-summary");
+  solverBody.appendChild(el("p", "card-note", "The request here is generated from the policy itself. Use 'Check a request' below for an independent request."));
   solverBody.appendChild(el("div", "solver-line", "Query type: " + (solver.query_type || "not returned")));
   solverBody.appendChild(el("div", "solver-line", "Entailment established: " + (solver.is_entailment ? "Yes" : "No")));
   solverBody.appendChild(el("p", "card-note", solver.explanation || "No solver explanation was returned."));
   if (solver.model) { solverBody.appendChild(codeBlock(solver.model)); }
-  stages.appendChild(stage("Z3 verification", "shield", solverBody, resultTone));
+  stages.appendChild(stage("Demonstration check (synthetic request)", "shield", solverBody, resultTone));
 
   const explanation = report.explanation || {};
   stages.appendChild(stage("Explanation", "info", codeBlock(explanation), "info"));
@@ -104,10 +113,156 @@ function renderError(root, message, unsupported = false) {
   root.appendChild(box);
 }
 
-async function verify(text, policyId, output, submit) {
+const REASON_WORDS = {
+  request_entailed: "The request is allowed by the policies.",
+  request_prohibited: "The request is denied by the policies.",
+  not_covered_by_policies: "Policies do not decide this request.",
+  policy_set_contradictory: "The submitted policies contradict each other.",
+  solver_unknown: "The solver could not determine the request."
+};
+
+function queryRow(label, query) {
+  const row = el("div", "request-query-row");
+  row.appendChild(el("strong", null, label));
+  row.appendChild(badge(query && query.status ? query.status.toUpperCase() : "UNKNOWN", statusTone(query && query.status ? query.status.toUpperCase() : "UNKNOWN")));
+  return row;
+}
+
+function requestReport(root, report) {
+  clear(root);
+  const decision = report.decision || "NOT_DETERMINED";
+  const isUndetermined = decision === "NOT_DETERMINED";
+  const result = el("div", "policy-result request-decision " + (
+    decision === "ALLOWED" ? "live" : decision === "DENIED" ? "bad" : "mock"
+  ));
+  result.appendChild(el("div", "policy-result-status", isUndetermined
+    ? "Policies do not decide this request"
+    : decision));
+  result.appendChild(el("p", null, REASON_WORDS[report.reason_code] || "The backend returned an unrecognised reason."));
+  root.appendChild(result);
+
+  const queries = el("div", "request-query-list");
+  queries.appendChild(queryRow("Consistency query", report.consistency_query));
+  queries.appendChild(queryRow("Allow query", report.allow_query));
+  queries.appendChild(queryRow("Deny query", report.deny_query));
+  const details = el("div", "request-details");
+  details.appendChild(el("h3", null, "Z3 queries"));
+  details.appendChild(queries);
+  details.appendChild(el("h3", null, "Assumptions"));
+  details.appendChild(codeBlock(report.assumptions || []));
+  details.appendChild(el("h3", null, "Limitations"));
+  details.appendChild(codeBlock(report.limitations || []));
+  root.appendChild(details);
+}
+
+function requestError(root, message) {
+  clear(root);
+  const box = el("div", "policy-error");
+  box.setAttribute("role", "alert");
+  box.appendChild(el("strong", null, "Request check failed"));
+  box.appendChild(el("p", null, message));
+  root.appendChild(box);
+}
+
+function policyForRequest(report) {
+  const attributes = report.attributes || {};
+  return {
+    policy_id: report.policy_id || "verified-policy",
+    subject: attributes.subject || "",
+    action: attributes.action || "",
+    resource: attributes.resource || "",
+    effect: attributes.effect || "Allow",
+    raw_text: report.original_policy || "",
+    interpretation: attributes.interpretation || "role_permission"
+  };
+}
+
+function createRequestPanel(report) {
+  const requestCard = card({
+    title: "Check a request",
+    icon: "shield",
+    badge: badge("Independent request", "info")
+  });
+  const form = el("form", "policy-form request-form");
+  const subject = el("input", "text-input");
+  subject.type = "text";
+  subject.required = true;
+  subject.maxLength = 64;
+  subject.value = "subject-1";
+  const roles = el("input", "text-input");
+  roles.type = "text";
+  roles.maxLength = 512;
+  roles.placeholder = "Administrators, Auditors";
+  const attributes = report.attributes || {};
+  const action = el("input", "text-input");
+  action.type = "text";
+  action.required = true;
+  action.maxLength = 64;
+  action.value = attributes.action || "";
+  const resource = el("input", "text-input");
+  resource.type = "text";
+  resource.required = true;
+  resource.maxLength = 128;
+  resource.value = attributes.resource || "";
+  const submit = button("Check request", "btn-primary", null, "play");
+  submit.type = "submit";
+  const output = el("div", "policy-output");
+  form.appendChild(field("Subject ID", subject));
+  form.appendChild(field("Roles (comma-separated)", roles));
+  form.appendChild(field("Action", action));
+  form.appendChild(field("Resource", resource));
+  form.appendChild(submit);
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!subject.value.trim() || !action.value.trim() || !resource.value.trim()) {
+      requestError(output, "Subject ID, action and resource are required.");
+      return;
+    }
+    submit.disabled = true;
+    submit.textContent = "Checking…";
+    clear(output);
+    output.appendChild(el("p", "loading-note", "Checking the request against the verified policy…"));
+    try {
+      const result = await verifyRequest({
+        policies: [policyForRequest(report)],
+        request: {
+          subject_id: subject.value.trim(),
+          roles: roles.value.split(",").map((role) => role.trim()).filter(Boolean),
+          action: action.value.trim(),
+          resource: resource.value.trim()
+        }
+      });
+      if (!result.ok) {
+        const detail = result.payload && result.payload.detail;
+        const message = result.networkError
+          ? "The request verification API could not be reached. Start the local FastAPI service and try again."
+          : detail && typeof detail.message === "string"
+            ? detail.message
+            : "The backend rejected the request (HTTP " + result.status + ").";
+        requestError(output, message);
+        return;
+      }
+      requestReport(output, result.payload);
+    } catch (error) {
+      requestError(output, "The request verification API could not be reached. Try again.");
+    } finally {
+      submit.disabled = false;
+      submit.textContent = "Check request";
+    }
+  });
+  requestCard.body.appendChild(form);
+  requestCard.body.appendChild(output);
+  return requestCard.root;
+}
+
+async function verify(text, policyId, output, submit, requestHost, workspaceBadge) {
   submit.disabled = true;
   submit.textContent = "Verifying…";
+  workspaceBadge.textContent = "AWAITING SUBMISSION";
+  workspaceBadge.className = "badge badge-pending";
   clear(output);
+  clear(requestHost);
+  requestHost.hidden = true;
   output.appendChild(el("p", "loading-note", "Running parser, calculus, constraints and Z3 verification…"));
   try {
     const result = await verifyPolicyText(text, policyId);
@@ -121,6 +276,11 @@ async function verify(text, policyId, output, submit) {
       return;
     }
     renderReport(output, payload);
+    workspaceBadge.textContent = "COMPLETE";
+    workspaceBadge.className = "badge badge-live";
+    clear(requestHost);
+    requestHost.appendChild(createRequestPanel(payload));
+    requestHost.hidden = false;
   } catch (error) {
     renderError(output, "The verification API could not be reached. Start the local FastAPI service and try again.");
   } finally {
@@ -156,6 +316,7 @@ export function mount(root, route) {
   const submit = button("Verify policy", "btn-primary", null, "play");
   submit.type = "submit";
   const output = el("div", "policy-output");
+  const workspaceBadge = badge("AWAITING SUBMISSION", "pending");
   form.appendChild(field("Natural-language policy", text));
   form.appendChild(field("Policy identifier", id));
   form.appendChild(submit);
@@ -165,14 +326,17 @@ export function mount(root, route) {
       renderError(output, "Enter a policy using the supported grammar.");
       return;
     }
-    verify(text.value.trim(), id.value.trim(), output, submit);
+    verify(text.value.trim(), id.value.trim(), output, submit, requestHost, workspaceBadge);
   });
   formCard.body.appendChild(form);
   root.appendChild(formCard.root);
 
-  const resultCard = card({ title: "Verification workspace", icon: "layers", badge: badge("Awaiting submission", "pending") });
+  const resultCard = card({ title: "Verification workspace", icon: "layers", badge: workspaceBadge });
   resultCard.body.appendChild(output);
   root.appendChild(resultCard.root);
+  const requestHost = el("div");
+  requestHost.hidden = true;
+  root.appendChild(requestHost);
 }
 
 export function unmount() {
