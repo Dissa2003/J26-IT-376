@@ -119,3 +119,50 @@ Write-Host "Dashboard:      http://127.0.0.1:8010/dashboard#/policy-verification
 Write-Host ("Policy PID:     {0}" -f $policyProcess.Id)
 Write-Host ("Dashboard PID:  {0}" -f $dashboardProcess.Id)
 Write-Host "Run scripts\stop_demo.ps1 to stop."
+
+Write-Host ""
+Write-Host "Running end-to-end smoke tests through the dashboard proxy..." -ForegroundColor Cyan
+$smokePolicy = [ordered]@{
+    policy_id = "smoke-1"
+    subject = "Administrators"
+    action = "Delete"
+    resource = "UserAccounts"
+    effect = "Allow"
+    raw_text = "Administrators can delete user accounts."
+}
+
+try {
+    $policiesBody = ConvertTo-Json -InputObject @($smokePolicy) -Depth 5 -Compress
+    $policiesResult = Invoke-RestMethod -Uri "http://127.0.0.1:8010/api/v1/verify-policies" `
+        -Method Post -ContentType "application/json" -Body $policiesBody -TimeoutSec 10
+    if ($policiesResult.rule_status -eq "eligible") {
+        Write-Host "PASS: verify-policies returned rule_status 'eligible'." -ForegroundColor Green
+    } else {
+        Write-Host ("FAIL: verify-policies returned rule_status '{0}', expected 'eligible'." -f $policiesResult.rule_status) -ForegroundColor Red
+    }
+} catch {
+    $status = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { "no response" }
+    Write-Host ("FAIL: verify-policies request failed with HTTP {0}." -f $status) -ForegroundColor Red
+}
+
+try {
+    $requestBody = ConvertTo-Json -InputObject ([ordered]@{
+        policies = @($smokePolicy)
+        request = [ordered]@{
+            subject_id = "smoke-admin"
+            roles = @("Administrators")
+            action = "Delete"
+            resource = "UserAccounts"
+        }
+    }) -Depth 5 -Compress
+    $requestResult = Invoke-RestMethod -Uri "http://127.0.0.1:8010/api/v1/verify-request" `
+        -Method Post -ContentType "application/json" -Body $requestBody -TimeoutSec 10
+    if ($requestResult.decision -eq "ALLOWED") {
+        Write-Host "PASS: verify-request returned decision 'ALLOWED'." -ForegroundColor Green
+    } else {
+        Write-Host ("FAIL: verify-request returned decision '{0}', expected 'ALLOWED'." -f $requestResult.decision) -ForegroundColor Red
+    }
+} catch {
+    $status = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { "no response" }
+    Write-Host ("FAIL: verify-request request failed with HTTP {0}." -f $status) -ForegroundColor Red
+}
