@@ -100,6 +100,33 @@ threshold**, and the request-only vs rule-fused **baseline comparison**.
 | API response `member4-analysis-v2` | `POST /v1/analyze` | privacy-safe projection, see §6 |
 | Trace / runtime metrics | `tracing.py`, `metrics.py` | counts and timings only |
 
+### Anomaly signal (proposed output format)
+
+`anomaly_signal.py` adds `AnomalySignal`, a strict, immutable wrapper around `AnomalyPrediction`
+(`to_anomaly_signal`, `to_anomaly_signal_dict`). Fields: `schema_version` (`"anomaly-signal-1"`),
+`event_id`, `score` (finite, 0–1), `model_version`, and the fixed metadata
+`score_semantics = "uncalibrated_model_output"`, `is_probability = false`, `calibrated = false`.
+Unknown fields are rejected. There is no label, threshold, decision, `threat_score` or
+rule-aligned signal.
+
+```json
+{"schema_version": "anomaly-signal-1", "event_id": "synthetic-example-1", "score": 0.25,
+ "model_version": "synthetic-example-model", "score_semantics": "uncalibrated_model_output",
+ "is_probability": false, "calibrated": false}
+```
+
+*(Synthetic illustration, not output of any running system.)*
+
+- **Status:** a **proposed Member 4-owned format**. It is **not** a completed Member 3
+  integration; nothing sends it anywhere, and `adapters.to_member3_output` is still unimplemented.
+- **The score is uncalibrated and is not an attack probability.** KPI 5 remains unmeasured.
+- **Member 3 must still agree** on score interpretation (and whether an uncalibrated score is
+  acceptable), who owns any threshold, transport, and failure handling (fail-open or
+  fail-closed). Field-name mapping onto Member 3's request is deliberately not done here.
+- **Evidence:** this module is not in the KPI source-hash inventory, so the archived KPI 1–4
+  reports do not cover it. Any future evaluation that uses it needs updated source provenance
+  under a new protocol version; the historical evidence is not rewritten.
+
 ## 4. Privacy masking, normalization and token roles
 
 - **Masking is a heuristic, name- and shape-based blocklist.** It recognizes sensitive key
