@@ -46,35 +46,64 @@ evaluates them. In all tests and demos these are `MOCK-*` fixtures.
 
 `src/policy_verifier/models.py`, `verifier.py`, `api/routes.py`:
 
+> **Updated by Formal Verification** (branch `feature/policy_verification`, after commit `f6f5f53`).
+> The single-`VerificationReport` response originally described here has been replaced:
+> `verify-policies` now runs the pipeline on **every** submitted policy and also runs a Z3
+> consistency check across the whole set. The request-level decision endpoint
+> `POST /api/v1/verify-request` is documented separately in
+> `docs/output_contracts/` (README and JSON Schema).
+
 ```text
 POST /api/v1/verify-policies
   request : list[SecurityPolicy]
               SecurityPolicy{ policy_id, subject, action, resource,
-                              effect: "Allow"|"Deny", raw_text }
-  response: VerificationReport
-              { is_valid: bool,
-                status: "SAT" | "UNSAT",
-                fol_expressions: list[str]          # e.g. "Allow(P1)", "Deny(P2)"
-                conflicting_policies: list[str]|null,
-                execution_time_ms: float }
-  UNSAT -> HTTP 400 with {"message": ..., "report": <VerificationReport>}
+                              effect: "Allow"|"Deny", raw_text,
+                              interpretation: "role_permission"|"only_role"|"role_prohibition",
+                              conditions: list (always empty; conditions are unsupported) }
+  response: MultiPolicyVerificationReport
+              { reports: list[VerificationReport],   # one per submitted policy, same order
+                conflicts: list[ConflictFinding],    # same subject/action/resource with Allow and Deny
+                consistency_result: SolverResult      # Z3 check over the whole set
+                  { status: "SAT"|"UNSAT"|"UNKNOWN", query_type: "consistency", explanation, ... },
+                overall_valid: bool }                 # all reports valid AND no conflicts AND status SAT
+  VerificationReport (per policy), main fields:
+              { policy_id, original_policy, is_valid: bool,
+                status: "SAT"|"UNSAT"|"UNKNOWN",
+                rule_status: "eligible"|"rejected"|"unsupported"|"conflicted"|"contradictory",
+                fol_formula, inference_trace, constraints, solver_result,
+                conflicts, conflicting_policies: list[str]|null,
+                consistency_result, execution_time_ms,
+                submission: {submission_id, index, size} | null }   # set only when >1 policy
+  Consistency UNSAT or UNKNOWN -> HTTP 200, overall_valid=false, every report is_valid=false
+                                  and rule_status="contradictory" (or "conflicted", below)
+  Direct Allow/Deny conflict    -> HTTP 400 with {"message": ..., "report": <MultiPolicyVerificationReport>};
+                                  the reports involved have rule_status="conflicted"
 ```
+
+`fol_expressions` is still present on each `VerificationReport` for older callers, but it now
+holds the readable FOL formula (e.g. `"∀x (Administrators(x) → CanDelete(x, UserAccounts))"`),
+not the `"Allow(P1)"` strings this section originally described.
 
 ### 2.3 Exact mismatches
 
 | # | Aspect | LogiShield expects | Formal Verification provides | Consequence |
 |---|---|---|---|---|
 | 1 | **Event correlation** | `event_id` on the rule information, equal to the context's | **No `event_id`** anywhere in `src/`, `api/`, `storage/`; a report describes a *policy set* | LogiShield's adapter would reject a `VerificationReport` (missing `event_id`, `rules`) |
-| 2 | **Rule representation** | `rules[]` of objects (`rule_id` + attributes) | `fol_expressions` strings (`"Allow(P1)"`) and `conflicting_policies` ids; policy objects are *inputs* to the endpoint, not part of the response | A lossy or invented mapping unless a representation is agreed |
+| 2 | **Rule representation** | `rules[]` of objects (`rule_id` + attributes) | `reports[]`, one `VerificationReport` per policy carrying `policy_id`, `attributes`, `fol_formula` and `rule_status`; set-level `conflicts` and `consistency_result` | Closer to `rules[]`, but the mapping (e.g. `rule_status` → `in_conflict`) still needs agreeing |
 | 3 | **Identity naming** | `rule_id` | `policy_id` (inputs); embedded inside FOL strings in outputs | Preservation of policy identity must be decided (§3.2) |
 | 4 | **Applicability to a request** | Rules are assumed to apply to the event they accompany | No mapping from an HTTP request (`method`, `path`, headers, payload) to a policy's `subject`/`action`/`resource` | Nobody currently decides *which* policies are relevant to *this* request |
-| 5 | **Verdict semantics** | None; rules are inert tokens | `is_valid` / `status` for the whole set; `UNSAT` returns HTTP 400 | Unclear whether LogiShield ever sees an `UNSAT` report, and what it would mean |
+| 5 | **Verdict semantics** | None; rules are inert tokens | `overall_valid` and `consistency_result.status` for the whole set, `is_valid` / `rule_status` per policy; a contradictory set returns HTTP 200, only a direct Allow/Deny conflict returns HTTP 400 | LogiShield can now receive non-valid reports over HTTP 200; what they should mean to the model is still open (§3.3) |
 | 6 | **Pipeline wiring** | consumed by an adapter | standalone FastAPI policy service (`api/routes.py`) on port 8002; the LogiShield app proxies its dashboard policy calls to that service | Cross-component rule delivery remains a separate contract |
 
 Observations Formal Verification should confirm (read from the code; not asserted as defects): the path
 used by `routes.py` (`PolicyVerificationEngine.process_and_verify`) derives SAT/UNSAT from the
 presence of Allow and Deny effects and does not call `ConflictDetector` (the Z3 component);
 `storage/database.py::save_log` is not called by that path.
+
+> **Formal Verification response:** `routes.py` no longer uses `process_and_verify`. `verify-policies`
+> runs `VerificationPipeline.verify` per policy, `ConflictDetector.find_conflicts` across the set (a
+> structural check, not Z3) and `PolicyVerificationEngine.check_consistency` (Z3) across the set.
+> `storage/database.py::save_log` is still not called; records and the rule cache are in memory only.
 
 ## 3. Proposed minimal Formal Verification → LogiShield interface (for Formal Verification's decision)
 
