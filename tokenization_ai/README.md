@@ -127,6 +127,35 @@ rule-aligned signal.
   reports do not cover it. Any future evaluation that uses it needs updated source provenance
   under a new protocol version; the historical evidence is not rewritten.
 
+### Policy report compatibility adapter (isolated, not integrated)
+
+`policy_report_adapter.py::policy_reports_to_verified_rule_info(context, reports,
+applicable_policy_ids=...)` converts **caller-supplied** Member 2-style report mappings (JSON form)
+into the existing `VerifiedRuleInfo`. It is an isolated compatibility adapter: it does not import
+or call Member 2, and nothing in the pipeline, API or dashboard uses it.
+
+- **`event_id` comes only from the supplied `UnifiedApiContext`.** A report that carries its own
+  `event_id` is rejected.
+- **Applicability is asserted by the caller.** `applicable_policy_ids` must equal the reports'
+  `policy_id`s exactly (explicit, unique, non-empty). Member 4 never decides which policies apply
+  to an HTTP request.
+- **Only policy-level eligibility is accepted:** `is_valid` true, `rule_status == "eligible"`,
+  top-level and solver status `UNSAT` for an `entailment` query with `is_entailment` true (UNSAT
+  is the expected result because Member 2 checks the *negated* query), and no conflicts. This is
+  **not** runtime request verification: Member 2 checks entailment on a fixed demonstration
+  individual.
+- **Allowlist only:** `subject`, `action`, `resource`, `effect`, `interpretation`. Raw policy text,
+  formulas, traces, constraints and conditions are never copied; a policy with conditions is
+  rejected rather than silently turned into an unconditional rule.
+- **Strict and content-safe:** malformed, ambiguous or ineligible input raises
+  `PolicyReportError` / `PolicyReportNotEligibleError` naming a report index and field, never a
+  supplied value. There is no fallback to mock rules. Report order is preserved, and rules that
+  do not fit the tensor raise (the existing tensorizer behaviour) instead of being truncated.
+- **Unverified:** prediction quality with real policies (the fitted vocabulary and model only know
+  mock tokens), automatic policy applicability, Member 2 integration, and KPI 5. Test fixtures are
+  synthetic and may drift from Member 2's real output. The module is outside the archived KPI
+  source-hash inventory; any evaluation using it needs updated provenance under a new protocol version.
+
 ## 4. Privacy masking, normalization and token roles
 
 - **Masking is a heuristic, name- and shape-based blocklist.** It recognizes sensitive key
