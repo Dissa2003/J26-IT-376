@@ -304,12 +304,22 @@ What do 0.34 ms (current code; 0.32 ms before the D3 masking fix) include and ex
 **Tests** (from the repository root):
 
 ```powershell
-.venv\Scripts\python.exe -m pytest tests/tokenization_ai -q     # 560 passed at ea50a49
-.venv\Scripts\python.exe -m pytest -q                           # 586 passed at ea50a49 (full repository)
+.venv\Scripts\python.exe -m pytest tests/tokenization_ai -q     # 871 passed at cf1f200 (current)
+.venv\Scripts\python.exe -m pytest -q                           # 897 passed at cf1f200 (full repository)
 ```
 
-(Counts are those observed at `ea50a49`; one pre-existing Starlette/httpx deprecation warning
-appears.) Unit and framework tests establish behaviour, not research KPI attainment.
+Counts observed per commit (each is a record of that commit's run; older rows are kept as
+history, not corrected):
+
+| Commit | Member 4 suite | Full repository | What changed |
+|---|---|---|---|
+| `ea50a49` | 560 passed | 586 passed | Counts at the post-D3 KPI 4 re-evaluation (the commit the KPI 4 figures are tied to) |
+| `a76ba11` | 673 passed | 699 passed | Verified baseline after the dashboard work |
+| `964813b` | 710 passed | 736 passed | Added `anomaly_signal.py` (+37 tests) |
+| `cf1f200` | **871 passed** | **897 passed** | Added `policy_report_adapter.py` (+161 tests); **current** |
+
+Each run reported one pre-existing Starlette/httpx deprecation warning (third-party). Unit and
+framework tests establish behaviour, not research KPI attainment or detection quality.
 
 **Reproducing the evaluation** (writes reports to the directory you give; never overwrite
 original evidence — use an empty directory):
@@ -408,7 +418,11 @@ original evidence — use an empty directory):
    was a separate run, so the ≈ +6.7% difference is indicative, not a controlled estimate of
    the masking cost.
 9. **Score semantics.** The score is uncalibrated and is not a probability of attack.
-10. **Integration.** No Member 2 or Member 3 integration exists; KPI 5 is unmeasured.
+10. **Integration.** No Member 2 or Member 3 integration exists; KPI 5 is unmeasured. The two
+    standalone modules added after the KPI evidence (`anomaly_signal.py`,
+    `policy_report_adapter.py`) do not change this: schema compatibility is not integration.
+11. **No held-out detection-quality evaluation and no request-only versus rule-fused baseline
+    yet.** Scores are uncalibrated and are not attack probabilities.
 
 ## 10. Troubleshooting
 
@@ -438,6 +452,14 @@ original evidence — use an empty directory):
 | `tracing.py`, `metrics.py` | Per-stage tracing and runtime metrics |
 | `app.py`, `__main__.py`, `static/` | HTTP API and browser demo |
 | `demo.py` | Console demo and the fixtures that fit the bundled model |
+| `anomaly_signal.py` | Standalone `AnomalySignal` output schema (proposed format). **Not wired into any running service**: the API, dashboard and `service.py` do not use it |
+| `policy_report_adapter.py` | Standalone adapter from caller-supplied Member 2-style policy reports to `VerifiedRuleInfo`. **Not wired into any running service** and not Member 2 integration |
+
+`anomaly_signal.py` and `policy_report_adapter.py` are exercised only by their own tests
+(`tests/tokenization_ai/test_anomaly_signal.py`, `test_policy_report_adapter.py`). Both sit outside
+the archived KPI source-hash inventory, so the historical KPI 1-4 evidence, which stays tied to
+its original evaluation protocol, does not cover them; a future evaluation using either module needs
+updated source provenance under a new protocol version.
 | `dataset_adapters.py` | SR-BH 2020 row adapter (not run on real data) |
 | `evaluation/` | Protocols, frozen fixtures, KPI 1–4 runners |
 | `INTEGRATION_STATUS.md` | Cross-member integration state |
