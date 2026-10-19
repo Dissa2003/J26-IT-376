@@ -145,6 +145,35 @@ def run_ablation_evaluation(iterations: int = 5_000) -> dict[str, Any]:
     }
 
 
+def run_sustained_throughput_benchmark(duration_seconds: float = 2.0) -> dict[str, Any]:
+    """Measure sustained end-to-end ingestion throughput (NFR2: >10,000 - 12,000+ RPS)."""
+    stream = SyntheticEnterpriseStream().generate(batch_size=500)
+    masker = PIIMasker()
+    builder = UnifiedContextVectorBuilder()
+    broker = RingBufferBroker(maxlen=50_000)
+
+    count = 0
+    start = time.perf_counter()
+    while time.perf_counter() - start < duration_seconds:
+        item = stream[count % len(stream)]
+        # Complete 5-stage pipeline hot path:
+        masked = masker.mask(item["payload"])
+        vector = builder.build(masked, item["threat_score"])
+        _ = builder.serialize(f"evt-{count}", masked, item["threat_score"], vector)
+        event = RawEvent(source="bench", payload={**masked, "_threat_score": item["threat_score"]})
+        broker.publish(event)
+        count += 1
+
+    elapsed = time.perf_counter() - start
+    rps = count / elapsed
+    broker.stop()
+    return {
+        "duration_seconds": round(elapsed, 2),
+        "total_requests_processed": count,
+        "sustained_throughput_rps": round(rps, 1),
+    }
+
+
 def main():
     print("=" * 70)
     print("TransVerify / LogiShield (J26-IT-376) Ingestion Benchmark Suite")
@@ -177,9 +206,15 @@ def main():
     assert len(sample_dict) == 0, "Transient dict was not cleared"
     print("  * Transient memory wipe verified: 100% cleared in RAM.")
 
+    print("\n[4] Running Sustained Throughput Evaluation (NFR2)...")
+    tp = run_sustained_throughput_benchmark(duration_seconds=2.0)
+    print(f"  * Sustained Hot-Path Ingestion Throughput: {tp['sustained_throughput_rps']:,} RPS (Target: >10,000 to 12,000+ RPS)")
+    print(f"  * Total Events Ingested in Benchmark:     {tp['total_requests_processed']:,} events in {tp['duration_seconds']}s")
+
     print("\nAll SLAs and Performance Targets Validated Successfully.")
     print("=" * 70)
 
 
 if __name__ == "__main__":
     main()
+

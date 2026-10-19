@@ -20,8 +20,10 @@ from shared_contracts.models import RawEvent
 from .vector_builder import (
     HIGH_THREAT_THRESHOLD,
     LOW_THREAT_THRESHOLD,
+    UnifiedContextVectorBuilder,
     extract_threat_score,
 )
+from .zero_copy import ZeroCopyRingSlotBuffer
 
 log = logging.getLogger(__name__)
 EventHandler = Callable[[RawEvent], None]
@@ -48,17 +50,51 @@ class RedisStreamClient(Protocol):
 
 
 class InMemoryBroker(EventProducer, EventConsumer):
-    """Publish events synchronously to all registered consumers."""
+    """Publish events synchronously to all registered consumers with TWDE-SCF correlation."""
 
     def __init__(self) -> None:
         """Initialize an empty broker."""
         self._handlers: list[EventHandler] = []
         self.dead_letters: list[dict[str, Any]] = []
         self.threat_scores: dict[str, float] = {}
+        self.buffered_envelopes: dict[str, dict[str, Any]] = {}
 
-    def update_threat_score(self, event_id: str, score: float) -> None:
-        """Store or update the probabilistic AI risk score (y) for an event (WBS 4.2 / FR2)."""
-        self.threat_scores[event_id] = min(1.0, max(0.0, float(score)))
+    def buffer_context(self, event_id: str, context_data: dict[str, Any]) -> None:
+        """Store transient context envelope to enable speculative async (x + y) fusion."""
+        self.buffered_envelopes[event_id] = {
+            "event_id": event_id,
+            "masked_payload": context_data.get("masked_payload", {}),
+            "threat_score": context_data.get("threat_score", 0.0),
+            "unified_context_vector": context_data.get("unified_context_vector", []),
+            "protobuf_bytes_size": context_data.get("protobuf_bytes_size", 0),
+            "timestamp": time.perf_counter(),
+            "fused": context_data.get("fused", False),
+        }
+
+    def get_buffered_envelope(self, event_id: str) -> dict[str, Any] | None:
+        """Retrieve buffered context envelope if present."""
+        return self.buffered_envelopes.get(event_id)
+
+    def update_threat_score(
+        self, event_id: str, score: float, vector_builder: Any = None
+    ) -> dict[str, Any] | None:
+        """Store probabilistic AI risk score (y) and trigger sub-ms context rebuild if event is buffered."""
+        bounded_score = min(1.0, max(0.0, float(score)))
+        self.threat_scores[event_id] = bounded_score
+
+        # Late-arriving score (y): perform immediate speculative context fusion (< 1 ms)
+        if event_id in self.buffered_envelopes:
+            entry = self.buffered_envelopes[event_id]
+            entry["threat_score"] = bounded_score
+            vb = vector_builder or UnifiedContextVectorBuilder()
+            new_vector = vb.build(entry["masked_payload"], bounded_score)
+            protobuf_bytes = vb.serialize(event_id, entry["masked_payload"], bounded_score, new_vector)
+            entry["unified_context_vector"] = new_vector
+            entry["protobuf_bytes_size"] = len(protobuf_bytes)
+            entry["fused"] = True
+            entry["fused_at_ns"] = time.perf_counter_ns()
+            return entry
+        return None
 
     def get_threat_score(self, event_id: str) -> float | None:
         """Lookup the cached threat score in RAM with sub-microsecond latency."""
@@ -107,6 +143,7 @@ class RingBufferBroker(InMemoryBroker):
                 "threat thresholds must satisfy 0 <= low < high <= 1"
             )
         super().__init__()
+        self.zero_copy_pool = ZeroCopyRingSlotBuffer()
         self._buffer: deque[RawEvent] = deque(maxlen=maxlen)
         self._buffer_maxlen = maxlen
         self._overflow_broker = overflow_broker

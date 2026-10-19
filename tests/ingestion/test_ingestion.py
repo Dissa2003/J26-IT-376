@@ -17,7 +17,8 @@ from ingestion.broker import (
 )
 from ingestion.app import create_app
 from ingestion.validator import IngestionValidator
-from ingestion.pii_masker import PIIMasker, REDACTED
+from ingestion.pii_masker import ASTPIIMasker, PIIMasker, REDACTED
+from ingestion.zero_copy import ZeroCopyRingSlotBuffer
 from ingestion.vector_builder import (
     HIGH_THREAT_THRESHOLD,
     LOW_THREAT_THRESHOLD,
@@ -549,4 +550,152 @@ def test_ast_pii_masking_semantic_retention_and_secure_wipe() -> None:
     transient_dict = {"secret": "sensitive_data", "sub": [1, 2, 3]}
     PIIMasker.secure_wipe(transient_dict)
     assert len(transient_dict) == 0
+
+
+def test_async_correlation_pre_arrived_threat_score() -> None:
+    """A pre-arrived async threat score (y) is automatically fused with incoming HTTP stream (x)."""
+    broker = InMemoryBroker()
+    client = TestClient(create_app(broker=broker))
+
+    # 1. External AI module submits threat score (y) in advance
+    corr_id = "evt-pre-arrive-777"
+    score_resp = client.post(
+        "/v1/threat-score",
+        json={"event_id": corr_id, "threat_score": 0.865},
+    )
+    assert score_resp.status_code == 200
+    assert score_resp.json()["status"] == "recorded"
+
+    # 2. Incoming HTTP request stream (x) arrives with matching event_id
+    intercept_resp = client.post(
+        "/v1/ingest",
+        headers={"X-Event-ID": corr_id},
+        json={
+            "metadata": {"method": "POST", "path": "/api/v1/auth", "client_ip": "10.0.0.1"},
+            "payload": {"username": "admin", "token": "xyz123"},
+            "threat_score": 0.05,  # initial gateway estimate
+        },
+    )
+    assert intercept_resp.status_code == 202
+    body = intercept_resp.json()
+    assert body["event_id"] == corr_id
+    # The pre-arrived probabilistic AI score (0.865) must supersede the default estimate
+    assert body["unified_context_vector"][0] == 0.865
+
+
+def test_async_correlation_late_arrived_speculative_fusion() -> None:
+    """A late-arriving threat score (y) triggers speculative context vector rebuild in < 1 ms."""
+    broker = InMemoryBroker()
+    client = TestClient(create_app(broker=broker))
+
+    # 1. HTTP request stream (x) arrives first and is buffered
+    late_id = "evt-late-fuse-999"
+    resp = client.post(
+        "/v1/intercept",
+        headers={"X-Event-ID": late_id},
+        json={
+            "metadata": {"method": "POST", "path": "/api/v1/transfer"},
+            "payload": {"account": "acc-9921", "amount": 500.0},
+            "threat_score": 0.10,
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.json()["unified_context_vector"][0] == 0.10
+
+    # 2. Async AI threat score arrives afterwards
+    score_resp = client.post(
+        "/v1/threat-score",
+        json={"event_id": late_id, "threat_score": 0.935},
+    )
+    assert score_resp.status_code == 200
+    fused_body = score_resp.json()
+    assert fused_body["status"] == "fused"
+    assert fused_body["event_id"] == late_id
+    assert fused_body["threat_score"] == 0.935
+    # The unified context vector was dynamically rebuilt in RAM with the new threat score
+    assert fused_body["unified_context_vector"][0] == 0.935
+    assert 500.0 in fused_body["unified_context_vector"]
+
+
+def test_syntax_preserving_ast_pii_masking_with_sqli_and_xss() -> None:
+    """Masks alphanumeric PII literals while preserving attack metacharacters and tokens."""
+    masker = ASTPIIMasker()
+    payload = {
+        "password": "secretPassword123' OR 1=1; --",
+        "email": "<script>alert('xss')</script>victim@company.com",
+        "access_token": "bearer_admin_token_999; DROP TABLE users;--",
+        "safe_user": "John Doe",
+        "amount": 250.0,
+    }
+
+    masked = masker.mask(payload)
+
+    # 1. Structural attack syntax is preserved for downstream SMT/Z3 solvers
+    assert "' OR 1=1; --" in masked["password"]
+    assert "<script>alert('xss')</script>" in masked["email"]
+    assert "; DROP TABLE users;--" in masked["access_token"]
+
+    # 2. Sensitive alphanumeric literals are masked
+    assert "secretPassword123" not in masked["password"]
+    assert "victim@company.com" not in masked["email"]
+    assert "bearer_admin_token_999" not in masked["access_token"]
+    assert REDACTED in masked["password"]
+    assert REDACTED in masked["email"]
+
+    # 3. Non-sensitive fields are untouched
+    assert masked["safe_user"] == "John Doe"
+    assert masked["amount"] == 250.0
+
+
+def test_rich_mathematical_vector_builder_dimensions() -> None:
+    """Verifies rich mathematical vector layout for string-heavy and mixed HTTP requests."""
+    builder = UnifiedContextVectorBuilder()
+
+    # String-heavy request (0 numeric leaves in payload)
+    string_payload = {
+        "action": "search",
+        "query": "wireless headphones' OR 1=1; --",
+        "category": "electronics",
+    }
+    vector = builder.build(string_payload, threat_score=0.75)
+    # [0]: threat_score
+    # [1]: payload_byte_length
+    # [2]: structural_depth
+    # [3]: masked_pii_count
+    # [4]: syntactic_anomaly_token_density
+    assert len(vector) == 5
+    assert vector[0] == 0.75
+    assert vector[1] > 0.0  # byte length
+    assert vector[2] >= 1.0  # structural depth
+    assert vector[3] == 0.0  # 0 masked PII
+    assert vector[4] > 0.0  # syntactic anomaly tokens: ', ;, -, =
+
+    # Explicit rich vector on payload containing numeric leaves
+    mixed_payload = {"amount": 100.0, "status": "pending"}
+    rich_vector = builder.build(mixed_payload, threat_score=0.25, include_structural_features=True)
+    assert len(rich_vector) == 6
+    assert rich_vector[0] == 0.25
+    assert rich_vector[-1] == 100.0
+
+
+def test_zero_copy_ring_slot_buffer_pointer_slicing_and_wipe() -> None:
+    """Zero-copy memoryview ring buffer demonstrates non-allocating slicing and wipe."""
+    buffer = ZeroCopyRingSlotBuffer(slot_count=4, slot_size=1024)
+    slot_id = buffer.allocate_slot()
+    assert slot_id == 0
+
+    http_raw = b"POST /v1/ingest HTTP/1.1\r\nHost: transverify.shield\r\n\r\n{\"action\": \"verify\"}"
+    view = buffer.write_bytes(slot_id, http_raw)
+    assert isinstance(view, memoryview)
+    assert len(view) == len(http_raw)
+
+    headers_view, body_view = buffer.slice_http_stream(slot_id)
+    assert headers_view.tobytes() == b"POST /v1/ingest HTTP/1.1\r\nHost: transverify.shield"
+    assert body_view.tobytes() == b"{\"action\": \"verify\"}"
+
+    # Verify zero-allocation wipe (NFR4)
+    buffer.wipe_slot(slot_id)
+    assert buffer.get_slot_view(slot_id).tobytes() == b""
+    assert buffer.stats()["active_slots"] == 0
+
 

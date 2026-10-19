@@ -9,9 +9,10 @@ from concurrent.futures import Future, TimeoutError
 from dataclasses import dataclass
 from queue import Queue
 from typing import Any
+import uuid
 
 import httpx
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException, Header
 from pydantic import BaseModel, Field
 from redis.exceptions import RedisError
 
@@ -230,23 +231,122 @@ def create_app(
         """Return the service health status."""
         return {"status": "ok", "service": "ingestion"}
 
+    def _handle_interception(
+        payload: dict[str, Any],
+        correlation_id: str | None = None,
+        started_ns: int | None = None,
+    ) -> InterceptionAcknowledgement:
+        """Process line-rate HTTP interception with AST PII masking, context vector, and async fusion."""
+        start = started_ns if started_ns is not None else time.perf_counter_ns()
+        try:
+            request = InterceptionRequest.model_validate(payload)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+        corr_id = correlation_id or payload.get("event_id") or (
+            payload.get("metadata", {}).get("event_id")
+            if isinstance(payload.get("metadata"), dict)
+            else None
+        )
+        pre_arrived_score = None
+        if corr_id and hasattr(event_broker, "get_threat_score"):
+            pre_arrived_score = event_broker.get_threat_score(corr_id)
+
+        effective_threat_score = (
+            pre_arrived_score if pre_arrived_score is not None else request.threat_score
+        )
+        masked_payload = pii_masker.mask(request.payload)
+        vector = vector_builder.build(masked_payload, effective_threat_score)
+
+        event_id = corr_id or str(uuid.uuid4())
+        event = RawEvent(
+            event_id=event_id,
+            source=request.metadata.path,
+            payload={
+                **masked_payload,
+                "_http_metadata": request.metadata.model_dump(),
+                "_threat_score": effective_threat_score,
+            },
+        )
+        protobuf_bytes = vector_builder.serialize(
+            event.event_id,
+            masked_payload,
+            effective_threat_score,
+            vector,
+        )
+
+        if hasattr(event_broker, "buffer_context"):
+            context_data = {
+                "masked_payload": masked_payload,
+                "threat_score": effective_threat_score,
+                "unified_context_vector": vector,
+                "protobuf_bytes_size": len(protobuf_bytes),
+                "fused": pre_arrived_score is not None,
+            }
+            event_broker.buffer_context(event.event_id, context_data)
+            if corr_id and corr_id != event.event_id:
+                event_broker.buffer_context(corr_id, context_data)
+
+        try:
+            event_broker.publish(event)
+        except (httpx.HTTPError, RedisError, OSError) as exc:
+            log.exception("Unable to publish intercepted event %s", event.event_id)
+            raise HTTPException(502, f"ingestion broker unavailable: {exc}") from exc
+
+        return InterceptionAcknowledgement(
+            event_id=event.event_id,
+            masked_payload=masked_payload,
+            protobuf_bytes_size=len(protobuf_bytes),
+            unified_context_vector=vector,
+            pipeline_metrics={
+                "execution_time_ms": (
+                    max(0, time.perf_counter_ns() - start) / 1_000_000
+                )
+            },
+        )
+
     @app.post(
         "/v1/threat-score",
         tags=[INGESTION_TAG],
         summary="Asynchronously ingest an AI threat risk score (y)",
-        description="Non-blocking ingestion harness for probabilistic AI threat scores [0.0, 1.0].",
+        description="Non-blocking ingestion harness for probabilistic AI threat scores [0.0, 1.0]. Performs speculative context fusion with buffered events.",
         status_code=200,
     )
     def submit_threat_score(update: ThreatScoreUpdate) -> dict[str, Any]:
-        """Record or update the async probabilistic threat score for an event."""
+        """Record or update the async probabilistic threat score and trigger speculative fusion if buffered."""
+        fused = None
         if hasattr(event_broker, "update_threat_score"):
-            event_broker.update_threat_score(update.event_id, update.threat_score)
+            fused = event_broker.update_threat_score(
+                update.event_id, update.threat_score, vector_builder=vector_builder
+            )
+        if fused:
+            return {
+                "status": "fused",
+                "event_id": update.event_id,
+                "threat_score": update.threat_score,
+                "unified_context_vector": fused["unified_context_vector"],
+                "protobuf_bytes_size": fused["protobuf_bytes_size"],
+            }
         return {
             "status": "recorded",
             "event_id": update.event_id,
             "threat_score": update.threat_score,
         }
 
+    @app.post(
+        "/v1/intercept",
+        tags=[INGESTION_TAG],
+        summary="Intercept and context-structure an HTTP request",
+        description="Line-rate HTTP request interception with AST PII masking and Unified Context Vector generation.",
+        status_code=200,
+        response_model=InterceptionAcknowledgement,
+    )
+    def intercept(
+        payload: dict[str, Any] = Body(...),
+        x_event_id: str | None = Header(None, alias="X-Event-ID"),
+    ) -> InterceptionAcknowledgement:
+        """Direct line-rate HTTP interception endpoint with AST PII masking and context vector creation."""
+        return _handle_interception(payload, correlation_id=x_event_id)
 
     @app.post(
         "/v1/ingest",
@@ -347,46 +447,19 @@ def create_app(
                 },
             },
         ),
+        x_event_id: str | None = Header(None, alias="X-Event-ID"),
     ) -> Prediction | AcceptedEvent | InterceptionAcknowledgement:
         """Validate, publish, and await processing for standard events."""
         started_ns = time.perf_counter_ns()
+        correlation_id = x_event_id or payload.get("event_id") or (
+            payload.get("metadata", {}).get("event_id")
+            if isinstance(payload.get("metadata"), dict)
+            else None
+        )
         interception = "metadata" in payload and "threat_score" in payload
         if interception:
-            try:
-                request = InterceptionRequest.model_validate(payload)
-            except ValueError as exc:
-                raise HTTPException(422, str(exc)) from exc
-            masked_payload = pii_masker.mask(request.payload)
-            vector = vector_builder.build(masked_payload, request.threat_score)
-            event = RawEvent(
-                source=request.metadata.path,
-                payload={
-                    **masked_payload,
-                    "_http_metadata": request.metadata.model_dump(),
-                    "_threat_score": request.threat_score,
-                },
-            )
-            protobuf_bytes = vector_builder.serialize(
-                event.event_id,
-                masked_payload,
-                request.threat_score,
-                vector,
-            )
-            try:
-                event_broker.publish(event)
-            except (httpx.HTTPError, RedisError, OSError) as exc:
-                log.exception("Unable to publish intercepted event %s", event.event_id)
-                raise HTTPException(502, f"ingestion broker unavailable: {exc}") from exc
-            return InterceptionAcknowledgement(
-                event_id=event.event_id,
-                masked_payload=masked_payload,
-                protobuf_bytes_size=len(protobuf_bytes),
-                unified_context_vector=vector,
-                pipeline_metrics={
-                    "execution_time_ms": (
-                        max(0, time.perf_counter_ns() - started_ns) / 1_000_000
-                    )
-                },
+            return _handle_interception(
+                payload, correlation_id=correlation_id, started_ns=started_ns
             )
 
         try:
@@ -400,9 +473,38 @@ def create_app(
                 except Exception:
                     log.exception("Unable to write invalid event to the DLQ")
             raise HTTPException(422, reason) from exc
-        event = event.model_copy(
-            update={"payload": pii_masker.mask(event.payload)}
+
+        corr_id = correlation_id or event.event_id
+        pre_arrived_score = None
+        if corr_id and hasattr(event_broker, "get_threat_score"):
+            pre_arrived_score = event_broker.get_threat_score(corr_id)
+
+        effective_threat_score = (
+            pre_arrived_score
+            if pre_arrived_score is not None
+            else float(payload.get("threat_score", payload.get("_threat_score", 0.0)))
         )
+        masked_payload = pii_masker.mask(event.payload)
+        event = event.model_copy(update={"payload": masked_payload})
+        if pre_arrived_score is not None:
+            event.payload["_threat_score"] = effective_threat_score
+
+        vector = vector_builder.build(masked_payload, effective_threat_score)
+        protobuf_bytes = vector_builder.serialize(
+            event.event_id, masked_payload, effective_threat_score, vector
+        )
+
+        if hasattr(event_broker, "buffer_context"):
+            context_data = {
+                "masked_payload": masked_payload,
+                "threat_score": effective_threat_score,
+                "unified_context_vector": vector,
+                "protobuf_bytes_size": len(protobuf_bytes),
+                "fused": pre_arrived_score is not None,
+            }
+            event_broker.buffer_context(event.event_id, context_data)
+            if corr_id and corr_id != event.event_id:
+                event_broker.buffer_context(corr_id, context_data)
 
         if dispatcher is None:
             try:
@@ -432,3 +534,4 @@ def create_app(
 
 
 app = create_app()
+
