@@ -59,7 +59,7 @@ Start both services with `scripts\start_demo.ps1`, or the policy service alone w
 | `policies[].raw_text` | If non-empty, it is re-parsed and must agree with `subject`, `action`, `resource`, `effect` and `interpretation`; otherwise HTTP 422. Supported sentence forms are listed in `src/policy_verifier/GRAMMAR.md`. |
 | `policies[].interpretation` | `role_permission` (*X can …*), `only_role` (*only X can …*) or `role_prohibition` (*X cannot …*). Defaults to `role_permission`. |
 | `request.roles` | Up to 32 roles. Treated as the subject's **complete** role assignment: any role not listed is assumed *not* held. |
-| `request.action`, `request.resource` | Write names as single words in the same form as the policy fields (`Delete`, `UserAccounts`). Do **not** use spaces — see *Known issue* below. |
+| `request.action`, `request.resource`, `request.roles` | Matched against the policy names ignoring case and spaces, so `user accounts`, `UserAccounts` and `useraccounts` are equivalent. A name that matches no policy leaves the request `NOT_DETERMINED`. |
 
 ### Example response (real output for the body above)
 
@@ -72,10 +72,10 @@ Start both services with `scripts\start_demo.ps1`, or the policy service alone w
   "allow_query": { "status": "unsat", "reason_unknown": null },
   "deny_query": { "status": "sat", "reason_unknown": null },
   "constraints": [
-    { "constraint_id": "p1:rule", "expression": "∀x (Administrators(x) → CanDelete(x, Useraccounts))", "kind": "rule", "source_policy_ids": ["p1"] },
+    { "constraint_id": "p1:rule", "expression": "∀x (Administrators(x) → CanDelete(x, UserAccounts))", "kind": "rule", "source_policy_ids": ["p1"] },
     { "constraint_id": "request:role:Administrators", "expression": "Administrators(Alice-01)", "kind": "fact", "source_policy_ids": [] },
-    { "constraint_id": "request:query", "expression": "CanDelete(Alice-01, Useraccounts)", "kind": "query", "source_policy_ids": [] },
-    { "constraint_id": "request:negated-query", "expression": "¬CanDelete(Alice-01, Useraccounts)", "kind": "negated_query", "source_policy_ids": [] }
+    { "constraint_id": "request:query", "expression": "CanDelete(Alice-01, UserAccounts)", "kind": "query", "source_policy_ids": [] },
+    { "constraint_id": "request:negated-query", "expression": "¬CanDelete(Alice-01, UserAccounts)", "kind": "negated_query", "source_policy_ids": [] }
   ],
   "assumptions": [
     "Role-witness axiom enabled.",
@@ -89,8 +89,8 @@ Start both services with `scripts\start_demo.ps1`, or the policy service alone w
 }
 ```
 
-`execution_time_ms` varies per call. Names in `constraints` are normalised (`Useraccounts`, `Alice-01`), so do not
-compare them with your own spelling.
+`execution_time_ms` varies per call. Names in `constraints` use the policy's spelling (`UserAccounts`) and a
+normalised `subject_id` (`Alice-01`), so do not compare them with your own spelling.
 
 ### Error responses (HTTP 422)
 
@@ -126,15 +126,3 @@ The pairing is fixed: `ALLOWED` always comes with `request_entailed`, `DENIED` w
   this component does not derive them from method, path or headers (Q2.3).
 - **No attribute conditions.** Policies with conditions (`if`, `when`, `with` …) are rejected by the grammar.
 - **Process-local.** Nothing from `verify-request` is stored; the rule cache and records endpoints are in-memory.
-
-## Known issue: spaced names in the request
-
-The service normalises names twice, and spaced and single-word spellings come out differently. With a
-policy on `UserAccounts`:
-
-| `request.resource` | Result |
-|---|---|
-| `UserAccounts`, `Useraccounts`, `useraccounts` | `ALLOWED` |
-| `user accounts` | `NOT_DETERMINED` / `not_covered_by_policies` — **incorrect** |
-
-Until this is fixed in `api/routes.py`, send `action` and `resource` as single words without spaces.

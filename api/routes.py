@@ -195,12 +195,23 @@ def verify_request(body: IndependentRequestBody):
                 "policies": mismatches,
             },
         )
+    # _canonical is not idempotent ("UserAccounts" -> "Useraccounts"), so names are
+    # matched on a case- and space-insensitive key and resolved to the policy's own
+    # spelling instead of being canonicalised a second time.
+    known_names: dict[str, str] = {}
+    for policy in body.policies:
+        for name in (policy.subject, policy.action, policy.resource):
+            known_names.setdefault(_name_key(name), name)
+
+    def resolve(name: str) -> str:
+        return known_names.get(_name_key(name), name)
+
     policies = [
         policy.model_copy(
             update={
-                "subject": _canonical(policy.subject),
-                "action": _canonical(policy.action),
-                "resource": _canonical(policy.resource),
+                "subject": resolve(policy.subject),
+                "action": resolve(policy.action),
+                "resource": resolve(policy.resource),
             }
         )
         for policy in body.policies
@@ -208,10 +219,14 @@ def verify_request(body: IndependentRequestBody):
     return pipeline.engine.check_request(
         policies,
         subject_id=body.request.subject_id,
-        roles=body.request.roles,
-        action=body.request.action,
-        resource=body.request.resource,
+        roles=[resolve(role) for role in body.request.roles],
+        action=resolve(body.request.action),
+        resource=resolve(body.request.resource),
     )
+
+
+def _name_key(value: str) -> str:
+    return "".join(value.split()).casefold()
 
 
 @router.get("/api/v1/verification-records", response_model=list[VerificationReport])
