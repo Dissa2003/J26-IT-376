@@ -5,6 +5,7 @@ from src.policy_verifier.models import (
     RequestDecisionReport,
     SecurityPolicy,
     VerificationReport,
+    VerificationStatus,
 )
 from src.policy_verifier.conflict_detector import ConflictDetector
 from src.policy_verifier.cache import LocalRuleCache
@@ -74,6 +75,32 @@ def verify_policies(policies: List[SecurityPolicy]):
             for conflict in report.conflicts
             for policy_id in conflict.policy_ids
         ]
+    consistency = pipeline.engine.check_consistency(
+        policies,
+        assume_role_witness=True,
+        assume_mutually_exclusive_roles=True,
+    )
+    if consistency.status is VerificationStatus.UNSAT:
+        consistency = consistency.model_copy(update={
+            "explanation": "The submitted policies are logically contradictory under "
+            "the role-witness and exclusive-roles assumptions.",
+        })
+        report.is_valid = False
+        if not report.conflicts:
+            report.rule_status = "contradictory"
+    elif consistency.status is VerificationStatus.SAT:
+        consistency = consistency.model_copy(update={
+            "explanation": "The submitted policies are mutually consistent.",
+        })
+    else:
+        consistency = consistency.model_copy(update={
+            "explanation": "Z3 returned an indeterminate result for consistency "
+            "— treating as not valid for safety.",
+        })
+        report.is_valid = False
+        if not report.conflicts:
+            report.rule_status = "contradictory"
+    report.consistency_result = consistency
     verification_records.insert(0, report)
     del verification_records[100:]
     rule_cache.put_if_eligible(report)

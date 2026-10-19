@@ -40,7 +40,10 @@ function reportList(root, records, query = "") {
     main.appendChild(el("p", "card-note", report.original_policy || "No original policy returned."));
     row.appendChild(main);
     const meta = el("div", "data-row-meta");
-    meta.appendChild(badge(report.rule_status || "unknown", report.rule_status === "eligible" ? "live" : "pending"));
+    meta.appendChild(report.rule_status === "contradictory"
+      ? badge("Contradictory", "bad")
+      : badge(report.rule_status || "unknown", report.rule_status === "eligible" ? "live"
+        : report.rule_status === "conflicted" ? "bad" : "pending"));
     meta.appendChild(el("span", "muted", report.status || "UNKNOWN"));
     row.appendChild(meta);
     table.appendChild(row);

@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 import z3
 
+from api import routes
 from api.routes import app
 from src.policy_verifier.cache import LocalRuleCache
 from src.policy_verifier.calculus import infer
@@ -11,6 +12,7 @@ from src.policy_verifier.models import (
     PolicyEffect,
     PolicyInterpretation,
     SecurityPolicy,
+    SolverResult,
     StructuredPolicy,
     VerificationStatus,
 )
@@ -186,6 +188,35 @@ def test_api_returns_complete_pipeline_and_rejects_conflict():
     ])
     assert conflict.status_code == 400
     assert conflict.json()["detail"]["report"]["conflicting_policies"] == ["p1", "p2"]
+
+
+def test_api_treats_unknown_consistency_as_not_valid(monkeypatch):
+    monkeypatch.setattr(
+        routes.pipeline.engine,
+        "check_consistency",
+        lambda *args, **kwargs: SolverResult(
+            status=VerificationStatus.UNKNOWN,
+            query_type="consistency",
+            explanation="Z3 could not determine satisfiability.",
+        ),
+    )
+    client = TestClient(app)
+    response = client.post("/api/v1/verify-policies", json=[{
+        "policy_id": "unknown-consistency",
+        "subject": "Administrators",
+        "action": "Delete",
+        "resource": "UserAccounts",
+        "effect": "Allow",
+        "raw_text": "Administrators can delete user accounts.",
+    }])
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_valid"] is False
+    assert body["rule_status"] == "contradictory"
+    assert body["consistency_result"]["status"] == "UNKNOWN"
+    assert "unknown-consistency" not in [
+        report["policy_id"] for report in client.get("/api/v1/rule-cache").json()
+    ]
 
 
 def test_text_api_parses_supported_input_and_rejects_unsupported_input():

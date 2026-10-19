@@ -142,8 +142,11 @@ class VerificationReport(BaseModel):
     constraints: list[FormalConstraint] = Field(default_factory=list)
     solver_result: SolverResult | None = None
     conflicts: list[ConflictFinding] = Field(default_factory=list)
+    consistency_result: SolverResult | None = None
     explanation: VerificationExplanation | None = None
-    rule_status: Literal["eligible", "rejected", "unsupported", "conflicted"] = "rejected"
+    rule_status: Literal[
+        "eligible", "rejected", "unsupported", "conflicted", "contradictory"
+    ] = "rejected"
     limitations: list[str] = Field(default_factory=list)
 
 
