@@ -100,6 +100,29 @@ def test_uncovered_action_and_request_mutations():
     assert other_subject["decision"] == admin["decision"]
 
 
+def test_request_names_match_policy_regardless_of_spacing_and_case():
+    response = _request(
+        ["Administrators can delete user accounts."],
+        ["Administrators"],
+        resource="user accounts",
+    ).json()
+    assert response["decision"] == "ALLOWED"
+    assert response["reason_code"] == "request_entailed"
+
+    for resource in ("UserAccounts", "Useraccounts", "useraccounts", "USER ACCOUNTS"):
+        assert _request(
+            ["Administrators can delete user accounts."],
+            ["Administrators"],
+            resource=resource,
+        ).json()["decision"] == "ALLOWED", resource
+    assert _request(
+        ["Administrators can delete user accounts."],
+        ["administrators"],
+        action="delete",
+        resource="user accounts",
+    ).json()["decision"] == "ALLOWED"
+
+
 def test_unknown_solver_is_not_determined(monkeypatch):
     class UnknownSolver:
         def add(self, *constraints):
@@ -219,4 +242,4 @@ def test_legacy_endpoints_keep_their_existing_shapes():
         }],
     )
     assert policies_response.status_code == 200
-    assert policies_response.json()["solver_result"]["query_type"] == "entailment"
+    assert policies_response.json()["reports"][0]["solver_result"]["query_type"] == "entailment"

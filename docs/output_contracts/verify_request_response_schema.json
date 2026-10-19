@@ -1,0 +1,127 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "verify-request-response-v1",
+  "title": "RequestDecisionReport",
+  "description": "HTTP 200 response body of POST /api/v1/verify-request. Derived from src/policy_verifier/models.py::RequestDecisionReport and the decision logic in src/policy_verifier/verifier.py::PolicyVerificationEngine.check_request. Error responses (HTTP 422) are documented in README.md, not here. Additional properties are allowed so that new optional fields can be added without breaking consumers.",
+  "type": "object",
+  "required": [
+    "decision",
+    "reason_code",
+    "explanation",
+    "consistency_query",
+    "allow_query",
+    "deny_query",
+    "execution_time_ms"
+  ],
+  "properties": {
+    "decision": {
+      "description": "Outcome of the request check. ALLOWED: the request is entailed by the policies and role assignment. DENIED: the negation of the request is entailed. NOT_DETERMINED: the policies do not decide the request; reason_code says why.",
+      "type": "string",
+      "enum": ["ALLOWED", "DENIED", "NOT_DETERMINED"]
+    },
+    "reason_code": {
+      "description": "Machine-readable reason. Fixed pairing with decision: ALLOWED -> request_entailed; DENIED -> request_prohibited; NOT_DETERMINED -> policy_set_contradictory, solver_unknown or not_covered_by_policies.",
+      "type": "string",
+      "enum": [
+        "request_entailed",
+        "request_prohibited",
+        "policy_set_contradictory",
+        "not_covered_by_policies",
+        "solver_unknown"
+      ]
+    },
+    "explanation": {
+      "description": "Human-readable explanation of the decision. Wording may change; consumers must branch on decision and reason_code, not on this text.",
+      "type": "string"
+    },
+    "consistency_query": {
+      "description": "Z3 check of the policies plus the request role facts alone. unsat means the policy set is contradictory for this subject.",
+      "$ref": "#/definitions/RequestQueryResult"
+    },
+    "allow_query": {
+      "description": "Z3 check of the policies, role facts and the NEGATED request. unsat means the request is entailed (ALLOWED).",
+      "$ref": "#/definitions/RequestQueryResult"
+    },
+    "deny_query": {
+      "description": "Z3 check of the policies, role facts and the request. unsat means the request is prohibited (DENIED).",
+      "$ref": "#/definitions/RequestQueryResult"
+    },
+    "constraints": {
+      "description": "The formal constraints that were encoded: one rule per policy, one fact per known role, the query and its negation.",
+      "type": "array",
+      "items": { "$ref": "#/definitions/FormalConstraint" }
+    },
+    "assumptions": {
+      "description": "Modelling assumptions in force, as human-readable strings (the model field is list[str], not an object). The role-witness axiom is enabled by default; the role-exclusivity axiom is always disabled for request checking because the request roles are encoded as a complete role assignment.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "Role-witness axiom enabled.",
+          "Role-witness axiom disabled.",
+          "Role-exclusivity axiom disabled for independent request checking."
+        ]
+      }
+    },
+    "execution_time_ms": {
+      "description": "Wall-clock time spent in check_request, in milliseconds.",
+      "type": "number",
+      "minimum": 0
+    },
+    "limitations": {
+      "description": "Known scope limitations of the decision, as human-readable strings.",
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "decision": { "const": "ALLOWED" } } },
+      "then": { "properties": { "reason_code": { "const": "request_entailed" } } }
+    },
+    {
+      "if": { "properties": { "decision": { "const": "DENIED" } } },
+      "then": { "properties": { "reason_code": { "const": "request_prohibited" } } }
+    },
+    {
+      "if": { "properties": { "decision": { "const": "NOT_DETERMINED" } } },
+      "then": {
+        "properties": {
+          "reason_code": {
+            "enum": ["policy_set_contradictory", "solver_unknown", "not_covered_by_policies"]
+          }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "RequestQueryResult": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "description": "Raw Z3 result for this query (lower case, as returned by Z3).",
+          "type": "string",
+          "enum": ["sat", "unsat", "unknown"]
+        },
+        "reason_unknown": {
+          "description": "Z3's reason when status is unknown; null otherwise.",
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "FormalConstraint": {
+      "type": "object",
+      "required": ["constraint_id", "expression", "kind"],
+      "properties": {
+        "constraint_id": { "type": "string" },
+        "expression": {
+          "description": "Readable first-order-logic rendering, e.g. \"∀x (Administrators(x) → CanDelete(x, UserAccounts))\".",
+          "type": "string"
+        },
+        "kind": { "type": "string", "enum": ["rule", "fact", "query", "negated_query"] },
+        "source_policy_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}
