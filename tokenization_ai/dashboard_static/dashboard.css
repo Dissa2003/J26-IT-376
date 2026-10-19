@@ -142,6 +142,12 @@ a { color: var(--blue-2); }
 .policy-result.mock { border-left-color: var(--amber); }
 .policy-result-status { font-size: 24px; font-weight: 750; letter-spacing: 0.5px; }
 .policy-result p, .policy-error p { color: var(--muted); margin-top: 3px; }
+.request-decision { margin-bottom: 12px; }
+.request-query-list { display: grid; gap: 8px; }
+.request-query-row { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; }
+.request-query-row strong { color: var(--ink); font-size: 13px; }
+.request-details { display: grid; gap: 8px; }
+.request-details h3 { color: var(--muted); font-size: 12px; font-weight: 650; margin-top: 4px; }
 .policy-stages { display: grid; gap: 12px; }
 .policy-stage { border: 1px solid var(--line); border-radius: 9px; padding: 12px; background: rgba(6, 20, 49, 0.7); }
 .policy-stage-head { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; }

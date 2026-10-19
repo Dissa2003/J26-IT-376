@@ -5,6 +5,7 @@ import pytest
 
 import src.policy_verifier.evaluation as evaluation
 from src.policy_verifier.evaluation import EvaluationDatasetError, evaluate_dataset
+from src.policy_verifier.request_evaluation import evaluate_request_dataset
 
 
 def test_reviewed_dataset_has_expected_size_and_all_cases_pass():
@@ -88,3 +89,19 @@ def test_malformed_expected_fields_report_case_and_field(tmp_path):
 
     with pytest.raises(EvaluationDatasetError, match=r"bad-01\.expected"):
         evaluate_dataset(path)
+
+
+def test_v3_request_evaluation_has_13_cases_and_runs(capsys):
+    path = Path(__file__).parents[1] / "src" / "policy_verifier" / "evaluation_dataset_v3.json"
+    result = evaluate_request_dataset(path)
+
+    assert result["case_count"] == 13
+    assert len(result["results"]) == 13
+    assert set(result["accuracy_by_decision"]) == {
+        "ALLOWED",
+        "DENIED",
+        "NOT_DETERMINED",
+    }
+    for mismatch in result["mismatches"]:
+        print(mismatch)
+    capsys.readouterr()

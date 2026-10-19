@@ -1,0 +1,135 @@
+{
+  "version": "policy-request-v3",
+  "cases": [
+    {
+      "id": "v3-01",
+      "policy_texts": ["Administrators can delete user accounts."],
+      "subject_roles": ["Administrators"],
+      "action": "Delete",
+      "resource": "UserAccounts",
+      "expected_decision": "ALLOWED",
+      "expected_reason_code": "request_entailed",
+      "justification": "The subject has the Administrators role, and that role universally permits deleting user accounts."
+    },
+    {
+      "id": "v3-02",
+      "policy_texts": ["Administrators can delete user accounts."],
+      "subject_roles": ["Guests"],
+      "action": "Delete",
+      "resource": "UserAccounts",
+      "expected_decision": "NOT_DETERMINED",
+      "expected_reason_code": "not_covered_by_policies",
+      "justification": "The policy constrains Administrators only, so neither deleting nor not deleting is entailed for a Guest."
+    },
+    {
+      "id": "v3-03",
+      "policy_texts": ["Only administrators can delete user accounts."],
+      "subject_roles": ["Guests"],
+      "action": "Delete",
+      "resource": "UserAccounts",
+      "expected_decision": "DENIED",
+      "expected_reason_code": "request_prohibited",
+      "justification": "The only-role rule requires every deleter to be an Administrator, while the subject is explicitly not an Administrator."
+    },
+    {
+      "id": "v3-04",
+      "policy_texts": ["Only administrators can delete user accounts."],
+      "subject_roles": ["Administrators"],
+      "action": "Delete",
+      "resource": "UserAccounts",
+      "expected_decision": "NOT_DETERMINED",
+      "expected_reason_code": "not_covered_by_policies",
+      "justification": "Being an Administrator satisfies the necessary role condition but the only-role rule does not grant deletion."
+    },
+    {
+      "id": "v3-05",
+      "policy_texts": ["Administrators cannot delete user accounts."],
+      "subject_roles": ["Administrators"],
+      "action": "Delete",
+      "resource": "UserAccounts",
+      "expected_decision": "DENIED",
+      "expected_reason_code": "request_prohibited",
+      "justification": "The prohibition rule entails that every Administrator cannot delete user accounts."
+    },
+    {
+      "id": "v3-06",
+      "policy_texts": ["Administrators can delete user accounts.", "Auditors cannot delete user accounts."],
+      "subject_roles": ["Administrators", "Auditors"],
+      "action": "Delete",
+      "resource": "UserAccounts",
+      "expected_decision": "NOT_DETERMINED",
+      "expected_reason_code": "policy_set_contradictory",
+      "justification": "The complete role assignment makes both the permission and prohibition apply to the same subject, so the policy set is inconsistent."
+    },
+    {
+      "id": "v3-07",
+      "policy_texts": ["Administrators can delete user accounts.", "Auditors cannot delete user accounts."],
+      "subject_roles": ["Auditors"],
+      "action": "Delete",
+      "resource": "UserAccounts",
+      "expected_decision": "DENIED",
+      "expected_reason_code": "request_prohibited",
+      "justification": "The subject is an Auditor and not an Administrator, so the Auditor prohibition entails that deletion is false."
+    },
+    {
+      "id": "v3-08",
+      "policy_texts": ["Administrators can delete user accounts.", "Auditors cannot delete user accounts."],
+      "subject_roles": ["Administrators"],
+      "action": "Delete",
+      "resource": "UserAccounts",
+      "expected_decision": "ALLOWED",
+      "expected_reason_code": "request_entailed",
+      "justification": "The subject is an Administrator and not an Auditor, so the Administrator permission entails deletion without contradiction."
+    },
+    {
+      "id": "v3-09",
+      "policy_texts": ["Administrators can delete user accounts.", "Auditors can read audit logs."],
+      "subject_roles": ["Auditors", "Administrators"],
+      "action": "Delete",
+      "resource": "UserAccounts",
+      "expected_decision": "ALLOWED",
+      "expected_reason_code": "request_entailed",
+      "justification": "The subject has the Administrators role, whose permission entails deleting user accounts; the unrelated Auditor rule does not conflict."
+    },
+    {
+      "id": "v3-10",
+      "policy_texts": ["Administrators can delete user accounts."],
+      "subject_roles": ["Administrators"],
+      "action": "Read",
+      "resource": "UserAccounts",
+      "expected_decision": "NOT_DETERMINED",
+      "expected_reason_code": "not_covered_by_policies",
+      "justification": "The policy covers Delete rather than Read, so neither the requested read nor its negation is entailed."
+    },
+    {
+      "id": "v3-11",
+      "policy_texts": ["Administrators can delete user accounts."],
+      "subject_roles": ["Administrators"],
+      "action": "Delete",
+      "resource": "AuditLogs",
+      "expected_decision": "NOT_DETERMINED",
+      "expected_reason_code": "not_covered_by_policies",
+      "justification": "The policy covers UserAccounts rather than AuditLogs, so the requested deletion is not covered."
+    },
+    {
+      "id": "v3-12",
+      "policy_texts": ["Administrators can delete user accounts."],
+      "subject_roles": ["Administrators", "Contractors"],
+      "action": "Delete",
+      "resource": "UserAccounts",
+      "expected_decision": "ALLOWED",
+      "expected_reason_code": "request_entailed",
+      "justification": "The subject has the Administrators role, and the additional complete-assignment Contractors role does not negate that permission."
+    },
+    {
+      "id": "v3-13",
+      "policy_texts": ["Only administrators can delete user accounts.", "Guests can delete user accounts."],
+      "subject_roles": ["Guests"],
+      "action": "Delete",
+      "resource": "UserAccounts",
+      "expected_decision": "NOT_DETERMINED",
+      "expected_reason_code": "policy_set_contradictory",
+      "justification": "The Guest permission implies deletion while the only-role rule implies that any deleter is an Administrator, contradicting the subject's complete Guest-only assignment."
+    }
+  ]
+}
