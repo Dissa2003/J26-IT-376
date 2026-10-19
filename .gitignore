@@ -13,3 +13,4 @@ htmlcov/
 
 # Generated modernization analysis artifacts
 .github/modernize/
+scripts/.demo_pids.json

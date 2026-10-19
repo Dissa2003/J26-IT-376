@@ -59,6 +59,15 @@ curl -X POST localhost:8000/v1/events -H "x-api-key: dev-key-1" -H "content-type
 curl localhost:8000/v1/alerts -H "x-api-key: dev-key-1"
 ```
 
+## Run the demo
+
+```powershell
+.\scripts\start_demo.ps1
+.\scripts\stop_demo.ps1
+```
+
+Open `http://127.0.0.1:8010/dashboard#/policy-verification` after starting.
+
 ## Branching
 - `main`: protected, PR + 1 review + green CI. Production-ready.
 - `develop`: integration branch.
