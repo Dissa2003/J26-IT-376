@@ -26,6 +26,7 @@
 | `1.2.0-draft` (D4-6C1) | **Documentation only: optimization and score-selection decisions recorded** (section 12.11.2): arm-relative learning rates `lr = c / L` with `c` in {0.1, 0.3, 0.8}, the 27-candidate shared grid, validation-AP selection with a fixed tie-break order, raw-logit ranking scores for the held-out evaluation, and numerical-provenance requirements. Informed by the label-free D4-6B diagnostic on development seed 6101. No code, model, dataset, manifest or confirmatory data was created or changed; several items remain open; nothing is frozen. |
 | `1.2.0-draft` (D4-6C2) | **`lambda-power-1` and `logit-readout-1` implemented** (`numerics.py`, section 12.11.3): the training-only eigenvalue estimator with arm-relative learning rates, and a faithful raw-logit readout of the unchanged `LightweightAnomalyModel`. Tested on hand-made inputs and explicitly assigned weights; a label-free check on development seed 6101 (training split) matched the D4-6B measurements. No model is fitted or scored, no runner or manifest exists, no confirmatory data; no production, arm, metric, budget, generator, audit or split change; nothing is frozen. |
 | `1.2.0-draft` (D4-6C3) | **Documentation only: remaining scientific evaluation decisions recorded** (section 12.11.4): the primary A-versus-B evidence rule (paired 95% interval strictly above zero, margin zero), the bootstrap validity convention, the strict fail-closed pairing, truncation and exclusion policy, the one-time test gate with its crash policy, and the development-seed policy. No code, runner, manifest, selection record or data was created or changed; the runner, manifest, hashes and final verification are still pending; nothing is frozen. |
+| `1.2.0-draft` (D4-6D1) | **Runner foundation `runner-foundation-1` implemented** (`runner.py`, section 12.11.5): dataset and split validation, by-id label alignment, train-only vocabulary, budget and numerical configuration, the label-free representability preflight (fail-closed), pure validation-only candidate selection, a label-free `SealedTestSet`, and explicitly unavailable training and test-access gates. No model is fitted or scored, no manifest, selection record or attempt marker exists, no confirmatory data; no existing component changed; the test gate is **not** complete; nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -418,7 +419,7 @@ protocol is frozen.
 | 10 | Whether `audit.py` gains path-root and method-by-path-category summaries | **Implemented** (D4-0, section 12.2.2) as a separate descriptive field; audit thresholds, errors and warnings unchanged. |
 | 11 | Scope of label-conditioned audits relative to the sealed test split | **Open** (12.6). |
 | 12 | Whether development-seed (6101) dry runs report any detection metric | **Decided in D4-6C3 (12.11.4):** no detection-quality result is reported or used for any choice from seed 6101; permitted uses are listed there. |
-| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` (12.9.1), `budget-rule-1` (12.8.1) the Arm C encoder (12.10.1), the paired arm builders (12.12.1) and the metric and bootstrap functions (12.11.1) exist so far; the runner and manifest tool do not. |
+| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` (12.9.1), `budget-rule-1` (12.8.1) the Arm C encoder (12.10.1), the paired arm builders (12.12.1) and the metric and bootstrap functions (12.11.1) exist so far; the runner foundation (12.11.5) and the numerical helpers (12.11.3) exist too; model fitting, the manifest, the selection record, the attempt marker and test scoring do not. |
 | 14 | Any generator correction beyond G1 and G2 | **Not approved.** Needs a documented reason and approval before the generator is fixed for the confirmatory study (12.2). |
 
 ## 12. Design decisions recorded in D3c-1 (documentation only)
@@ -1124,6 +1125,70 @@ failure-report format and the manual-review procedure; the manifest source hashe
 the test split (section 11, item 11); and the final decision to generate the confirmatory dataset and freeze. No confirmatory experiment may start
 before these are resolved and documented.
 
+#### 12.11.5 Runner foundation `runner-foundation-1` (implemented in D4-6D1)
+
+`tokenization_ai/heldout_eval/runner.py` connects the existing components through small, validating, fail-closed steps. **It fits no model, computes no
+detection metric, scores nothing, reads no test label and has not touched any confirmatory data** (seeds 7101-7103 unused). Tests:
+`tests/tokenization_ai/test_runner.py` (development seed 6101 for structure only; hand-made result lists for selection). The protocol remains a draft.
+
+**Interface (what exists).**
+- *A. Dataset and split validation.* `partition_records(records, split_result)` returns a `Partition` of `TrainData`, `ValidationData` and a
+  `SealedTestSet`. It refuses: non-`EvalRecord` or empty input, duplicate record ids, a split that does not meet its requirements, any splitter
+  exclusion (no silent exclusions), assignments that do not match the records one to one, an unknown split name, a template group spanning splits,
+  any violation reported by `verify_split_isolation` (groups, templates, exact duplicates), and a train or validation split without both classes.
+- *B. Alignment.* Arm pairing is enforced by `ArmInputs` (same ids, same order in all three arms). `aligned_labels(record_ids, labels_by_id)` maps labels
+  to that verified order **by record id** and rejects missing, extra, duplicate or non-0/1 labels; list position never determines a label.
+- *C. Train-only preparation.* `prepare_train_configuration(train)` accepts only `TrainData` and runs `prepare_split`, `select_shared_max_length`
+  (`budget-rule-1`) on the training Arm B lengths, `fit_shared_vocabulary` (`min_frequency = 2`, `max_literal_vocab_size = None`) and
+  `build_arm_inputs`, returning a `TrainConfiguration` (its `to_dict` is manifest-ready). `encode_validation` encodes validation records with the
+  **frozen** vocabulary and budget (no refit, no new budget) and fails closed if any request is not represented in full.
+- *D. Representability preflight (D4-6C3 item 3).* `preflight_prepared`, `preflight_split` and `preflight_report` compute the real tensorizer outcome
+  (`fits`, `truncated`, `rejected`) of every Arm A and Arm B request against the frozen budget for train, validation and the blinded test requests.
+  Reports hold record ids (capped at 20 listed), arm names, counts and categories only. Any outcome other than `fits` raises `RepresentabilityError` after the
+  full report is built; nothing is excluded, truncated, re-budgeted or adapted, and Arm C (no budget) is reported as not applicable. The preflight reads no
+  label and no score. *(Corrected in D4-6D1R.)* For validation and test requests it builds only transient, vocabulary-free Arm A and Arm B
+  `TokenSequence`s through the arm builders' own stage flow (`arms._front_end`, plus the checked `simpol-1` rules for Arm B), takes the tensorizer outcome
+  of each, and returns counts and ids; the sequences are local to the call and retained nowhere. It builds **no** vocabulary ids, **no** `ModelInput`
+  (hence no scoring-ready input) and **no** Arm C encoding (Arm C has no budget); the first version of D4-6D1 called `prepare_split`, which also built
+  Arm C inputs, and this was replaced. The preflight relies on two private `arms.py` members (`_front_end`, `_check_simulated`); a test pins its
+  sequences to `prepare_split`. Tests also assert the report is identical for blinded and true-labelled test records and that the encoders, the
+  tensorizer's `tensorize`, the vocabulary and `prepare_split` are never called by it.
+- *E. Numerical configuration.* `prepare_numerical_configuration(config)` calls `estimate_from_arm_inputs` (`lambda-power-1`) on the training inputs for each
+  arm and `num_buckets`, `learning_rate_table`, and `build_candidates`: 27 candidates per arm (`num_buckets` x `epochs` {50, 150, 400} x `c`), each with
+  a canonical identifier `ARM|nb=NNNNN|ep=EEEE|c=C.CC` and its learning rate. No model is created.
+- *F. Validation-only selection.* `select_candidate(results, arm=..., validation_ids_sha256=...)` is pure. It takes `ValidationCandidateResult`
+  objects (supplied by the future fitting stage) and requires: the `validation` split label on every result; one arm; exactly the 27 approved
+  candidates (no missing, duplicate or unexpected identifier or hyperparameter value, identifiers matching their parameters); a defined, finite AP in
+  [0, 1]; one common validation-record fingerprint and count (and, if given, the expected fingerprint). Selection: highest AP **rounded to 10 decimals**;
+  ties: fewer epochs, smaller `num_buckets`, smaller `c`, then candidate identifier. The decision keeps every full-precision AP and the complete ranking,
+  states `basis = validation_split_only` and `test_data_used = false`, and does not depend on input order. Validation-only F1 threshold selection stays a
+  future integration of `detection_metrics.select_threshold`.
+- *G. Sealed-test boundary and unavailable gates.* The test split is held as a `SealedTestSet`: blinded request records (the type requires a label field,
+  so it holds the **sentinel `-1`, which is not a class**: `aligned_labels`, `TrainData`, `ValidationData` and model training all reject it, and the arm
+  builders never read it), record ids and group ids. **The test labels are dropped at partition time** and are not retained by the runner, the partition
+  summary reports no test label statistic, and the set offers no method that scores, encodes or unseals. *(D4-6D1R: the sentinel was `0` in the first
+  version, which a careless reader could have taken for "normal"; `-1` fails closed.)* `SealedTestSet.binding()` returns the record count, the SHA-256 of
+  the sorted record-id list and of the group-id list, and the split manifest hash (no label, no content).
+  *Where the authentic test labels live and how they are recovered.* Only in the caller's source dataset (`EvalRecord.meta.label`, rebuilt deterministically
+  from the recorded generator seed; the dataset fingerprint and the split manifest hash are recorded in the pre-run manifest). The future one-time test gate
+  (not implemented) must read them from that source **by record id, after** both records verify and the atomic attempt marker exists, check the
+  recovered id set and split against `binding()` and the manifest, and align them with `aligned_labels`. Selection functions never receive them. `request_training_authorization()`
+  and `request_test_access()` always raise `AuthorizationUnavailable`, listing the missing prerequisites; they take no arguments, so no caller-supplied
+  verifier can unlock them, and `TRAINING_AUTHORIZATION_AVAILABLE` and `TEST_SCORING_AVAILABLE` are `False`. There is no mock success path in the module.
+
+**Split isolation.** Train labels are available for fitting only and validation labels for selection only; selection functions accept neither a
+`SealedTestSet` nor test data. The generator and splitter may use labels internally, as already documented.
+
+**What is deliberately not implemented** (so the test gate is **not** complete and nothing is frozen): the pre-run manifest writer and verifier; the
+validation-selection record writer and verifier; the persistent, atomically created one-time attempt marker; fitting of candidate models and the
+training loop; validation scoring, validation-only threshold selection on real scores and the use of `raw_logit` readout in a run; the failure-report
+format and the manual-review procedure; test unsealing, test encoding and scoring; the test-side bootstrap and final reporting. Before any confirmatory
+execution these must exist, be reviewed and be bound into the manifest (12.12), and the open items of 12.11.4 must be resolved.
+
+**Known limitations.** Privacy of the sealed set is by construction (labels are not held), not by Python access control; the caller still holds the
+original records. The preflight reads test request content (token counts and tensorizer outcomes), as approved in D4-6C3. `partition_records` relies on the
+splitter's own report for class presence in the test split and does not inspect test labels beyond dropping them.
+
 ### 12.12 Evaluation provenance and the write-once pre-run manifest (plan)
 
 **This step creates no manifest.** The pre-run manifest is written **once**, only after all relevant runner, arm,
@@ -1238,6 +1303,7 @@ the confirmatory run, and what confirmatory evidence exists. It holds no perform
 | 9c | D4-6B / D4-6C1 | Exploratory finding, then pre-run decision (recorded) | Label-free feature-scale diagnostic on development seed 6101 (training split, no model); arm-relative learning rates, 27-candidate grid, validation-AP selection with tie-breaks and raw-logit ranking recorded as accepted draft decisions (12.11.2). No code, no score. |
 | 9d | D4-6C2 | Design revision (implemented) | `lambda-power-1` estimator, relative learning-rate table and `logit-readout-1` written (12.11.3) and tested on hand-made inputs; label-free development check on seed 6101 (training split) reproduced the D4-6B eigenvalues. No model fit, no score. |
 | 9e | D4-6C3 | Pre-run decision (recorded) | Primary evidence rule, bootstrap validity convention, strict pairing and fail-closed truncation policy, one-time test gate and crash policy, development-seed policy (12.11.4). No code, no score. |
+| 9f | D4-6D1 / D4-6D1R | Design revision (implemented, then corrected before commit) | Runner foundation written (12.11.5) and tested on development-seed structure and hand-made selection fixtures; test access and training authorization are explicitly unavailable. Safety review: test labels replaced by the invalid sentinel `-1` and a split binding added; the preflight no longer builds Arm C or any `ModelInput`. No fit, no score, no manifest. |
 | 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; runner and manifest code (estimator and logit extraction: D4-6C2, 12.11.3). |
 | 11 | Pending | Pre-run decision | Write-once pre-run manifest, before any training or scoring. |
 | 12 | Pending | Confirmatory evidence | Confirmatory dataset (seed 7101), validation-only selection, one scored test run. **No confirmatory evidence exists yet.** |
