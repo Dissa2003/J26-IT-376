@@ -32,6 +32,7 @@
 | `1.2.0-draft` (D4-6D2C) | **One-time test attempt gate `test-attempt-gate-1` and marker `test-attempt-marker-1` implemented** (`attempt_gate.py`, section 12.12.4): the real manifest and selection-record verifiers must pass before an atomic `O_EXCL` marker is created in a trusted directory outside the repository; only afterwards are the authentic test labels recovered from the source records and validated; any failure after the marker leaves it intact and writes a redacted failure report. No real marker exists, nothing is scored, the runner's gates are still blocked and unconnected, the draft protocol cannot open the gate, and nothing is frozen. |
 | `1.2.0-draft` (D4-7A) | **Model artifact persistence `model-artifact-1` implemented** (`model_artifacts.py`, section 12.12.5): a single canonical-JSON, write-once file per candidate that stores a fitted `LightweightAnomalyModel` bit-exactly (float64 weights as base64 chunks, exact bias, fingerprint), bound to the candidate, its train-only learning rate, the model source hash and a manifest digest, with a strict loader that takes all expectations from the caller and a 81-candidate set loader. No research model exists, nothing is trained or authorized, `selection_record.py` is unchanged (so non-selected candidate APs are still claims), and nothing is frozen. |
 | `1.2.0-draft` (D4-7B) | **All-candidate validation verification and manifest source coverage** (`selection_record.py`, `manifest.py`, section 12.12.6): the validation-selection record is now `validation-selection-record-2` and its verifier recomputes the validation AP of **all 81** candidates from independently trusted, `model-artifact-1`-verified model artifacts (the old selected-only version 1 is refused); the manifest's default source list grows from 22 to 25 files (adding `selection_record.py`, `attempt_gate.py`, `model_artifacts.py`) with normalized-content hashing stated explicitly. Nothing is trained or scored, no real record exists, `test_attempt_gate.py` needs a fixture update for the new evidence, and nothing is frozen. |
+| `1.2.0-draft` (D4-7C1) | **Gate-side source-coverage enforcement** (`attempt_gate.py`, section 12.12.7): the test attempt gate no longer forwards any verifier override (source list, configuration list, protocol path, environment-mismatch flag); it runs the real manifest verifier with the trusted code constants, then its own coverage check (exact required source table re-hashed from the live repository, gate-critical modules in the required list, verifier coverage report), all before the marker. Nothing is trained or scored, no real manifest or marker exists, the runner gates stay blocked, and nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -1408,7 +1409,7 @@ protocol header says FROZEN, development-seed structure, mock fitted artifacts, 
 confirmatory seed). The gate's production code has no flag, callback or already-verified object that can do the same. The module is named `attempt_gate.py` (renamed in D4-6D2C from a first name that matched pytest's
 `test_*.py` collection pattern) so that no collection of the `heldout_eval` directory can mistake it for a test module.
 
-**Verification order (`verify_attempt_inputs`; nothing is created on failure).** (1) The expected run must be `confirmatory` (an infrastructure run, or any draft, cannot open
+**Verification order (`verify_attempt_inputs`; nothing is created on failure).** *(Extended in D4-7C1: the gate accepts no verifier overrides and adds a source-coverage check after the manifest verifier; see 12.12.7.)* (1) The expected run must be `confirmatory` (an infrastructure run, or any draft, cannot open
 the gate). (2) Manifest and selection record must be supplied as their **exact bytes** (a dictionary, a string or a flag is refused). (3) The real
 `manifest.verify_manifest_bytes`: external digest, `Status: FROZEN` protocol with an externally approved hash, confirmatory seed, clean tree, commit, source and config hashes,
 dataset/split provenance, compatible environment. (4) The real `selection_record.verify_selection_record_bytes`: external digest, binding to that exact manifest digest, full
@@ -1534,7 +1535,42 @@ training was authorized, or that the train, validation and test splits were sepa
 are bound to a manifest digest, not to a signature. The held-out evaluation remains synthetic-only; Arm B uses simulated `simpol-1` rules, which must not be represented as Member 2 verified policies.
 
 **F. Remaining before training authorization and protocol freeze.** The protocol freeze and a real manifest; the training-authorization wiring from a verified manifest to the runner; the training and validation stage that
-produces the 81 artifacts and the record; a gate-side requirement for the default (complete) source list; the manual-review procedure; test scoring and the final report.
+produces the 81 artifacts and the record; a gate-side requirement for the default (complete) source list (done in D4-7C1, section 12.12.7); the manual-review procedure; test scoring and the final report.
+
+#### 12.12.7 Gate-side source-coverage enforcement (implemented in D4-7C1)
+
+`attempt_gate.py` now refuses a manifest that does not cover the complete trusted source set, before any marker is created. Nothing is trained, scored or unsealed, no real manifest, record or marker exists, the runner's training
+and test gates are unchanged and still blocked, and the protocol remains a draft (seeds 7101-7103 unused).
+
+**The gap.** `verify_attempt_inputs` and `open_test_attempt` forwarded arbitrary keyword arguments to the manifest and selection-record verifiers, and the manifest verifier checks the source table against whatever list it is
+given (`source_files`, default `DEFAULT_SOURCE_FILES`). A caller could therefore pass a shorter `source_files` list (or another `config_files`, `protocol_path`, or `allow_environment_mismatch=True`) and obtain a manifest
+that passed verification while omitting protected modules. The verifier reports the situation (`VerificationResult.source_list_is_default`, `missing_required_sources`), but the gate did not look at it.
+
+**The enforcement.**
+- *No overrides.* The gate functions have no `**manifest_kwargs` and no parameter for a source list, configuration list, protocol path or environment-mismatch flag; passing one raises `TypeError` before anything happens. The gate
+  calls both verifiers with the trusted code constants only: `manifest.REQUIRED_SOURCE_FILES` (equal to `DEFAULT_SOURCE_FILES`), `DEFAULT_CONFIG_FILES` and `DEFAULT_PROTOCOL_PATH`; the environment check is therefore always strict.
+- *Order.* (1) expected run is `confirmatory`; (2) exact bytes; (3) the **real manifest verifier**; (4) the gate's **source-coverage check** (`_check_source_coverage`); (5) the real selection-record verifier (which re-verifies the
+  manifest and all 81 artifacts); (6) the record's test-status flags; (7) the sealed-set bindings. Only then is a `VerifiedAttempt` produced, and the marker is created afterwards; a failure at any step creates no marker.
+- *What the coverage check requires.* It does not rely on the verifier's report alone. (a) The trusted required list contains no duplicates and includes `GATE_CRITICAL_SOURCES` (`model.py`, `manifest.py`, `selection_record.py`,
+  `model_artifacts.py`, `attempt_gate.py`, `runner.py`, `numerics.py`, `detection_metrics.py`), so shrinking the manifest module's constant cannot silently drop a module the gate depends on. (b) The verifier's result must
+  report `source_list_is_default = True` and no `missing_required_sources`; a result lacking those fields is refused. (c) The manifest's own `sources` table must have **exactly** the required paths (no omission, no extra entry)
+  and must equal the hashes recomputed from the live repository by `manifest.hash_files` (normalized-content SHA-256); a missing file fails. (d) The manifest's `config_files` table must have exactly the default configuration paths.
+  Any failure raises `GateVerificationError("source coverage is not complete (...)")` naming categories only.
+- *Reused, not duplicated.* The real verifier already compares hashes, branch, commit, cleanliness, protocol, dataset and split provenance; the gate adds only the coverage invariants that depend on the list the caller used.
+
+**Tests (`test_attempt_gate.py`, now 82).** The fixture repository has the complete default layout (all 25 required sources, the two configuration files and the protocol at their code-defined paths; `numerics.py` and `model.py`
+carry the real content because the manifest cross-checks their hashes). New tests cover: complete coverage accepted; omitted sources (each of five modules) with a recomputed digest rejected; substituted source hashes rejected by the
+real verifier; a partial source list whose listed hashes are all genuine rejected; the gate's own check rejecting a partial manifest when a fooled verifier claims complete coverage, when it reports incomplete coverage, and when it
+returns no coverage fields; forged coverage metadata, an altered configuration table and an extra source entry rejected; a missing required source file rejected; every override keyword refused; a shrunken trusted list rejected;
+all 81 artifacts still verified through the gate; and the real repository's DRAFT protocol unable to open the gate. A mutation check (disabling `_check_source_coverage`) makes the tests that target it fail. The original
+gate tests (restart persistence, 16-thread race, ordering, redaction, no retry, binding checks) are unchanged in meaning.
+
+**Limitations.** The coverage check is as strong as `manifest.py`, `hash_files` and the gate itself, all of which live in the repository being verified; the critical-module floor guards against shrinking the list, not against an
+attacker who also edits the gate. Normalized-content hashes ignore line-ending differences by design. Source files outside the required list (the archived KPI evaluation, the service, the API, the dashboard) are not covered.
+The gate still cannot prove that nothing read the test data earlier, nor that the persisted models were trained on training data only.
+
+**Remaining before training authorization.** The protocol freeze and a real manifest; the training-authorization wiring from a verified manifest to the runner; the training and validation stage that writes the 81 artifacts and the
+record; the manual-review procedure; test scoring and the final report.
 
 ## 13. Chronological record
 
@@ -1563,6 +1599,7 @@ the confirmatory run, and what confirmatory evidence exists. It holds no perform
 | 9i | D4-6D2C | Design revision (implemented) | One-time attempt gate, atomic marker, post-marker label recovery and failure reports written (12.12.4) and tested with the real verifiers on disposable fixtures. No real marker, no scoring, runner gates unchanged. |
 | 9j | D4-7A | Design revision (implemented) | Model artifact writer and loader written (12.12.5) and tested on hand-built fitted fixtures; the all-candidate validation-verification requirement for `selection_record.py` is recorded as unresolved. No research artifact, no fit, no score. |
 | 9k | D4-7B | Design revision (implemented) | Selection record upgraded to version 2 with recomputation of all 81 candidate APs from verified model artifacts; manifest source list extended to 25 files; normalized-content hashing stated. No real record, no fit, no score; the attempt-gate test fixture needs an update (12.12.6). |
+| 9l | D4-7C1 | Design revision (implemented) | The test attempt gate enforces complete, trusted manifest source coverage (12.12.7) and accepts no verifier overrides; tested with a complete-layout disposable repository and negative cases. No real manifest or marker, no fit, no score. |
 | 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; runner and manifest code (estimator and logit extraction: D4-6C2, 12.11.3). |
 | 11 | Pending | Pre-run decision | Write-once pre-run manifest, before any training or scoring. |
 | 12 | Pending | Confirmatory evidence | Confirmatory dataset (seed 7101), validation-only selection, one scored test run. **No confirmatory evidence exists yet.** |

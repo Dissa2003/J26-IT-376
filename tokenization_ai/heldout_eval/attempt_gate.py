@@ -7,7 +7,10 @@ and are not wired to this module. Because the protocol is a DRAFT, a real confir
 Order of operations (each step must succeed before the next)
 --------------------------------------------------------------
 1. :func:`verify_attempt_inputs`: the **real** manifest verifier (external digest, FROZEN and externally approved protocol, clean tree, commit, source and
-   config hashes, dataset/split provenance, environment) and the **real** validation-selection verifier (external digest, binding to that exact manifest,
+   config hashes, dataset/split provenance, environment), run with the **trusted code-defined** source, configuration and protocol lists only (the gate accepts
+   no override: no source list, configuration list, protocol path or environment-mismatch flag can be passed), followed by the gate's own **source-coverage
+   check** (the manifest must cover exactly ``manifest.REQUIRED_SOURCE_FILES``, each hash re-verified against the live repository, and the list must contain
+   the gate's critical modules), and then the **real** validation-selection verifier (external digest, binding to that exact manifest,
    recomputation from trusted validation evidence). The expected run must be ``confirmatory``. There is no flag, callback or "already verified" object a
    caller can pass; the :class:`VerifiedAttempt` it returns can only be made by this function. The sealed test set must match the manifest (id hash, count, group
    count, split hash) and the supplied split result.
@@ -52,6 +55,11 @@ BLINDED_LABEL = -1  # the runner's sentinel for blinded records; never ground tr
 _HEX64 = re.compile(r"[0-9a-f]{64}")
 _UTC = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
 _KEY = object()  # only this module creates VerifiedAttempt / MarkerReceipt objects
+# The modules the gate itself relies on. A trusted required-source list that omits any of them is refused, so shrinking ``manifest.REQUIRED_SOURCE_FILES``
+# cannot silently remove them from the protected set.
+GATE_CRITICAL_SOURCES: tuple[str, ...] = tuple(f"tokenization_ai/{name}" for name in (
+    "model.py", "heldout_eval/manifest.py", "heldout_eval/selection_record.py", "heldout_eval/model_artifacts.py", "heldout_eval/attempt_gate.py",
+    "heldout_eval/runner.py", "heldout_eval/numerics.py", "heldout_eval/detection_metrics.py"))
 _MARKER_KEYS = {"marker_version", "gate_version", "lifecycle_state", "experiment_id", "manifest_sha256", "selection_record_sha256", "dataset_seed",
                 "dataset_fingerprint", "generator_fingerprint", "split_manifest_sha256", "test_ids_sha256", "test_records", "created_utc"}
 STAGES = ("verification", "marker_creation", "marker_persistence", "label_recovery")
@@ -273,28 +281,34 @@ def create_attempt_marker(attempt_root: str | os.PathLike[str], verified: Verifi
 
 def verify_attempt_inputs(*, manifest_bytes: bytes, expected_manifest_sha256: str, record_bytes: bytes, expected_record_sha256: str,
                           repo_root: str | os.PathLike[str], expected_run: mf.ExpectedRun, evidence: sr.ValidationEvidence,
-                          sealed_test: runner.SealedTestSet, **manifest_kwargs: Any) -> VerifiedAttempt:
-    """Run the real manifest and selection-record verifiers and the sealed-set bindings. Raises :class:`GateVerificationError`; creates nothing."""
+                          sealed_test: runner.SealedTestSet) -> VerifiedAttempt:
+    """Run the real manifest and selection-record verifiers, the source-coverage check and the sealed-set bindings. Creates nothing.
+
+    The source list, configuration list and protocol path are the trusted constants of ``manifest``; there is no parameter to change them. Raises
+    :class:`GateVerificationError` on any failure.
+    """
     if not isinstance(expected_run, mf.ExpectedRun) or expected_run.purpose != mf.PURPOSE_CONFIRMATORY:
         raise GateVerificationError("the gate only opens for an expected confirmatory run")
     if not isinstance(manifest_bytes, (bytes, bytearray)) or not isinstance(record_bytes, (bytes, bytearray)):
         raise GateVerificationError("the manifest and the selection record must be supplied as their exact bytes")
     if not isinstance(sealed_test, runner.SealedTestSet) or not isinstance(evidence, sr.ValidationEvidence):
         raise GateVerificationError("a SealedTestSet and ValidationEvidence are required")
+    trusted = {"source_files": tuple(mf.REQUIRED_SOURCE_FILES), "config_files": tuple(mf.DEFAULT_CONFIG_FILES), "protocol_path": mf.DEFAULT_PROTOCOL_PATH}
     try:
-        mf.verify_manifest_bytes(bytes(manifest_bytes), expected_sha256=expected_manifest_sha256, repo_root=repo_root, expected=expected_run,
-                                 **manifest_kwargs)
+        manifest_result = mf.verify_manifest_bytes(bytes(manifest_bytes), expected_sha256=expected_manifest_sha256, repo_root=repo_root,
+                                                   expected=expected_run, **trusted)
     except mf.ManifestError as exc:
         raise GateVerificationError(f"the pre-run manifest did not verify ({type(exc).__name__})") from None
+    manifest = mf.parse_manifest_bytes(bytes(manifest_bytes))
+    _check_source_coverage(manifest, manifest_result, repo_root)
     try:
         verification = sr.verify_selection_record_bytes(bytes(record_bytes), expected_sha256=expected_record_sha256, manifest_bytes=bytes(manifest_bytes),
                                                         expected_manifest_sha256=expected_manifest_sha256, repo_root=repo_root,
-                                                        expected_run=expected_run, evidence=evidence, **manifest_kwargs)
+                                                        expected_run=expected_run, evidence=evidence, **trusted)
     except mf.ManifestError as exc:
         raise GateVerificationError(f"the validation-selection record did not verify ({type(exc).__name__})") from None
     if not verification.ok or verification.manifest_sha256 != expected_manifest_sha256 or verification.authorizes_test_scoring is not False:
         raise GateVerificationError("the validation-selection verification result is not acceptable")
-    manifest = mf.parse_manifest_bytes(bytes(manifest_bytes))
     record = mf.parse_manifest_bytes(bytes(record_bytes))
     if record["test_status"] != {"test_scored": False, "test_labels_accessed": False, "test_scores_accessed": False, "test_data_in_record": False}:
         raise GateVerificationError("the selection record reports prior test access")
@@ -304,6 +318,35 @@ def verify_attempt_inputs(*, manifest_bytes: bytes, expected_manifest_sha256: st
                            dataset_fingerprint=manifest["data"]["dataset_fingerprint"], generator_fingerprint=manifest["data"]["generator"]["fingerprint"],
                            split_manifest_sha256=manifest["data"]["split"]["manifest_sha256"],
                            test_ids_sha256=manifest["arms"]["alignment"]["test_ids_sha256"], test_records=manifest["arms"]["alignment"]["test_records"])
+
+
+def _check_source_coverage(manifest: dict[str, Any], result: Any, repo_root: str | os.PathLike[str]) -> None:
+    """Refuse a manifest that does not cover the complete trusted source set. Runs after the real manifest verifier and before anything is created.
+
+    Nothing reported by the verifier or the manifest is taken on trust: the required list is the manifest module's code constant, the manifest's own source and
+    configuration tables must equal it exactly, and every required file is hashed again from the live repository. The verifier's reported coverage fields are
+    checked as an additional signal, never as the only proof.
+    """
+    required = tuple(mf.REQUIRED_SOURCE_FILES)
+    problems = []
+    if len(set(required)) != len(required) or not set(GATE_CRITICAL_SOURCES) <= set(required):
+        problems.append("the trusted required-source list omits a module the gate depends on")
+    if getattr(result, "source_list_is_default", None) is not True or tuple(getattr(result, "missing_required_sources", ("?",))) != ():
+        problems.append("the manifest verifier reports incomplete source coverage")
+    sources, configs = manifest.get("sources"), manifest.get("config_files")
+    if not isinstance(sources, dict) or set(sources) != set(required):
+        problems.append("the manifest's source table differs from the trusted required list")
+    else:
+        try:
+            live = mf.hash_files(repo_root, required)
+        except mf.ManifestError:
+            live = None
+        if live is None or sources != live:
+            problems.append("a required source is missing from, or differs from, the live repository")
+    if not isinstance(configs, dict) or set(configs) != set(mf.DEFAULT_CONFIG_FILES):
+        problems.append("the manifest's configuration table differs from the trusted list")
+    if problems:
+        raise GateVerificationError("source coverage is not complete (" + "; ".join(problems) + ")")
 
 
 def _check_sealed(manifest: dict[str, Any], split_result: SplitResult, sealed: runner.SealedTestSet) -> None:
@@ -449,11 +492,11 @@ class AttemptOutcome:
 def open_test_attempt(*, attempt_root: str | os.PathLike[str], manifest_bytes: bytes, expected_manifest_sha256: str, record_bytes: bytes,
                       expected_record_sha256: str, repo_root: str | os.PathLike[str], expected_run: mf.ExpectedRun, evidence: sr.ValidationEvidence,
                       sealed_test: runner.SealedTestSet, label_provider: Callable[[], Iterable[EvalRecord]], created_utc: str | None = None,
-                      **manifest_kwargs: Any) -> AttemptOutcome:
+                      ) -> AttemptOutcome:
     """Verify both records, atomically create the one-time marker, and only then recover the authentic test labels. Scores nothing."""
     verified = verify_attempt_inputs(manifest_bytes=manifest_bytes, expected_manifest_sha256=expected_manifest_sha256, record_bytes=record_bytes,
                                      expected_record_sha256=expected_record_sha256, repo_root=repo_root, expected_run=expected_run, evidence=evidence,
-                                     sealed_test=sealed_test, **manifest_kwargs)
+                                     sealed_test=sealed_test)
     try:
         receipt = create_attempt_marker(attempt_root, verified, repo_root=repo_root, created_utc=created_utc)
     except MarkerPersistenceError:

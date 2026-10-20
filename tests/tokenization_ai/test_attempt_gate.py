@@ -42,9 +42,7 @@ from tokenization_ai.heldout_eval.splits import PRIMARY_SPLIT_SEED, EvalRecord, 
 from tokenization_ai.model import LightweightAnomalyModel
 
 REPO_ROOT = Path(mf.__file__).resolve().parents[2]
-SRC = ("src/a.py", "src/b.py")
-CFG = ("requirements.txt",)
-PROTO = "docs/PROTOCOL.md"
+LF, CRLF = bytes([10]), bytes([13, 10])
 FROZEN = "# Protocol\n\n**Protocol version:** `heldout-eval-test-frozen`  **Status: FROZEN**\n"
 DRAFT = "# Protocol\n\n**Protocol version:** `heldout-eval-test-draft`  **Status: DRAFT, not frozen.**\n"
 AUDIT_OK = {"errors": [], "warnings": [], "construction_checks_passed": True}
@@ -89,13 +87,18 @@ def git(root: Path, *args: str) -> str:
 
 
 def make_repo(root: Path, header: str) -> Path:
+    """A throw-away repository with a small file at every path of the code-defined default lists (the gate accepts no other layout)."""
     root.mkdir()
-    (root / "src").mkdir()
-    (root / "docs").mkdir()
-    (root / "src/a.py").write_text("A = 1\n", encoding="utf-8", newline="\n")
-    (root / "src/b.py").write_text("B = 2\n", encoding="utf-8", newline="\n")
-    (root / "requirements.txt").write_text("numpy>=1.26\n", encoding="utf-8", newline="\n")
-    (root / PROTO).write_text(header, encoding="utf-8", newline="\n")
+    for rel in (*mf.DEFAULT_SOURCE_FILES, *mf.DEFAULT_CONFIG_FILES):
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if rel in ("tokenization_ai/heldout_eval/numerics.py", "tokenization_ai/model.py"):
+            path.write_bytes((REPO_ROOT / rel).read_bytes().replace(CRLF, LF))  # the manifest cross-checks these two hashes with the live code
+        else:
+            path.write_text(f"# placeholder for {rel}{LF.decode()}", encoding="utf-8", newline=LF.decode())
+    protocol = root / mf.DEFAULT_PROTOCOL_PATH
+    protocol.parent.mkdir(parents=True, exist_ok=True)
+    protocol.write_text(header, encoding="utf-8", newline=LF.decode())
     git(root, "init", "-q", "-b", "main")
     git(root, "add", "-A")
     git(root, "commit", "-q", "-m", "init")
@@ -127,7 +130,8 @@ def build_env(root: Path, header: str, purpose: str) -> Env:
     cfg = rn.prepare_train_configuration(part.train)
     numerical = rn.prepare_numerical_configuration(cfg)
     pre = rn.preflight_report(cfg, part.validation, part.sealed_test)
-    e.kw = {"source_files": SRC, "config_files": CFG, "protocol_path": PROTO}
+    e.kw = {}  # the gate and the verifiers use only the code-defined lists; nothing is overridden
+    e.cfg, e.numerical, e.pre = cfg, numerical, pre
     manifest = mf.build_manifest(purpose=purpose, created_utc=CREATED, repo_root=e.repo, dataset=ds, split_result=split, partition=part,
                                  audit_report=AUDIT_OK, train_config=cfg, numerical=numerical, preflight=pre, **e.kw)
     approved = manifest["protocol"]["sha256"] if purpose == mf.PURPOSE_CONFIRMATORY else None
@@ -328,7 +332,7 @@ def test_a_stale_commit_or_dirty_repository_is_rejected(env, root):
         assert_blocked(env, root)
     finally:
         (env.repo / "stray.txt").unlink()
-    (env.repo / "docs/later.md").write_text("later\n", encoding="utf-8")
+    (env.repo / "later.md").write_text("later\n", encoding="utf-8")
     git(env.repo, "add", "-A")
     git(env.repo, "commit", "-q", "-m", "later")
     try:
@@ -339,11 +343,12 @@ def test_a_stale_commit_or_dirty_repository_is_rejected(env, root):
 
 
 def test_a_changed_source_file_is_rejected(env, root):
-    (env.repo / "src/a.py").write_text("A = 2\n", encoding="utf-8", newline="\n")
+    changed = "tokenization_ai/heldout_eval/arm_c.py"
+    (env.repo / changed).write_text("A = 2" + LF.decode(), encoding="utf-8", newline=LF.decode())
     try:
         assert_blocked(env, root)  # dirty
     finally:
-        git(env.repo, "checkout", "--", "src/a.py")
+        git(env.repo, "checkout", "--", changed)
 
 
 def test_a_draft_protocol_or_an_infrastructure_run_cannot_open_the_gate(env, root, tmp_path, monkeypatch):
@@ -416,6 +421,160 @@ def test_the_gate_requires_the_full_81_candidate_artifact_evidence(env, root):
     assert_blocked(env, root, evidence=dataclasses.replace(env.evidence, artifact_dir=root.parent / "no_such_directory"))
     with pytest.raises(TypeError):
         dataclasses.replace(env.evidence, models={})  # the obsolete selected-only evidence no longer exists
+
+
+# -- manifest source coverage (D4-7C1) -------------------------------------------------------------------------------------------------------------
+
+
+NEW_MODULES = ("tokenization_ai/heldout_eval/selection_record.py", "tokenization_ai/heldout_eval/attempt_gate.py",
+               "tokenization_ai/heldout_eval/model_artifacts.py")
+
+
+def variant_manifest(env, **over):
+    """A genuine, valid manifest of the fixture repository built with some deviation (for example a shorter source list)."""
+    return mf.build_manifest(purpose=mf.PURPOSE_CONFIRMATORY, created_utc=CREATED, repo_root=env.repo, dataset=env.ds, split_result=env.split,
+                            partition=env.part, audit_report=AUDIT_OK, train_config=env.cfg, numerical=env.numerical, preflight=env.pre, **over)
+
+
+def blocked_by_manifest(env, root, manifest: dict, fragment: str | None = None):
+    data = mf.canonical_bytes(manifest)
+    provider = Provider(env.source)
+    with pytest.raises(gate.GateVerificationError) as caught:
+        attempt(env, root, provider, manifest_bytes=data, expected_manifest_sha256=mf.sha256_hex(data))
+    assert provider.calls == 0 and marker_files(root) == [] and failure_files(root) == []
+    if fragment:
+        assert fragment in str(caught.value)
+
+
+def test_complete_default_source_coverage_is_accepted_in_an_isolated_authorized_fixture(env, root):
+    required = tuple(mf.REQUIRED_SOURCE_FILES)
+    assert len(required) == 25 and set(NEW_MODULES) <= set(required) and set(env.manifest["sources"]) == set(required)
+    assert set(env.manifest["config_files"]) == set(mf.DEFAULT_CONFIG_FILES)
+    result = mf.verify_manifest_bytes(env.manifest_bytes, expected_sha256=env.manifest_sha, repo_root=env.repo, expected=env.expected,
+                                      source_files=required, config_files=mf.DEFAULT_CONFIG_FILES, protocol_path=mf.DEFAULT_PROTOCOL_PATH)
+    assert result.source_list_is_default is True and result.missing_required_sources == ()
+    gate._check_source_coverage(env.manifest, result, env.repo)  # the gate's own check agrees
+    assert attempt(env, root).test_scored is False
+
+
+def test_the_gate_critical_modules_are_part_of_the_trusted_required_list():
+    assert set(gate.GATE_CRITICAL_SOURCES) <= set(mf.REQUIRED_SOURCE_FILES)
+    assert all((REPO_ROOT / rel).is_file() for rel in gate.GATE_CRITICAL_SOURCES)
+
+
+@pytest.mark.parametrize("rel", [*NEW_MODULES, "tokenization_ai/heldout_eval/runner.py", "tokenization_ai/model.py"])
+def test_an_omitted_source_is_rejected_even_with_a_recomputed_digest(env, root, rel):
+    blocked_by_manifest(env, root, mutated_manifest(env, lambda m: m["sources"].pop(rel)))
+
+
+@pytest.mark.parametrize("rel", NEW_MODULES)
+def test_a_substituted_source_hash_is_rejected_by_the_real_verifier(env, root, rel):
+    blocked_by_manifest(env, root, mutated_manifest(env, lambda m: m["sources"].update({rel: "f" * 64})))
+
+
+def mutated_manifest(env, fn) -> dict:
+    manifest = copy.deepcopy(env.manifest)
+    fn(manifest)
+    return manifest
+
+
+def test_a_partial_source_list_is_rejected_although_every_listed_hash_is_valid(env, root):
+    partial = tuple(rel for rel in mf.REQUIRED_SOURCE_FILES if rel != "tokenization_ai/heldout_eval/attempt_gate.py")
+    manifest = variant_manifest(env, source_files=partial)
+    assert set(manifest["sources"]) == set(partial)
+    assert manifest["sources"] == {rel: v for rel, v in env.manifest["sources"].items() if rel in partial}  # every listed hash is the genuine one
+    blocked_by_manifest(env, root, manifest)
+
+
+def test_the_gates_own_coverage_check_rejects_a_partial_manifest_even_if_the_verifier_were_fooled(env, root, monkeypatch):
+    partial = tuple(rel for rel in mf.REQUIRED_SOURCE_FILES if rel not in NEW_MODULES)
+    manifest = variant_manifest(env, source_files=partial)
+    lying = mf.VerificationResult(ok=True, manifest_sha256="0" * 64, purpose=mf.PURPOSE_CONFIRMATORY, protocol_status="FROZEN",
+                                  environment_differences=(), checks=(), source_list_is_default=True, missing_required_sources=())
+    monkeypatch.setattr(mf, "verify_manifest_bytes", lambda *a, **k: lying)  # a verifier that wrongly reports complete, default coverage
+    blocked_by_manifest(env, root, manifest, "source coverage")
+
+
+@pytest.mark.parametrize("reported", [dict(source_list_is_default=False, missing_required_sources=()), dict(source_list_is_default=True,
+                                                                                                           missing_required_sources=("x",)),
+                                      dict(source_list_is_default=None, missing_required_sources=())])
+def test_reported_incomplete_coverage_is_rejected_even_for_a_complete_manifest(env, root, monkeypatch, reported):
+    result = mf.VerificationResult(ok=True, manifest_sha256=env.manifest_sha, purpose=mf.PURPOSE_CONFIRMATORY, protocol_status="FROZEN",
+                                   environment_differences=(), checks=(), **reported)
+    monkeypatch.setattr(mf, "verify_manifest_bytes", lambda *a, **k: result)
+    blocked_by_manifest(env, root, env.manifest, "source coverage")
+
+
+def test_a_verifier_result_without_coverage_fields_is_not_accepted(env, root, monkeypatch):
+    monkeypatch.setattr(mf, "verify_manifest_bytes", lambda *a, **k: object())
+    blocked_by_manifest(env, root, env.manifest, "source coverage")
+
+
+def test_forged_coverage_metadata_in_the_manifest_is_rejected(env, root):
+    blocked_by_manifest(env, root, mutated_manifest(env, lambda m: m.update(source_coverage="complete")))
+    blocked_by_manifest(env, root, mutated_manifest(env, lambda m: m["protocol"].update(source_coverage="complete")))
+    blocked_by_manifest(env, root, mutated_manifest(env, lambda m: m["config_files"].pop(next(iter(m["config_files"])))))
+    blocked_by_manifest(env, root, mutated_manifest(env, lambda m: m["sources"].update({"tokenization_ai/extra.py": "a" * 64})))
+
+
+def test_a_missing_required_executable_source_is_rejected(env, root):
+    victim = "tokenization_ai/heldout_eval/arm_c.py"
+    original = env.expected.commit
+    git(env.repo, "rm", "-q", victim)
+    git(env.repo, "commit", "-q", "-m", "remove a required source")
+    try:
+        assert_blocked(env, root, expected_run=dataclasses.replace(env.expected, commit=git(env.repo, "rev-parse", "HEAD")))
+    finally:
+        git(env.repo, "reset", "-q", "--hard", original)
+    assert (env.repo / victim).is_file()
+
+
+def test_the_gate_accepts_no_override_of_the_trusted_lists_or_the_environment_check(env, root):
+    import inspect
+    for function in (gate.open_test_attempt, gate.verify_attempt_inputs):
+        parameters = inspect.signature(function).parameters.values()
+        assert not any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters)
+        assert not {"source_files", "config_files", "protocol_path", "allow_environment_mismatch"} & {p.name for p in parameters}
+    for override in (dict(source_files=("tokenization_ai/model.py",)), dict(config_files=()), dict(protocol_path="docs/PROTOCOL.md"),
+                     dict(allow_environment_mismatch=True), dict(require_complete_sources=False)):
+        provider = Provider(env.source)
+        with pytest.raises(TypeError):
+            attempt(env, root, provider, **override)
+        assert provider.calls == 0 and marker_files(root) == [] and failure_files(root) == []
+
+
+def test_a_shrunken_trusted_required_list_cannot_remove_a_module_the_gate_depends_on(env, root, monkeypatch):
+    shrunk = tuple(rel for rel in mf.REQUIRED_SOURCE_FILES if rel != "tokenization_ai/heldout_eval/selection_record.py")
+    manifest = variant_manifest(env, source_files=shrunk)  # a manifest that is internally consistent with the shrunken list
+    monkeypatch.setattr(mf, "REQUIRED_SOURCE_FILES", shrunk)
+    blocked_by_manifest(env, root, manifest, "omits a module the gate depends on")
+
+
+def test_all_81_candidate_artifacts_are_still_verified_through_the_gate(env, root, monkeypatch):
+    seen: set[str] = set()
+    real = numerics.raw_logits
+    size = len(env.evidence.arm_inputs.record_ids)
+
+    def spy(model, inputs):
+        if len(inputs) == size:
+            seen.add(hashlib.sha256(np.ascontiguousarray(model.weights, dtype="<f8").tobytes()).hexdigest())
+        return real(model, inputs)
+
+    monkeypatch.setattr(numerics, "raw_logits", spy)
+    assert attempt(env, root).test_scored is False
+    assert len(seen) == 81 and len(env.digests) == 81
+
+
+def test_the_real_repository_and_its_draft_protocol_cannot_authorize_test_access(env, root):
+    assert mf.collect_protocol(REPO_ROOT)["status"] == "DRAFT"
+    provider = Provider(env.source)
+    with pytest.raises(gate.GateVerificationError):
+        attempt(env, root, provider, repo_root=REPO_ROOT)
+    assert provider.calls == 0 and marker_files(root) == []
+    with pytest.raises(rn.AuthorizationUnavailable):
+        rn.request_test_access()
+    with pytest.raises(rn.AuthorizationUnavailable):
+        rn.request_training_authorization()
 
 
 def test_a_sealed_set_that_does_not_match_the_manifest_is_rejected(env, root):
