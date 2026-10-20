@@ -75,7 +75,8 @@ DEFAULT_SOURCE_FILES: tuple[str, ...] = (
     "tokenization_ai/heldout_eval/request_context.py", "tokenization_ai/heldout_eval/arm_c.py", "tokenization_ai/heldout_eval/token_budget.py",
     "tokenization_ai/heldout_eval/arms.py", "tokenization_ai/heldout_eval/detection_metrics.py", "tokenization_ai/heldout_eval/numerics.py",
     "tokenization_ai/heldout_eval/runner.py", "tokenization_ai/heldout_eval/manifest.py", "tokenization_ai/heldout_eval/selection_record.py",
-    "tokenization_ai/heldout_eval/attempt_gate.py", "tokenization_ai/heldout_eval/model_artifacts.py",
+    "tokenization_ai/heldout_eval/attempt_gate.py", "tokenization_ai/heldout_eval/model_artifacts.py", "tokenization_ai/heldout_eval/training.py",
+    "tokenization_ai/heldout_eval/confirmatory_scoring.py",
 )
 REQUIRED_SOURCE_FILES: tuple[str, ...] = DEFAULT_SOURCE_FILES  # the executable sources a confirmatory run must protect, defined here in trusted code
 DEFAULT_CONFIG_FILES: tuple[str, ...] = ("requirements.txt", "tokenization_ai/requirements-ml.txt")

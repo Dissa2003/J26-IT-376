@@ -35,7 +35,7 @@ import os
 import re
 import stat
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -59,12 +59,13 @@ _KEY = object()  # only this module creates VerifiedAttempt / MarkerReceipt obje
 # cannot silently remove them from the protected set.
 GATE_CRITICAL_SOURCES: tuple[str, ...] = tuple(f"tokenization_ai/{name}" for name in (
     "model.py", "heldout_eval/manifest.py", "heldout_eval/selection_record.py", "heldout_eval/model_artifacts.py", "heldout_eval/attempt_gate.py",
-    "heldout_eval/runner.py", "heldout_eval/numerics.py", "heldout_eval/detection_metrics.py"))
+    "heldout_eval/runner.py", "heldout_eval/numerics.py", "heldout_eval/detection_metrics.py", "heldout_eval/training.py",
+    "heldout_eval/confirmatory_scoring.py"))
 _MARKER_KEYS = {"marker_version", "gate_version", "lifecycle_state", "experiment_id", "manifest_sha256", "selection_record_sha256", "dataset_seed",
                 "dataset_fingerprint", "generator_fingerprint", "split_manifest_sha256", "test_ids_sha256", "test_records", "created_utc"}
-STAGES = ("verification", "marker_creation", "marker_persistence", "label_recovery")
+STAGES = ("verification", "marker_creation", "marker_persistence", "label_recovery", "test_scoring")
 CATEGORIES = ("verification_failed", "marker_exists", "marker_creation_failed", "marker_persistence_failed", "marker_unverifiable", "binding_mismatch",
-              "provider_failed", "records_misaligned", "placeholder_label", "invalid_label", "content_mismatch", "group_mismatch", "unexpected_error")
+              "provider_failed", "records_misaligned", "placeholder_label", "invalid_label", "content_mismatch", "group_mismatch", "unexpected_error", "scoring_failed")
 
 
 class AttemptGateError(mf.ManifestError):
@@ -487,6 +488,7 @@ class AttemptOutcome:
     marker_path: str
     marker_sha256: str
     test_scored: bool = False
+    attempt: VerifiedAttempt | None = field(default=None, repr=False, compare=False)  # binding for post-marker failure reports
 
 
 def open_test_attempt(*, attempt_root: str | os.PathLike[str], manifest_bytes: bytes, expected_manifest_sha256: str, record_bytes: bytes,
@@ -508,7 +510,18 @@ def open_test_attempt(*, attempt_root: str | os.PathLike[str], manifest_bytes: b
         raise PostMarkerFailure(exc.category, "label_recovery", _report(attempt_root, verified, "label_recovery", exc.category)) from None
     except Exception:  # noqa: BLE001 - any other failure after the marker is reported by category only
         raise PostMarkerFailure("unexpected_error", "label_recovery", _report(attempt_root, verified, "label_recovery", "unexpected_error")) from None
-    return AttemptOutcome(labels=labels, experiment_id=verified.experiment_id, marker_path=receipt.path, marker_sha256=receipt.marker_sha256)
+    return AttemptOutcome(labels=labels, experiment_id=verified.experiment_id, marker_path=receipt.path, marker_sha256=receipt.marker_sha256,
+                          attempt=verified)
+
+
+def report_post_marker_failure(attempt_root: str | os.PathLike[str], outcome: AttemptOutcome, stage: str, category: str) -> str | None:
+    """Write the redacted failure report for a failure that happens after a successful :func:`open_test_attempt` (for example during test scoring).
+
+    It requires the gate's own outcome (so the attempt is bound to its verified records), leaves the marker in place and authorizes nothing.
+    """
+    if not isinstance(outcome, AttemptOutcome) or not isinstance(outcome.attempt, VerifiedAttempt):
+        raise AttemptGateError("a post-marker failure report needs the gate's own AttemptOutcome")
+    return _report(attempt_root, outcome.attempt, stage, category)
 
 
 def _report(attempt_root: str | os.PathLike[str], verified: VerifiedAttempt, stage: str, category: str) -> str | None:

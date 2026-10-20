@@ -427,7 +427,8 @@ def test_the_gate_requires_the_full_81_candidate_artifact_evidence(env, root):
 
 
 NEW_MODULES = ("tokenization_ai/heldout_eval/selection_record.py", "tokenization_ai/heldout_eval/attempt_gate.py",
-               "tokenization_ai/heldout_eval/model_artifacts.py")
+               "tokenization_ai/heldout_eval/model_artifacts.py", "tokenization_ai/heldout_eval/training.py",
+               "tokenization_ai/heldout_eval/confirmatory_scoring.py")
 
 
 def variant_manifest(env, **over):
@@ -448,7 +449,7 @@ def blocked_by_manifest(env, root, manifest: dict, fragment: str | None = None):
 
 def test_complete_default_source_coverage_is_accepted_in_an_isolated_authorized_fixture(env, root):
     required = tuple(mf.REQUIRED_SOURCE_FILES)
-    assert len(required) == 25 and set(NEW_MODULES) <= set(required) and set(env.manifest["sources"]) == set(required)
+    assert len(required) == 27 and set(NEW_MODULES) <= set(required) and set(env.manifest["sources"]) == set(required)
     assert set(env.manifest["config_files"]) == set(mf.DEFAULT_CONFIG_FILES)
     result = mf.verify_manifest_bytes(env.manifest_bytes, expected_sha256=env.manifest_sha, repo_root=env.repo, expected=env.expected,
                                       source_files=required, config_files=mf.DEFAULT_CONFIG_FILES, protocol_path=mf.DEFAULT_PROTOCOL_PATH)

@@ -626,7 +626,8 @@ def test_environment_snapshot_is_json_safe_and_complete():
 
 
 LF, CRLF = bytes([10]), bytes([13, 10])
-NEW_MODULES = ("tokenization_ai/heldout_eval/selection_record.py", "tokenization_ai/heldout_eval/attempt_gate.py", "tokenization_ai/heldout_eval/model_artifacts.py")
+NEW_MODULES = ("tokenization_ai/heldout_eval/selection_record.py", "tokenization_ai/heldout_eval/attempt_gate.py", "tokenization_ai/heldout_eval/model_artifacts.py",
+               "tokenization_ai/heldout_eval/training.py", "tokenization_ai/heldout_eval/confirmatory_scoring.py")
 
 
 def make_default_repo(root: Path, header: str = DRAFT_HEADER) -> Path:
@@ -656,7 +657,7 @@ def dctx(tmp_path, objs):
 
 
 def test_the_default_source_list_protects_the_three_new_modules():
-    assert len(mf.DEFAULT_SOURCE_FILES) == 25 and len(set(mf.DEFAULT_SOURCE_FILES)) == 25
+    assert len(mf.DEFAULT_SOURCE_FILES) == 27 and len(set(mf.DEFAULT_SOURCE_FILES)) == 27
     for rel in NEW_MODULES:
         assert rel in mf.DEFAULT_SOURCE_FILES and rel in mf.REQUIRED_SOURCE_FILES
     assert mf.REQUIRED_SOURCE_FILES == mf.DEFAULT_SOURCE_FILES and mf.missing_required_sources(mf.DEFAULT_SOURCE_FILES) == ()
