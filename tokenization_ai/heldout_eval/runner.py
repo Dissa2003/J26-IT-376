@@ -12,8 +12,10 @@ D. :func:`preflight_split` / :func:`preflight_report` check, label-free, that th
 E. :func:`prepare_numerical_configuration` derives the training-only eigenvalue estimates, the arm-relative learning rates and the 27 candidates
    per arm (``lambda-power-1``).
 F. :func:`select_candidate` is a pure validation-only selection over externally supplied, already aligned results.
-G. :func:`request_training_authorization` and :func:`request_test_access` are the explicit **unavailable** states of the gates that need the future
-   manifest, selection-record and attempt-marker modules. There is no permissive path.
+G. :func:`authorize_training` is the **only** way to obtain a :class:`TrainingAuthorization`: it runs the real pre-run manifest verifier with the trusted
+   code-defined lists (no override), checks complete source coverage, and binds the verified manifest to the objects this runner actually prepared. It fits
+   nothing and grants no test access. :func:`request_training_authorization` (no arguments, never authorizes) and :func:`request_test_access` stay as the
+   explicit **unavailable** states; there is no permissive path.
 
 Split isolation. Train records and labels are used for fitting only, validation records and labels for selection only. The test split is held as
 *blinded* records: the runner keeps the request content (for the label-free preflight), the record ids and bindings to the dataset split, but **drops
@@ -80,7 +82,8 @@ MIN_FREQUENCY = MIN_FREQUENCY_PROPOSED
 MAX_LITERAL_VOCAB_SIZE: int | None = None
 AP_ROUND_DECIMALS = 10
 TEST_SCORING_AVAILABLE = False
-TRAINING_AUTHORIZATION_AVAILABLE = False
+TRAINING_AUTHORIZATION_AVAILABLE = False  # no unconditional or unverified authorization exists; see authorize_training for the verified path
+VERIFIED_TRAINING_AUTHORIZATION_PATH = "authorize_training"
 _BLINDED_LABEL = -1  # sentinel required by the EvalRecord type; NOT a class: every label consumer rejects it, the arm builders never read it
 _MAX_LISTED_IDS = 20
 _BUDGETED_ARMS = (ARM_A, ARM_B)
@@ -594,11 +597,194 @@ def select_candidate(results: Sequence[ValidationCandidateResult], *, arm: str, 
 # -- G. unavailable gates -----------------------------------------------------------------------------------------------------------------------
 
 
+# -- H. verified training authorization --------------------------------------------------------------------------------------------------------
+
+
+class TrainingAuthorizationError(RuntimeError):
+    """Training could not be authorized. Messages name checks and categories only, never values, labels, scores or request content."""
+
+
+_AUTH_KEY = object()  # only authorize_training creates TrainingAuthorization objects
+_AUTH_FIELDS = ("purpose", "manifest_sha256", "protocol_version", "protocol_sha256", "git_branch", "git_commit", "dataset_seed", "generator_fingerprint",
+                "dataset_fingerprint", "split_seed", "split_manifest_sha256", "train_ids_sha256", "test_ids_sha256", "vocabulary_sha256", "max_length",
+                "numerics_identity_sha256", "candidate_grid_sha256", "sources_sha256", "model_source_sha256")
+
+
+def _canonical_digest(value: Any) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False).encode("ascii")).hexdigest()
+
+
+class TrainingAuthorization:
+    """Immutable evidence that :func:`authorize_training` succeeded for one verified pre-run manifest and one prepared run.
+
+    It binds only hashes, identifiers and counts: no label of any split, score, prediction or request content. It grants **no** test access
+    (``grants_test_access`` is always false), creates no marker and fits nothing. The restrictions here (private creation key, immutability, a seal over the
+    fields that :func:`require_training_authorization` rechecks, no pickling or copying) guard against accidental misuse by honest code; they are **not** a
+    security boundary against malicious code running inside the same process.
+    """
+
+    __slots__ = _AUTH_FIELDS + ("_seal",)
+
+    def __init__(self, key: object, **fields: Any) -> None:
+        if key is not _AUTH_KEY:
+            raise TrainingAuthorizationError("a TrainingAuthorization can only be produced by authorize_training")
+        if set(fields) != set(_AUTH_FIELDS):
+            raise TrainingAuthorizationError("a TrainingAuthorization needs exactly its defined fields")
+        for name in _AUTH_FIELDS:
+            object.__setattr__(self, name, fields[name])
+        object.__setattr__(self, "_seal", self._digest())
+
+    def _digest(self) -> str:
+        return _canonical_digest({name: getattr(self, name) for name in _AUTH_FIELDS})
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise AttributeError("a TrainingAuthorization is immutable")
+
+    def __delattr__(self, name: str) -> None:
+        raise AttributeError("a TrainingAuthorization is immutable")
+
+    @property
+    def grants_test_access(self) -> bool:
+        return False  # training authorization never implies test access; that needs the one-time attempt gate and a verified selection record
+
+    def to_dict(self) -> dict[str, Any]:
+        return {**{name: getattr(self, name) for name in _AUTH_FIELDS}, "grants_test_access": False, "fits_models": False, "seal_sha256": self._seal,
+                "scope": "training of the 81 approved candidates on the training split only; no test labels, scores or marker"}
+
+    def __repr__(self) -> str:
+        return f"TrainingAuthorization(manifest={self.manifest_sha256[:12]}..., commit={self.git_commit[:12]}...)"
+
+    def __reduce__(self) -> Any:
+        raise TypeError("a TrainingAuthorization is not serializable or copyable")
+
+
+def require_training_authorization(authorization: object) -> TrainingAuthorization:
+    """The check every future training stage must call first. Refuses anything that is not an intact authorization produced by :func:`authorize_training`."""
+    if type(authorization) is not TrainingAuthorization:
+        raise TrainingAuthorizationError("training requires a TrainingAuthorization from authorize_training")
+    try:
+        intact = authorization._digest() == authorization._seal
+    except AttributeError:
+        intact = False
+    if not intact:
+        raise TrainingAuthorizationError("the TrainingAuthorization was modified after it was issued")
+    return authorization
+
+
+def _norm(value: Any) -> Any:
+    """JSON round trip, so tuples/lists and key order compare the way the canonical manifest does."""
+    return json.loads(json.dumps(value, sort_keys=True, allow_nan=False))
+
+
+def _run_binding_problems(manifest: Mapping[str, Any], *, dataset: Any, split_result: SplitResult, partition: "Partition",
+                          train_config: "TrainConfiguration", numerical: "NumericalConfiguration") -> list[str]:
+    """Differences between the verified manifest and the objects this runner actually prepared. Reads no label; recomputes the label-free preflight."""
+    problems: list[str] = []
+    data, arms, num = manifest["data"], manifest["arms"], manifest["numerics"]
+    cfg = train_config.to_dict()
+    sealed = partition.sealed_test.binding()
+    summary = partition.summary
+    if data["split"]["manifest_sha256"] != split_result.manifest_sha256 or sealed["split_manifest_sha256"] != split_result.manifest_sha256 \
+            or summary.get("split_manifest_sha256") != split_result.manifest_sha256:
+        problems.append("split manifest hash")
+    if data["dataset_fingerprint"] != split_result.report.dataset_fingerprint or data["generator"]["fingerprint"] != dataset.fingerprint \
+            or data["dataset_seed"] != dataset.config.seed or data["split"]["seed"] != split_result.report.seed:
+        problems.append("dataset or split identity")
+    train_ids = ids_fingerprint(partition.train.record_ids)
+    if not (train_ids == arms["alignment"]["train_ids_sha256"] == cfg["train_ids_sha256"]):
+        problems.append("training record ids")
+    for name in ("train", "validation"):
+        counts = data["counts"][name]
+        if (summary[name]["records"], summary[name]["groups"], summary[name]["positives"]) != (counts["records"], counts["groups"], counts["positives"]):
+            problems.append(f"{name} counts")
+    test_counts = data["counts"]["test"]
+    if (sealed["records"], summary["test"]["groups"], sealed["ids_sha256"]) != (test_counts["records"], test_counts["groups"], test_counts["ids_sha256"]) \
+            or sealed["ids_sha256"] != arms["alignment"]["test_ids_sha256"]:
+        problems.append("sealed test binding")
+    vocabulary = {**cfg["vocabulary"], "min_frequency": cfg["min_frequency"], "max_literal_vocab_size": cfg["max_literal_vocab_size"]}
+    if _norm(vocabulary) != arms["vocabulary"]:
+        problems.append("train-only vocabulary")
+    if _norm(cfg["budget"]) != arms["budget"]:
+        problems.append("shared token budget")
+    if [_norm(e.to_dict()) for e in numerical.estimates] != num["estimates"] or _norm(dict(numerical.learning_rates)) != num["learning_rates"]:
+        problems.append("train-only numerical configuration")
+    candidates = [_norm(c.to_dict()) for c in numerical.candidates]
+    expected_ids = sorted(cid for arm in ARMS for cid in approved_candidate_ids(arm))
+    if candidates != num["candidates"] or sorted(c["candidate_id"] for c in candidates) != expected_ids or len(expected_ids) != 81:
+        problems.append("candidate grid")
+    try:
+        recomputed = preflight_report(train_config, partition.validation, partition.sealed_test)
+    except RepresentabilityError:
+        problems.append("representability preflight")
+    else:
+        if _norm(recomputed) != arms["preflight"]:
+            problems.append("representability preflight report")
+    return problems
+
+
+def authorize_training(*, manifest_bytes: bytes, expected_manifest_sha256: str, repo_root: Any, expected_run: Any, dataset: Any,
+                       split_result: SplitResult, partition: "Partition", train_config: "TrainConfiguration",
+                       numerical: "NumericalConfiguration") -> TrainingAuthorization:
+    """Authorize training of the 81 approved candidates, **only** against a manifest that passes the real verifier and matches the prepared run.
+
+    Trusted inputs (supplied by the caller from outside the manifest): the exact manifest bytes and their expected SHA-256; the repository root; and an
+    ``ExpectedRun`` for a **confirmatory** run (branch, full commit, dataset seed, generator and dataset fingerprints, split seed and hash, and the externally
+    approved SHA-256 of the FROZEN protocol file). The runner checks that the ``ExpectedRun`` describes the very objects it was given. The manifest verifier runs
+    with the trusted code constants only (``REQUIRED_SOURCE_FILES``, ``DEFAULT_CONFIG_FILES``, ``DEFAULT_PROTOCOL_PATH``, strict environment); there is no parameter
+    to change them, and no flag or callback that could report success. It then applies the gate's complete-source-coverage check and compares the verified manifest
+    with the training configuration, numerical configuration, 81-candidate grid and sealed-test binding this runner prepared (and recomputes the label-free
+    representability preflight). It fits no model, chooses no hyperparameter, computes no AP, saves no artifact, creates no selection record or attempt marker, and
+    does not unseal or read any test label.
+    """
+    from . import attempt_gate as gate_module  # imported lazily: these modules import this one
+    from . import manifest as mf
+
+    if not isinstance(expected_run, mf.ExpectedRun) or expected_run.purpose != mf.PURPOSE_CONFIRMATORY:
+        raise TrainingAuthorizationError("training is authorized only for an expected confirmatory run")
+    if not isinstance(manifest_bytes, (bytes, bytearray)):
+        raise TrainingAuthorizationError("the pre-run manifest must be supplied as its exact bytes")
+    if not (isinstance(split_result, SplitResult) and isinstance(partition, Partition) and isinstance(train_config, TrainConfiguration)
+            and isinstance(numerical, NumericalConfiguration) and hasattr(dataset, "fingerprint") and hasattr(dataset, "config")):
+        raise TrainingAuthorizationError("the dataset, split, partition, training configuration and numerical configuration must be the runner's own objects")
+    if (expected_run.generator_fingerprint != dataset.fingerprint or expected_run.dataset_seed != dataset.config.seed
+            or expected_run.dataset_fingerprint != split_result.report.dataset_fingerprint or expected_run.split_seed != split_result.report.seed
+            or expected_run.split_manifest_sha256 != split_result.manifest_sha256):
+        raise TrainingAuthorizationError("the expected run does not describe the supplied dataset and split")
+    trusted = {"source_files": tuple(mf.REQUIRED_SOURCE_FILES), "config_files": tuple(mf.DEFAULT_CONFIG_FILES), "protocol_path": mf.DEFAULT_PROTOCOL_PATH}
+    try:
+        verification = mf.verify_manifest_bytes(bytes(manifest_bytes), expected_sha256=expected_manifest_sha256, repo_root=repo_root, expected=expected_run,
+                                                **trusted)
+        manifest = mf.parse_manifest_bytes(bytes(manifest_bytes))
+    except mf.ManifestError as exc:
+        raise TrainingAuthorizationError(f"the pre-run manifest did not verify ({type(exc).__name__})") from None
+    if manifest.get("purpose") != mf.PURPOSE_CONFIRMATORY or manifest["protocol"]["status"] != "FROZEN" or verification.protocol_status != "FROZEN":
+        raise TrainingAuthorizationError("the manifest is not a confirmatory manifest of a FROZEN protocol")
+    try:
+        gate_module._check_source_coverage(manifest, verification, repo_root)
+    except gate_module.GateVerificationError:
+        raise TrainingAuthorizationError("source coverage is not complete") from None
+    problems = _run_binding_problems(manifest, dataset=dataset, split_result=split_result, partition=partition, train_config=train_config, numerical=numerical)
+    if problems:
+        raise TrainingAuthorizationError("the verified manifest does not match the prepared run (" + "; ".join(problems) + ")")
+    return TrainingAuthorization(
+        _AUTH_KEY, purpose=manifest["purpose"], manifest_sha256=expected_manifest_sha256, protocol_version=manifest["protocol"]["version"],
+        protocol_sha256=manifest["protocol"]["sha256"], git_branch=manifest["git"]["branch"], git_commit=manifest["git"]["commit"],
+        dataset_seed=manifest["data"]["dataset_seed"], generator_fingerprint=manifest["data"]["generator"]["fingerprint"],
+        dataset_fingerprint=manifest["data"]["dataset_fingerprint"], split_seed=manifest["data"]["split"]["seed"],
+        split_manifest_sha256=manifest["data"]["split"]["manifest_sha256"], train_ids_sha256=manifest["arms"]["alignment"]["train_ids_sha256"],
+        test_ids_sha256=manifest["arms"]["alignment"]["test_ids_sha256"], vocabulary_sha256=manifest["arms"]["vocabulary"]["sha256"],
+        max_length=manifest["arms"]["budget"]["selected_max_length"],
+        numerics_identity_sha256=_canonical_digest({"estimates": manifest["numerics"]["estimates"], "learning_rates": manifest["numerics"]["learning_rates"]}),
+        candidate_grid_sha256=_canonical_digest(sorted(c["candidate_id"] for c in manifest["numerics"]["candidates"])),
+        sources_sha256=_canonical_digest(manifest["sources"]), model_source_sha256=manifest["numerics"]["provenance"]["model_sha256"])
+
+
 def request_training_authorization() -> NoReturn:
-    """Model fitting requires a verified pre-run manifest. The manifest writer and verifier do not exist yet, so this always raises."""
+    """The argument-free request never authorizes anything: no verified manifest was supplied. Use :func:`authorize_training` (it needs the exact manifest bytes)."""
     raise AuthorizationUnavailable("training", [
-        "the pre-run manifest writer and verifier are not implemented",
-        "no verified manifest authorizes fitting any candidate model"])
+        "no verified pre-run manifest was supplied: authorization is obtained only through authorize_training(...) with the exact manifest bytes, "
+        "an expected digest and the trusted run values",
+        "an argument-free request, a flag or a callback can never authorize fitting any candidate model"])
 
 
 def request_test_access() -> NoReturn:

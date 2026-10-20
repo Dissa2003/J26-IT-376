@@ -12,11 +12,14 @@ import copy
 import dataclasses
 import inspect
 import json
+import pickle
 import random
+import subprocess
 from pathlib import Path
 
 import pytest
 
+import tokenization_ai.heldout_eval.manifest as mf
 import tokenization_ai.heldout_eval.runner as rn
 from tokenization_ai.heldout_eval.arms import ARM_A, ARM_B, ARM_C, ARMS, ArmInputs, prepare_split
 from tokenization_ai.heldout_eval.generator import GeneratorConfig, generate
@@ -649,3 +652,423 @@ def test_runner_does_not_mutate_its_inputs(dataset, split):
 def test_source_sha256_is_a_stable_digest():
     assert len(rn.source_sha256()) == 64 and rn.source_sha256() == rn.source_sha256()
     assert rn.RUNNER_ID == "runner-foundation-1"
+
+
+# -- verified training authorization (D4-7C2) -----------------------------------------------------------------------------------------------------
+#
+# These tests run the REAL manifest verifier on disposable fixtures: a throw-away Git repository with the complete default layout whose protocol header says
+# FROZEN, development-seed (6101) structure, and a monkeypatched seed tuple that lets the development seed stand in for the confirmatory seed (so no
+# confirmatory seed value appears here). Nothing is fitted or scored, no marker or artifact is created, and no test label is read.
+
+REPO_ROOT = Path(mf.__file__).resolve().parents[2]
+FROZEN = "# Protocol" + chr(10) * 2 + "**Protocol version:** `heldout-eval-test-frozen`  **Status: FROZEN**" + chr(10)
+DRAFT = "# Protocol" + chr(10) * 2 + "**Protocol version:** `heldout-eval-test-draft`  **Status: DRAFT, not frozen.**" + chr(10)
+AUDIT_OK = {"errors": [], "warnings": [], "construction_checks_passed": True}
+CREATED = "2026-01-01T00:00:00Z"
+LF, CRLF = bytes([10]), bytes([13, 10])
+
+
+@pytest.fixture(scope="module", autouse=True)
+def development_seed_stands_in():
+    patch = pytest.MonkeyPatch()
+    patch.setattr(mf, "CONFIRMATORY_SEEDS", (6101,))
+    yield
+    patch.undo()
+
+
+def git(root: Path, *args: str) -> str:
+    done = subprocess.run(["git", "-c", "commit.gpgsign=false", "-c", "user.name=t", "-c", "user.email=t@example.invalid", *args],
+                          cwd=str(root), capture_output=True, text=True, check=True)
+    return done.stdout.strip()
+
+
+def make_default_repo(root: Path, header: str) -> Path:
+    root.mkdir(parents=True)
+    for rel in (*mf.DEFAULT_SOURCE_FILES, *mf.DEFAULT_CONFIG_FILES):
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if rel in ("tokenization_ai/heldout_eval/numerics.py", "tokenization_ai/model.py"):
+            path.write_bytes((REPO_ROOT / rel).read_bytes().replace(CRLF, LF))  # the manifest cross-checks these two hashes with the live code
+        else:
+            path.write_text(f"# placeholder for {rel}{LF.decode()}", encoding="utf-8", newline=LF.decode())
+    protocol = root / mf.DEFAULT_PROTOCOL_PATH
+    protocol.parent.mkdir(parents=True, exist_ok=True)
+    protocol.write_text(header, encoding="utf-8", newline=LF.decode())
+    git(root, "init", "-q", "-b", "main")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "init")
+    return root
+
+
+class AuthEnv:
+    pass
+
+
+@pytest.fixture(scope="module")
+def aenv(tmp_path_factory, dataset, split, part, cfg, numerical):
+    e = AuthEnv()
+    root = tmp_path_factory.mktemp("auth")
+    e.out = root / "out"
+    e.out.mkdir()
+    e.repo = make_default_repo(root / "repo", FROZEN)
+    e.pre = rn.preflight_report(cfg, part.validation, part.sealed_test)
+    e.args = dict(dataset=dataset, split_result=split, partition=part, train_config=cfg, numerical=numerical)
+    manifest = mf.build_manifest(purpose=mf.PURPOSE_CONFIRMATORY, created_utc=CREATED, repo_root=e.repo, dataset=dataset, split_result=split, partition=part,
+                                 audit_report=AUDIT_OK, train_config=cfg, numerical=numerical, preflight=e.pre)
+    e.expected = mf.ExpectedRun(purpose=mf.PURPOSE_CONFIRMATORY, branch="main", commit=git(e.repo, "rev-parse", "HEAD"), dataset_seed=6101,
+                                generator_fingerprint=dataset.fingerprint, dataset_fingerprint=split.report.dataset_fingerprint,
+                                split_seed=PRIMARY_SPLIT_SEED, split_manifest_sha256=split.manifest_sha256,
+                                approved_protocol_sha256=manifest["protocol"]["sha256"])
+    written = mf.write_manifest(e.out / "manifest.json", manifest, repo_root=e.repo, expected=e.expected)
+    e.manifest_bytes, e.manifest_sha = Path(written.path).read_bytes(), written.sha256
+    e.manifest = mf.parse_manifest_bytes(e.manifest_bytes)
+    e.dataset, e.split, e.part, e.cfg, e.numerical = dataset, split, part, cfg, numerical
+    e.files_before = sorted(p.name for p in e.out.iterdir())
+    return e
+
+
+def authorize(e, **over):
+    kwargs = dict(manifest_bytes=e.manifest_bytes, expected_manifest_sha256=e.manifest_sha, repo_root=e.repo, expected_run=e.expected, **e.args)
+    kwargs.update(over)
+    return rn.authorize_training(**kwargs)
+
+
+def rejected(e, fragment: str | None = None, **over):
+    with pytest.raises(rn.TrainingAuthorizationError) as caught:
+        authorize(e, **over)
+    if fragment:
+        assert fragment in str(caught.value)
+    return caught.value
+
+
+def forged(e, fn):
+    manifest = copy.deepcopy(e.manifest)
+    fn(manifest)
+    data = mf.canonical_bytes(manifest)
+    return dict(manifest_bytes=data, expected_manifest_sha256=mf.sha256_hex(data))
+
+
+def variant_manifest_bytes(e, **over):
+    manifest = mf.build_manifest(purpose=mf.PURPOSE_CONFIRMATORY, created_utc=CREATED, repo_root=e.repo, dataset=e.dataset, split_result=e.split,
+                                 partition=e.part, audit_report=AUDIT_OK, train_config=e.cfg, numerical=e.numerical, preflight=e.pre, **over)
+    data = mf.canonical_bytes(manifest)
+    return dict(manifest_bytes=data, expected_manifest_sha256=mf.sha256_hex(data))
+
+
+def test_a_fully_verified_frozen_fixture_is_authorized_and_binds_only_hashes(aenv):
+    auth = authorize(aenv)
+    assert type(auth) is rn.TrainingAuthorization and rn.require_training_authorization(auth) is auth
+    assert auth.purpose == "confirmatory" and auth.manifest_sha256 == aenv.manifest_sha and auth.git_commit == aenv.expected.commit
+    assert auth.git_branch == "main" and auth.protocol_sha256 == aenv.expected.approved_protocol_sha256 and auth.protocol_version == "heldout-eval-test-frozen"
+    assert auth.dataset_fingerprint == aenv.split.report.dataset_fingerprint and auth.generator_fingerprint == aenv.dataset.fingerprint
+    assert auth.split_manifest_sha256 == aenv.split.manifest_sha256 and auth.split_seed == PRIMARY_SPLIT_SEED and auth.dataset_seed == 6101
+    assert auth.train_ids_sha256 == rn.ids_fingerprint(aenv.part.train.record_ids) and auth.test_ids_sha256 == aenv.part.sealed_test.binding()["ids_sha256"]
+    assert auth.vocabulary_sha256 == aenv.cfg.frozen.record["sha256"] and auth.max_length == aenv.cfg.decision.selected_max_length
+    assert auth.model_source_sha256 == aenv.manifest["numerics"]["provenance"]["model_sha256"] and len(auth.sources_sha256) == 64
+    assert len(auth.numerics_identity_sha256) == len(auth.candidate_grid_sha256) == 64
+    again = authorize(aenv)
+    assert again.to_dict() == auth.to_dict()  # deterministic
+
+
+def test_the_authorization_serializes_without_labels_scores_or_request_content(aenv):
+    auth = authorize(aenv)
+    payload = auth.to_dict()
+    json.dumps(payload, allow_nan=False)
+    problems: list[str] = []
+    mf._scan_forbidden(payload, "$", problems)
+    assert problems == [] and payload["grants_test_access"] is False and payload["fits_models"] is False
+    text = json.dumps(payload)
+    for rec in list(aenv.part.train.records[:100]) + list(aenv.part.validation.records[:100]):
+        assert rec.features.path not in text
+    assert not any("label" in key or "score" in key or "prediction" in key for key in payload)
+
+
+def test_authorization_does_not_imply_test_access_and_creates_nothing(aenv, monkeypatch, tmp_path):
+    import tokenization_ai.heldout_eval.attempt_gate as gate
+    from tokenization_ai.heldout_eval import numerics
+    from tokenization_ai.model import LightweightAnomalyModel
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("authorization must not fit, score, read out or create a marker")
+
+    for target, name in ((LightweightAnomalyModel, "fit"), (LightweightAnomalyModel, "predict"), (numerics, "raw_logits"), (gate, "create_attempt_marker"),
+                         (gate, "recover_test_labels"), (gate, "open_test_attempt"), (rn, "select_candidate")):
+        monkeypatch.setattr(target, name, forbidden)
+    before = {p for p in tmp_path.rglob("*")}
+    auth = authorize(aenv)
+    assert auth.grants_test_access is False and not hasattr(auth, "labels") and not hasattr(auth, "test_labels")
+    assert sorted(p.name for p in aenv.out.iterdir()) == aenv.files_before and {p for p in tmp_path.rglob("*")} == before
+    assert not list(aenv.repo.glob("**/test-attempt-*")) and not list(aenv.out.glob("*attempt*")) and not list(aenv.out.glob("*artifact*"))
+    with pytest.raises(rn.AuthorizationUnavailable):
+        rn.request_test_access()
+    with pytest.raises(TypeError):
+        rn.request_test_access(auth)  # type: ignore[call-arg]
+    assert rn.TEST_SCORING_AVAILABLE is False
+    assert set(aenv.part.sealed_test.__class__.__dict__) .isdisjoint({"labels", "release_labels", "unseal"})
+
+
+def test_the_argument_free_request_still_never_authorizes():
+    assert rn.TRAINING_AUTHORIZATION_AVAILABLE is False and rn.VERIFIED_TRAINING_AUTHORIZATION_PATH == "authorize_training"
+    with pytest.raises(rn.AuthorizationUnavailable) as caught:
+        rn.request_training_authorization()
+    assert "authorize_training" in " ".join(caught.value.missing)
+
+
+# -- what the caller must supply, and what it cannot change -------------------------------------------------------------------------------------------
+
+
+def test_the_interface_accepts_no_overrides_or_bypass_flags(aenv):
+    parameters = inspect.signature(rn.authorize_training).parameters.values()
+    assert not any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters)
+    names = {p.name for p in inspect.signature(rn.authorize_training).parameters.values()}
+    assert not names & {"source_files", "config_files", "protocol_path", "allow_environment_mismatch", "verified", "trust", "skip_checks", "callback", "verifier"}
+    for override in (dict(source_files=("tokenization_ai/model.py",)), dict(config_files=()), dict(protocol_path="x.md"), dict(allow_environment_mismatch=True),
+                     dict(verified=True), dict(require_frozen=False)):
+        with pytest.raises(TypeError):
+            authorize(aenv, **override)
+
+
+def test_the_expected_run_must_be_confirmatory_and_describe_the_supplied_run(aenv, dataset, split):
+    rejected(aenv, "confirmatory", expected_run=dataclasses.replace(aenv.expected, purpose=mf.PURPOSE_INFRASTRUCTURE, approved_protocol_sha256=None))
+    rejected(aenv, "confirmatory", expected_run="trusted")
+    rejected(aenv, "does not describe", expected_run=dataclasses.replace(aenv.expected, dataset_fingerprint="1" * 64))
+    rejected(aenv, "does not describe", expected_run=dataclasses.replace(aenv.expected, generator_fingerprint="2" * 64))
+    rejected(aenv, "does not describe", expected_run=dataclasses.replace(aenv.expected, split_manifest_sha256="3" * 64))
+    rejected(aenv, "does not describe", expected_run=dataclasses.replace(aenv.expected, split_seed=1))
+    rejected(aenv, "does not describe", expected_run=dataclasses.replace(aenv.expected, dataset_seed=6102))
+
+
+def test_the_real_draft_protocol_and_the_real_repository_cannot_authorize_training(aenv):
+    assert mf.collect_protocol(REPO_ROOT)["status"] == "DRAFT"
+    rejected(aenv, "did not verify", repo_root=REPO_ROOT)
+
+
+def test_a_draft_protocol_or_an_infrastructure_manifest_is_rejected(aenv, tmp_path, monkeypatch, dataset, split, part, cfg, numerical):
+    monkeypatch.setattr(mf, "CONFIRMATORY_SEEDS", (1,))  # build a genuine infrastructure manifest on a draft protocol
+    draft_repo = make_default_repo(tmp_path / "draft", DRAFT)
+    manifest = mf.build_manifest(purpose=mf.PURPOSE_INFRASTRUCTURE, created_utc=CREATED, repo_root=draft_repo, dataset=dataset, split_result=split,
+                                 partition=part, audit_report=AUDIT_OK, train_config=cfg, numerical=numerical, preflight=aenv.pre)
+    monkeypatch.setattr(mf, "CONFIRMATORY_SEEDS", (6101,))
+    data = mf.canonical_bytes(manifest)
+    sha = mf.sha256_hex(data)
+    infra = mf.ExpectedRun(purpose=mf.PURPOSE_INFRASTRUCTURE, branch="main", commit=git(draft_repo, "rev-parse", "HEAD"), dataset_seed=6101,
+                           generator_fingerprint=dataset.fingerprint, dataset_fingerprint=split.report.dataset_fingerprint, split_seed=PRIMARY_SPLIT_SEED,
+                           split_manifest_sha256=split.manifest_sha256)
+    rejected(aenv, "confirmatory", manifest_bytes=data, expected_manifest_sha256=sha, repo_root=draft_repo, expected_run=infra)
+    claimed = dataclasses.replace(infra, purpose=mf.PURPOSE_CONFIRMATORY, approved_protocol_sha256=manifest["protocol"]["sha256"])
+    rejected(aenv, "did not verify", manifest_bytes=data, expected_manifest_sha256=sha, repo_root=draft_repo, expected_run=claimed)
+
+
+def test_wrong_digests_and_protocol_approval_are_rejected(aenv):
+    rejected(aenv, "did not verify", expected_manifest_sha256="0" * 64)
+    rejected(aenv, "did not verify", expected_manifest_sha256="short")
+    rejected(aenv, "did not verify", expected_run=dataclasses.replace(aenv.expected, approved_protocol_sha256="0" * 64))
+    rejected(aenv, "did not verify", expected_run=dataclasses.replace(aenv.expected, approved_protocol_sha256=None))
+
+
+def test_wrong_branch_or_commit_is_rejected(aenv):
+    rejected(aenv, "did not verify", expected_run=dataclasses.replace(aenv.expected, branch="feature/other"))
+    rejected(aenv, "did not verify", expected_run=dataclasses.replace(aenv.expected, commit="1" * 40))
+
+
+def test_a_dirty_working_tree_is_rejected(aenv):
+    stray = aenv.repo / "stray.txt"
+    stray.write_text("x", encoding="utf-8")
+    try:
+        rejected(aenv, "did not verify")
+    finally:
+        stray.unlink()
+    assert authorize(aenv)
+
+
+def test_a_stale_manifest_after_the_repository_moves_on_is_rejected(aenv):
+    (aenv.repo / "later.md").write_text("later", encoding="utf-8")
+    git(aenv.repo, "add", "-A")
+    git(aenv.repo, "commit", "-q", "-m", "later")
+    try:
+        rejected(aenv, "did not verify")
+        rejected(aenv, "did not verify", expected_run=dataclasses.replace(aenv.expected, commit=git(aenv.repo, "rev-parse", "HEAD")))
+    finally:
+        git(aenv.repo, "reset", "-q", "--hard", aenv.expected.commit)
+    assert authorize(aenv)
+
+
+def test_a_missing_required_source_file_is_rejected(aenv):
+    victim = "tokenization_ai/heldout_eval/arm_c.py"
+    git(aenv.repo, "rm", "-q", victim)
+    git(aenv.repo, "commit", "-q", "-m", "remove")
+    try:
+        rejected(aenv, "did not verify", expected_run=dataclasses.replace(aenv.expected, commit=git(aenv.repo, "rev-parse", "HEAD")))
+    finally:
+        git(aenv.repo, "reset", "-q", "--hard", aenv.expected.commit)
+    assert (aenv.repo / victim).is_file()
+
+
+@pytest.mark.parametrize("rel", ["tokenization_ai/heldout_eval/selection_record.py", "tokenization_ai/heldout_eval/attempt_gate.py",
+                                 "tokenization_ai/heldout_eval/model_artifacts.py", "tokenization_ai/heldout_eval/runner.py"])
+def test_an_omitted_or_substituted_source_entry_is_rejected(aenv, rel):
+    rejected(aenv, "did not verify", **forged(aenv, lambda m: m["sources"].pop(rel)))
+    rejected(aenv, "did not verify", **forged(aenv, lambda m: m["sources"].update({rel: "f" * 64})))
+
+
+def test_a_partial_source_list_with_valid_hashes_is_rejected(aenv):
+    partial = tuple(rel for rel in mf.REQUIRED_SOURCE_FILES if rel != "tokenization_ai/heldout_eval/attempt_gate.py")
+    rejected(aenv, "did not verify", **variant_manifest_bytes(aenv, source_files=partial))
+
+
+def test_the_runners_own_coverage_check_rejects_a_partial_manifest_if_the_verifier_were_fooled(aenv, monkeypatch):
+    partial = tuple(rel for rel in mf.REQUIRED_SOURCE_FILES if rel not in ("tokenization_ai/heldout_eval/attempt_gate.py",))
+    data = variant_manifest_bytes(aenv, source_files=partial)
+    lying = mf.VerificationResult(ok=True, manifest_sha256="0" * 64, purpose=mf.PURPOSE_CONFIRMATORY, protocol_status="FROZEN", environment_differences=(),
+                                  checks=(), source_list_is_default=True, missing_required_sources=())
+    monkeypatch.setattr(mf, "verify_manifest_bytes", lambda *a, **k: lying)
+    rejected(aenv, "source coverage", **data)
+
+
+def test_an_environment_mismatch_is_rejected(aenv):
+    rejected(aenv, "EnvironmentMismatchError", **forged(aenv, lambda m: m["environment"]["python"].update(version="0.0.1")))
+    rejected(aenv, "EnvironmentMismatchError", **forged(aenv, lambda m: m["environment"]["numpy"].update(version="0.0.1")))
+
+
+@pytest.mark.parametrize("raw", [b"", b"[]", b"not json", b'{"a":1,"a":2}' + LF, b'{"a": 1}' + LF])
+def test_malformed_or_noncanonical_manifests_are_rejected_even_with_a_matching_digest(aenv, raw):
+    rejected(aenv, "did not verify", manifest_bytes=raw, expected_manifest_sha256=mf.sha256_hex(raw))
+
+
+def test_pretty_printed_truncated_and_tampered_manifests_are_rejected(aenv):
+    pretty = json.dumps(aenv.manifest, indent=2).encode()
+    rejected(aenv, "did not verify", manifest_bytes=pretty, expected_manifest_sha256=mf.sha256_hex(pretty))
+    half = aenv.manifest_bytes[: len(aenv.manifest_bytes) // 2]
+    rejected(aenv, "did not verify", manifest_bytes=half, expected_manifest_sha256=mf.sha256_hex(half))
+    flipped = bytearray(aenv.manifest_bytes)
+    flipped[len(flipped) // 2] ^= 1
+    rejected(aenv, "did not verify", manifest_bytes=bytes(flipped))
+    rejected(aenv, "exact bytes", manifest_bytes=json.loads(aenv.manifest_bytes))
+
+
+@pytest.mark.parametrize("mutation", [lambda m: m["numerics"]["estimates"][0].update(lambda_max=-1.0, L=-0.25),
+                                      lambda m: m["numerics"]["candidates"].pop(),
+                                      lambda m: m["numerics"]["learning_rates"]["cells"][0]["rates"][0].update(learning_rate=0.5),
+                                      lambda m: m["arms"]["vocabulary"].update(min_frequency=1),
+                                      lambda m: m["arms"]["preflight"].update(passed=False),
+                                      lambda m: m.update(source_coverage="complete")])
+def test_a_manifest_with_invalid_numerics_vocabulary_or_forged_metadata_is_rejected(aenv, mutation):
+    rejected(aenv, "did not verify", **forged(aenv, mutation))
+
+
+# -- binding the verified manifest to the prepared run ----------------------------------------------------------------------------------------------------
+
+
+def test_a_different_split_or_partition_does_not_match_the_manifest(aenv, dataset):
+    other_split = split_records(dataset.records, seed=PRIMARY_SPLIT_SEED + 1)
+    other_part = partition_records(dataset.records, other_split)
+    rejected(aenv, "does not describe", split_result=other_split)
+    rejected(aenv, "does not match the prepared run", partition=other_part)
+
+
+def test_wrong_vocabulary_budget_or_training_ids_do_not_match_the_manifest(aenv, cfg):
+    bad_vocab = dataclasses.replace(cfg, frozen=dataclasses.replace(cfg.frozen, record={**cfg.frozen.record, "sha256": "0" * 64}))
+    rejected(aenv, "train-only vocabulary", train_config=bad_vocab)
+    bad_budget = dataclasses.replace(cfg, decision=dataclasses.replace(cfg.decision, selected_max_length=256))
+    rejected(aenv, "shared token budget", train_config=bad_budget)
+
+
+def test_a_wrong_numerical_configuration_or_candidate_grid_does_not_match_the_manifest(aenv, numerical):
+    rejected(aenv, "numerical configuration", numerical=dataclasses.replace(numerical, estimates=numerical.estimates[:-1]))
+    changed = dataclasses.replace(numerical.candidates[0], learning_rate=numerical.candidates[0].learning_rate * 2)
+    rejected(aenv, "candidate grid", numerical=dataclasses.replace(numerical, candidates=(changed, *numerical.candidates[1:])))
+    rejected(aenv, "candidate grid", numerical=dataclasses.replace(numerical, candidates=numerical.candidates[:-1]))
+    extra = dataclasses.replace(numerical.candidates[0], candidate_id="extra")
+    rejected(aenv, "candidate grid", numerical=dataclasses.replace(numerical, candidates=(*numerical.candidates, extra)))
+
+
+def test_the_preflight_is_recomputed_and_must_match_the_manifest(aenv, monkeypatch):
+    monkeypatch.setattr(rn, "preflight_report", lambda *a, **k: {"passed": True})
+    rejected(aenv, "representability preflight")
+
+    def failing(*args, **kwargs):
+        report = rn.preflight_split(aenv.part.validation.records, "validation", dataclasses.replace(aenv.cfg.decision, selected_max_length=60))
+        report.require_pass()
+
+    monkeypatch.setattr(rn, "preflight_report", failing)
+    rejected(aenv, "representability preflight")
+
+
+def test_objects_of_the_wrong_type_are_rejected(aenv):
+    for over in (dict(dataset=object()), dict(split_result="split"), dict(partition=None), dict(train_config={}), dict(numerical=[])):
+        rejected(aenv, "runner's own objects", **over)
+
+
+# -- the context cannot be forged, modified or reused as something else ---------------------------------------------------------------------------------------
+
+
+def valid_fields(auth):
+    return {name: getattr(auth, name) for name in rn._AUTH_FIELDS}
+
+
+def test_the_authorization_cannot_be_constructed_without_verification(aenv):
+    auth = authorize(aenv)
+    with pytest.raises(rn.TrainingAuthorizationError):
+        rn.TrainingAuthorization(object(), **valid_fields(auth))
+    with pytest.raises(rn.TrainingAuthorizationError):
+        rn.TrainingAuthorization(None, **valid_fields(auth))
+    with pytest.raises(rn.TrainingAuthorizationError):
+        rn.TrainingAuthorization(rn._AUTH_KEY, **{**valid_fields(auth), "extra": 1})
+    with pytest.raises(rn.TrainingAuthorizationError):
+        rn.TrainingAuthorization(rn._AUTH_KEY, manifest_sha256="a" * 64)
+
+
+def test_the_authorization_is_immutable_and_tampering_is_detected(aenv):
+    auth = authorize(aenv)
+    with pytest.raises(AttributeError):
+        auth.git_commit = "0" * 40  # type: ignore[misc]
+    with pytest.raises(AttributeError):
+        del auth.manifest_sha256
+    with pytest.raises(AttributeError):
+        auth.extra = 1  # type: ignore[attr-defined]
+    object.__setattr__(auth, "git_commit", "0" * 40)  # deliberate bypass of the guard, as malicious in-process code could
+    with pytest.raises(rn.TrainingAuthorizationError, match="modified"):
+        rn.require_training_authorization(auth)
+
+
+def test_only_a_genuine_authorization_satisfies_the_training_stage_check(aenv):
+    auth = authorize(aenv)
+
+    class Imposter(rn.TrainingAuthorization):
+        pass
+
+    class Duck:
+        def __getattr__(self, name):
+            return "x"
+
+    for bad in (None, "authorized", {"verified": True}, Duck(), object(), 1, aenv.manifest):
+        with pytest.raises(rn.TrainingAuthorizationError):
+            rn.require_training_authorization(bad)
+    with pytest.raises(rn.TrainingAuthorizationError):
+        rn.require_training_authorization(Imposter(rn._AUTH_KEY, **valid_fields(auth)))  # a subclass instance is not an authorization
+    assert rn.require_training_authorization(auth) is auth
+
+
+def test_the_authorization_is_not_picklable_or_copyable(aenv):
+    auth = authorize(aenv)
+    for operation in (pickle.dumps, copy.copy, copy.deepcopy):
+        with pytest.raises(TypeError):
+            operation(auth)
+    assert "..." in repr(auth) and auth.git_commit not in repr(auth)
+
+
+def test_errors_do_not_echo_manifest_values_or_secrets(aenv):
+    secret = "SECRET-VALUE-424242"
+    errors = [rejected(aenv, expected_manifest_sha256=secret), rejected(aenv, **forged(aenv, lambda m: m["git"].update(branch=secret))),
+              rejected(aenv, **forged(aenv, lambda m: m["data"].update(dataset_fingerprint=secret))),
+              rejected(aenv, manifest_bytes=secret.encode(), expected_manifest_sha256=mf.sha256_hex(secret.encode()))]
+    assert all(secret not in str(e) for e in errors)
+
+
+def test_the_authorization_code_never_fits_scores_or_unseals():
+    tree = ast.parse(Path(rn.__file__).read_text(encoding="utf-8"))
+    func = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "authorize_training")
+    called = {n.func.attr if isinstance(n.func, ast.Attribute) else getattr(n.func, "id", "") for n in ast.walk(func) if isinstance(n, ast.Call)}
+    assert not called & {"fit", "predict", "raw_logit", "raw_logits", "average_precision", "select_threshold", "select_candidate", "create_attempt_marker",
+                         "recover_test_labels", "open_test_attempt", "write_model_artifact", "write_selection_record", "request_test_access"}
+    assert "7101" not in Path(rn.__file__).read_text(encoding="utf-8")

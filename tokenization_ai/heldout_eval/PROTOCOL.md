@@ -33,6 +33,7 @@
 | `1.2.0-draft` (D4-7A) | **Model artifact persistence `model-artifact-1` implemented** (`model_artifacts.py`, section 12.12.5): a single canonical-JSON, write-once file per candidate that stores a fitted `LightweightAnomalyModel` bit-exactly (float64 weights as base64 chunks, exact bias, fingerprint), bound to the candidate, its train-only learning rate, the model source hash and a manifest digest, with a strict loader that takes all expectations from the caller and a 81-candidate set loader. No research model exists, nothing is trained or authorized, `selection_record.py` is unchanged (so non-selected candidate APs are still claims), and nothing is frozen. |
 | `1.2.0-draft` (D4-7B) | **All-candidate validation verification and manifest source coverage** (`selection_record.py`, `manifest.py`, section 12.12.6): the validation-selection record is now `validation-selection-record-2` and its verifier recomputes the validation AP of **all 81** candidates from independently trusted, `model-artifact-1`-verified model artifacts (the old selected-only version 1 is refused); the manifest's default source list grows from 22 to 25 files (adding `selection_record.py`, `attempt_gate.py`, `model_artifacts.py`) with normalized-content hashing stated explicitly. Nothing is trained or scored, no real record exists, `test_attempt_gate.py` needs a fixture update for the new evidence, and nothing is frozen. |
 | `1.2.0-draft` (D4-7C1) | **Gate-side source-coverage enforcement** (`attempt_gate.py`, section 12.12.7): the test attempt gate no longer forwards any verifier override (source list, configuration list, protocol path, environment-mismatch flag); it runs the real manifest verifier with the trusted code constants, then its own coverage check (exact required source table re-hashed from the live repository, gate-critical modules in the required list, verifier coverage report), all before the marker. Nothing is trained or scored, no real manifest or marker exists, the runner gates stay blocked, and nothing is frozen. |
+| `1.2.0-draft` (D4-7C2) | **Verified training authorization** (`runner.authorize_training`, section 12.12.8): a `TrainingAuthorization` context is obtainable only after the real manifest verifier succeeds with the trusted code-defined lists (no override), the gate's complete-source-coverage check passes, and the verified manifest matches the dataset, split, training configuration, numerical configuration, 81-candidate grid, recomputed preflight and sealed-test binding the runner prepared. Nothing is fitted, scored or unsealed, no marker or artifact is created, no real manifest or authorization exists, `request_test_access()` and the argument-free `request_training_authorization()` stay disabled, and nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -1572,6 +1573,50 @@ The gate still cannot prove that nothing read the test data earlier, nor that th
 **Remaining before training authorization.** The protocol freeze and a real manifest; the training-authorization wiring from a verified manifest to the runner; the training and validation stage that writes the 81 artifacts and the
 record; the manual-review procedure; test scoring and the final report.
 
+#### 12.12.8 Verified training authorization (implemented in D4-7C2)
+
+`runner.authorize_training` is the only way to obtain a `TrainingAuthorization`, the context that every future training stage must require. This milestone is authorization infrastructure only: **no model is fitted, no
+hyperparameter chosen, no AP computed, no artifact saved, no selection record or attempt marker created, no test label or score touched**; no real manifest, authorization or training run exists, and the protocol remains a
+draft (seeds 7101-7103 unused). The argument-free `runner.request_training_authorization()` is unchanged and still always raises (`TRAINING_AUTHORIZATION_AVAILABLE` stays `False`, meaning that no unconditional or
+unverified authorization exists); `runner.request_test_access()` stays disabled; `attempt_gate.py` is unchanged.
+
+**What the caller supplies (all from outside the manifest).** The exact pre-run manifest bytes and their expected SHA-256; the repository root; an `ExpectedRun` for a **confirmatory** run (branch, full commit, dataset
+seed, generator and dataset fingerprints, split seed and split manifest hash, and the externally approved SHA-256 of the FROZEN protocol file); and the runner's own prepared objects: the `SyntheticDataset`, the
+`SplitResult`, the `Partition`, the `TrainConfiguration` and the `NumericalConfiguration`. The runner first checks that the `ExpectedRun` describes exactly those objects (generator fingerprint, dataset seed, dataset
+fingerprint, split seed and hash), so the trusted values are tied to the actual run and are not merely copied from the manifest.
+
+**Verification (in order; any failure raises `TrainingAuthorizationError`, naming categories only).**
+1. The expected run must be confirmatory (an infrastructure or draft run is refused); the manifest must be exact bytes.
+2. The **real** `manifest.verify_manifest_bytes` with the trusted code constants only: `REQUIRED_SOURCE_FILES`, `DEFAULT_CONFIG_FILES`, `DEFAULT_PROTOCOL_PATH`, and the strict environment comparison. There is no parameter for a
+   source list, configuration list, protocol path, environment-mismatch flag, expected branch or commit, or FROZEN requirement; the function has no `**kwargs`. It therefore checks the external digest, the FROZEN protocol and
+   its externally approved hash, the confirmatory seed, branch and full commit, a clean working tree (untracked files included), every source and configuration hash, the dataset and split provenance, the numerical and
+   statistical specification and the environment. The manifest must be a confirmatory manifest of a FROZEN protocol.
+3. The gate's complete-source-coverage check (`attempt_gate._check_source_coverage`, reused): exactly the required source table, re-hashed from the live repository, the gate-critical modules in the required list, the
+   verifier's coverage report and the configuration table. (The runner imports the gate module lazily and calls this private helper; it does not create a marker or open the gate.)
+4. Bindings between the **verified** manifest and the prepared run, none taken from caller assertions: split manifest hash (also against the sealed-test binding and the partition summary); dataset and split identity;
+   training record-id fingerprint (against the partition and the training configuration); train and validation counts; the sealed test binding (id-list hash, count, group count, with no label read); the train-only
+   vocabulary record and its settings; the shared token budget decision; the 9 train-only eigenvalue estimates and the learning-rate table; the exact 81-candidate grid (identifiers and learning rates); and the label-free
+   representability preflight, which the runner **recomputes** for train, validation and the blinded test requests and compares with the manifest's report.
+The result carries only hashes, identifiers and counts: purpose, manifest digest, protocol version and approved hash, branch, commit, dataset and split identity, training and test id-list hashes, vocabulary hash, token budget,
+a hash of the numerical configuration, a hash of the candidate grid, a hash of the source table and the model-source hash. It contains no label, score, prediction or request content, and its `grants_test_access` is always false.
+
+**The authorization object.** `TrainingAuthorization` can be created only with a private module key; it is immutable, carries a seal over its fields, and cannot be pickled or copied. `require_training_authorization` is the
+check a training stage must call first: it accepts only an exact-type, untampered instance. These are safeguards against accidental misuse by honest code, **not a security boundary against malicious code running in the
+same process** (which could bypass any in-process guard, including by editing this module).
+
+**Separation from test access.** Training authorization does not unseal anything: the sealed test set still holds no labels, the authorization contains none and exposes no way to recover them, no marker is created or
+consumed, candidate selection stays validation-only, and test access still requires the separate one-time attempt gate with a verified selection record and the atomic marker (12.12.4, 12.12.7).
+
+**Tests (`test_runner.py`, 108).** Real manifest verifier on a disposable fixture (complete default layout, FROZEN header, development seed standing in for the confirmatory seed by monkeypatching). They cover success;
+draft, infrastructure and real-repository refusal; wrong digest, protocol approval, branch and commit; dirty and stale repositories; missing, omitted, substituted and partial sources (including a fooled verifier); every
+override keyword refused; environment mismatch; malformed, non-canonical, truncated and tampered manifests; wrong dataset, split, vocabulary, budget, numerical configuration, candidate grid and preflight; construction,
+modification, subclassing, duck-typing, pickling and copying of the context; no fitting, scoring, marker, artifact or file creation; and no test access. Disabling the binding or coverage checks makes the targeted tests fail.
+
+**Limitations and remaining work.** The runner trusts the manifest module, the gate's coverage helper and its own binding code, all in the repository being verified. The binding checks compare configuration, not training
+behavior: nothing yet proves that later training uses only training data or exactly the authorized configuration. Remaining: the protocol freeze and a real manifest; the training stage (it must call
+`require_training_authorization`, fit the 81 candidates on the training split only, persist them with `model_artifacts`, score validation only and produce the selection record); the manual-review procedure; test scoring through
+the gate and the final report.
+
 ## 13. Chronological record
 
 This record separates what was found in exploratory data, what was revised in the design, what was decided before
@@ -1600,6 +1645,7 @@ the confirmatory run, and what confirmatory evidence exists. It holds no perform
 | 9j | D4-7A | Design revision (implemented) | Model artifact writer and loader written (12.12.5) and tested on hand-built fitted fixtures; the all-candidate validation-verification requirement for `selection_record.py` is recorded as unresolved. No research artifact, no fit, no score. |
 | 9k | D4-7B | Design revision (implemented) | Selection record upgraded to version 2 with recomputation of all 81 candidate APs from verified model artifacts; manifest source list extended to 25 files; normalized-content hashing stated. No real record, no fit, no score; the attempt-gate test fixture needs an update (12.12.6). |
 | 9l | D4-7C1 | Design revision (implemented) | The test attempt gate enforces complete, trusted manifest source coverage (12.12.7) and accepts no verifier overrides; tested with a complete-layout disposable repository and negative cases. No real manifest or marker, no fit, no score. |
+| 9m | D4-7C2 | Design revision (implemented) | Verified training authorization written (12.12.8): authorization requires the real manifest verifier with trusted lists, complete source coverage and bindings to the prepared run; it grants no test access. No real manifest or authorization, no fit, no score. |
 | 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; runner and manifest code (estimator and logit extraction: D4-6C2, 12.11.3). |
 | 11 | Pending | Pre-run decision | Write-once pre-run manifest, before any training or scoring. |
 | 12 | Pending | Confirmatory evidence | Confirmatory dataset (seed 7101), validation-only selection, one scored test run. **No confirmatory evidence exists yet.** |
