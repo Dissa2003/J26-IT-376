@@ -23,6 +23,7 @@
 | `1.2.0-draft` (D4-3) | **Arm C encoder `armc-char3-v1` implemented** (`arm_c.py`, section 12.10.1): deterministic serialization of a masked and normalized request into hashed character 3-grams as a `ModelInput` for the unchanged `LightweightAnomalyModel`. Encoding only: no model is fitted or scored, no Arm C builder or runner exists, no confirmatory data; no production, adapter, budget, generator, audit or split change; nothing is frozen. |
 | `1.2.0-draft` (D4-4) | **Paired A/B/C arm builders implemented** (`arms.py`, `arms-1`, section 12.12.1): the three representations of the same requests, one train-only shared vocabulary, the shared `budget-rule-1` budget with fail-closed handling of unrepresentable records, a fresh-model factory and manifest provenance. Preparation only: no model is fitted, predicted with or scored, no metric, no runner, no confirmatory data; no production, adapter, encoder, budget, generator, policy, audit or split change; nothing is frozen. |
 | `1.2.0-draft` (D4-5) | **Detection metrics and paired group bootstrap implemented** (`detection_metrics.py`, `detection-metrics-1`, section 12.11.1): step-wise Average Precision, ROC-AUC, threshold metrics, validation-only F1 threshold selection and a paired normalized-template-group bootstrap of AP(B) - AP(A). Tested on hand-made arrays only: no model is fitted or scored, no real detection metric exists, no development or confirmatory scoring, no success margin; no arm, encoder, generator, policy, audit, split or production change; nothing is frozen. |
+| `1.2.0-draft` (D4-6C1) | **Documentation only: optimization and score-selection decisions recorded** (section 12.11.2): arm-relative learning rates `lr = c / L` with `c` in {0.1, 0.3, 0.8}, the 27-candidate shared grid, validation-AP selection with a fixed tie-break order, raw-logit ranking scores for the held-out evaluation, and numerical-provenance requirements. Informed by the label-free D4-6B diagnostic on development seed 6101. No code, model, dataset, manifest or confirmatory data was created or changed; several items remain open; nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -409,8 +410,8 @@ protocol is frozen.
 | 5 | `max_length` identical across arms from training-split statistics only | **Rule decided and implemented** (12.8, 12.8.1); the value is computed later from the confirmatory training split. Header handling is identical across arms by sharing `request_to_context-v1` (12.9). |
 | 6 | Review of `simpol-1` and its diagnostics | **Resolved:** `simpol-1` is unchanged; SIM-P06 and SIM-P12 are documented limitations (12.3); SIM-P04 and SIM-P07 are addressed in the generator (12.2), not in the catalog. |
 | 7 | Final scale and prevalence sensitivities | Scale **proposed** (12.7, subject to feasibility). Prevalence sensitivities are **open**. |
-| 8 | Arm C feature-budget policy, n-gram settings and equal hyperparameter-search effort | Encoder, n-gram settings and serialization **implemented** (12.10.1: character 3-grams, same model class, no truncation). The equal-effort search grid and the `num_buckets` values remain **open**. |
-| 9 | Hyperparameter grids, selection criterion, threshold rule, bootstrap settings (resamples, seed) | Threshold rule (maximum validation F1) and bootstrap settings (2,000 resamples, seed 8201, 95% percentile interval, minimum-valid rule) **implemented as draft** in D4-5 (12.11.1). Hyperparameter grids and the model selection criterion remain **open**; everything is fixed only by the manifest (12.12). |
+| 8 | Arm C feature-budget policy, n-gram settings and equal hyperparameter-search effort | Encoder, n-gram settings and serialization **implemented** (12.10.1: character 3-grams, same model class, no truncation). The equal-effort search grid and the `num_buckets` values are recorded in D4-6C1 (12.11.2) as an accepted draft decision (27 candidates per arm); not frozen. |
+| 9 | Hyperparameter grids, selection criterion, threshold rule, bootstrap settings (resamples, seed) | Threshold rule (maximum validation F1) and bootstrap settings (2,000 resamples, seed 8201, 95% percentile interval, minimum-valid rule) **implemented as draft** in D4-5 (12.11.1). The hyperparameter grid, the model selection criterion with its tie-break order, arm-relative learning rates and the ranking score are **recorded as accepted draft design decisions** in D4-6C1 (12.11.2); the bootstrap minimum-valid rule stays open pending final freeze; nothing is fixed until the manifest (12.12). |
 | 10 | Whether `audit.py` gains path-root and method-by-path-category summaries | **Implemented** (D4-0, section 12.2.2) as a separate descriptive field; audit thresholds, errors and warnings unchanged. |
 | 11 | Scope of label-conditioned audits relative to the sealed test split | **Open** (12.6). |
 | 12 | Whether development-seed (6101) dry runs report any detection metric | **Open.** Until decided, none is reported (12.5). |
@@ -892,6 +893,87 @@ development-seed or confirmatory score exists, and the confirmatory seeds were n
 - **Manifest provenance.** Record `METRICS_ID`, the SHA-256 of `detection_metrics.py`, the replicate count, seed, confidence level and
   `MIN_VALID_PERCENT`.
 
+#### 12.11.2 Optimization and score-selection decisions (recorded in D4-6C1; documentation only)
+
+**Status: accepted draft design decisions, not a protocol freeze.** No code, estimator, logit extraction, runner, manifest, model fit or
+score exists for any of this, and no confirmatory data was generated (seeds 7101-7103 unused). These are planned specifications, not
+measured performance.
+
+**Informing evidence (D4-6B; label-free; development seed 6101 only; training split only).** On the development seed (primary split seed
+4401; 250 and 2,000 templates) the feature matrices of the unchanged `LightweightAnomalyModel` were built from the training records of
+each arm and the largest eigenvalue of `[X | 1]^T [X | 1] / n` was estimated for `num_buckets` 1024, 2048 and 4096. No label was read by the
+diagnostic, no model was fitted, `predict` was not called, and no validation or test record was prepared. Findings: the curvature differs
+strongly by arm (at 2,000 templates, `lambda_max` about 112-117 for Arm A, 270-283 for Arm B and 308-476 for Arm C; Arm C falls about 35%
+from 1024 to 4096 buckets, A and B change by 4-5%); power iteration converged in 6-8 iterations and matched an exact Gram-matrix eigenvalue
+to about 1e-11 (relative) at 250 templates; estimates at the two scales differed by under about 4%. Feature extraction is cheap (0.05-0.26 ms
+per record) and the dense training matrix needs 66-264 MB (peak about twice that inside `fit`), so the grid below is feasible. These
+diagnostics informed the choices below; they were not used to tune anything against labels or performance, and the actual values for the study
+are computed only from the confirmatory training features.
+
+**Decision 1 - arm-relative learning rates (supersedes the common absolute grid).** For each arm and `num_buckets`, `L = lambda_max / 4`,
+where `lambda_max` is the largest eigenvalue of `[X | 1]^T [X | 1] / n`; `X` is built from the **training split only** with the model's actual
+feature representation and the appended column of ones stands for the bias. Each candidate uses `learning_rate = c / L` with the same relative
+step set for A, B and C: **`c` in {0.1, 0.3, 0.8}**. `L` bounds the curvature of the logistic loss (curvature at most one quarter of the
+feature Gram spectrum), so `c <= 1` is the conservative range and `c < 2` the monotone-descent range; the bound is a numerical-stability
+statement, **not** evidence of predictive quality.
+- *Why not common absolute rates.* The proposed common values {0.002, 0.005, 0.012} gave every arm a stable candidate, but progress along the
+  dominant curvature direction scales with `lr * L`, and `L` is about 2.4-2.5 times larger for Arm B and about 2.7-4.2 times larger for Arm C
+  than for Arm A. With a fixed epoch count, a common absolute rate would have trained Arm A less than Arm B, confounding the primary A-versus-B
+  contrast. The relative grid gives every arm the same fraction of its own stability limit. Larger absolute rates (for example 0.03) would also
+  exceed the limit for B and C.
+- *Estimator (proposed implementation settings, subject to compatibility tests; to be versioned, for example `lambda-power-1`).* Deterministic
+  power iteration on `[X | 1]^T [X | 1] / n` without forming the matrix, in float64; initial vector uniform with entries `1/sqrt(d)`
+  (`d = num_buckets + 1`); the Rayleigh quotient is the estimate; convergence when the relative change of the Rayleigh quotient between
+  successive iterations is at most `1e-10`; at most `5,000` iterations. No random start, no seed.
+- *Failure handling.* If the estimate is not finite, not positive, or does not converge within the maximum, the run **stops**. There is no
+  fallback learning rate and no silent substitution.
+- *Timing and provenance.* All learning rates are computed from the confirmatory **training** features after the protocol and runner are
+  final, **before any model is fitted**, and recorded in the pre-run manifest. No label, validation AP, test datum or observed model
+  performance may influence them.
+- *Limits.* The Rayleigh quotient is a lower bound on the true eigenvalue (small if convergence is tight); a different seed changes `lambda_max`
+  by a few percent; dominant-direction progress says nothing about slow directions, and the model has no regularization, so epochs act as an
+  implicit stopping rule.
+
+**Decision 2 - shared hyperparameter grid (27 candidates per arm).** `num_buckets` in {1024, 2048, 4096}; `epochs` in {50, 150, 400};
+`relative_step_c` in {0.1, 0.3, 0.8}. Fixed: `min_frequency = 2` and `max_literal_vocab_size = None` for the shared, training-only A/B vocabulary
+(not tuned, which avoids a tuning dimension Arm C lacks); the same model class for all arms; a **fresh** model instance for every candidate;
+training on the training split only; validation-only selection. 8,192 buckets are excluded (dense-matrix memory).
+
+**Decision 3 - validation model selection.** Per arm, select the candidate with the highest validation Average Precision (`detection-metrics-1`).
+APs are compared after rounding to 10 decimal places (full-precision APs are kept in the diagnostic output). Ties are broken in this fixed order:
+(1) fewer epochs, (2) smaller `num_buckets`, (3) smaller `relative_step_c`, (4) the stable lexicographic candidate identifier. Test scores and
+labels are never used to choose a candidate.
+
+**Decision 4 - raw-logit ranking score (held-out evaluation only).** The evaluation ranks by the raw linear-model logit `w . features + bias`, not
+by `predict()`, because `predict()` returns a float64 sigmoid that becomes exactly 1.0 (or 0.0) for large logits and would create artificial ties.
+- Applies **only** to this held-out evaluation. `LightweightAnomalyModel`, the production API and its score semantics are unchanged.
+- Future evaluation code must verify, on non-saturated examples, that the extracted logit is mathematically compatible with `predict()`
+  (`sigmoid(logit)` equals `predict()` within floating-point tolerance). If faithful extraction cannot be done safely without changing production
+  code, work **stops** and approval is requested; production code is not changed to make it work.
+- Validation AP, validation threshold selection, test AP and ROC-AUC use this same representation. Logits are uncalibrated ranking scores, not
+  probabilities; a threshold chosen on logits is a **logit-scale threshold** and must not be presented or compared as a probability threshold.
+  Section 12.11.1 applies with "score" read as this logit.
+- The number of distinct scores per arm and split is to be reported, as a tie diagnostic.
+
+**Decision 5 - numerical reproducibility.** The future pre-run manifest (not created now) must record: the eigenvalue method and its version; the
+actual training-set eigenvalue estimates (with iteration counts and convergence flags) per arm and `num_buckets`; the selected-grid learning rates
+per arm and bucket count; the shared relative-step grid; Python and numpy versions; relevant BLAS information and thread configuration; the full
+hyperparameter grid and tie-breaking rules; and the SHA-256 of the model source (`model.py`) and of the other sources listed in 12.12.
+
+**Decision 6 - matters deliberately kept open (nothing here is silently frozen).**
+- The confirmatory A-versus-B success rule and any margin (12.11).
+- The paired exclusion and truncation policy for records the frozen budget cannot represent (12.8.1, 12.12.1).
+- The bootstrap minimum-valid-replicate rule (12.11.1) pending final freeze.
+- The test-scoring crash and recovery policy (including what happens after an interrupted scoring run).
+- Whether development-seed (6101) scoring may report any detection metric (section 11, item 12).
+- The runner, estimator, logit extraction, manifest and selection-record implementations, and the final protocol freeze.
+
+No confirmatory experiment may start until these are resolved and documented.
+
+**Supersession.** These decisions replace the open grid and learning-rate placeholders of section 11 items 8-9 and the "common learning-rate
+grid" idea from the D4-6A/D4-6B review (a common absolute grid {0.002, 0.005, 0.012} was proposed there and not adopted). Where section 12.12.1
+says every hyperparameter setting needs a fresh model, that still holds.
+
 ### 12.12 Evaluation provenance and the write-once pre-run manifest (plan)
 
 **This step creates no manifest.** The pre-run manifest is written **once**, only after all relevant runner, arm,
@@ -999,6 +1081,7 @@ the confirmatory run, and what confirmatory evidence exists. It holds no perform
 | 9 | D3c-2 | Design revision (implemented) | G1/G2 implementation note written before any generator code was changed; `synthgen-3` / `synthetic-catalog-3` implemented; default dataset seed set to the development seed 6101; checked on the development seed only, structure and construction checks, no model (12.2.1). Structural before/after figures were read from the development seed after the design constants were fixed; the constants were not adjusted. |
 | 9a | D4-0 | Design revision (diagnostics only) | `structural_coverage` added to the audit report and the audit protocol label corrected (12.2.2). Development seed 6101 only. |
 | 9b | D4-5 | Design revision (implemented) | Metric and paired group-bootstrap functions, threshold rule and minimum-valid-replicate rule written (12.11.1) and tested on hand-made arrays. No model score, no data, no result. |
-| 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; hyperparameter grids; decision rule and any margin; runner and manifest code. |
+| 9c | D4-6B / D4-6C1 | Exploratory finding, then pre-run decision (recorded) | Label-free feature-scale diagnostic on development seed 6101 (training split, no model); arm-relative learning rates, 27-candidate grid, validation-AP selection with tie-breaks and raw-logit ranking recorded as accepted draft decisions (12.11.2). No code, no score. |
+| 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; decision rule and any margin; exclusion and truncation policy; recovery policy; runner, estimator, logit extraction and manifest code. |
 | 11 | Pending | Pre-run decision | Write-once pre-run manifest, before any training or scoring. |
 | 12 | Pending | Confirmatory evidence | Confirmatory dataset (seed 7101), validation-only selection, one scored test run. **No confirmatory evidence exists yet.** |
