@@ -713,8 +713,11 @@ def aenv(tmp_path_factory, dataset, split, part, cfg, numerical):
     e.repo = make_default_repo(root / "repo", FROZEN)
     e.pre = rn.preflight_report(cfg, part.validation, part.sealed_test)
     e.args = dict(dataset=dataset, split_result=split, partition=part, train_config=cfg, numerical=numerical)
+    e.ops = {"attempt_root": root / "ops" / "attempts", "results_root": root / "ops" / "results"}
+    for d in e.ops.values():
+        d.mkdir(parents=True)
     manifest = mf.build_manifest(purpose=mf.PURPOSE_CONFIRMATORY, created_utc=CREATED, repo_root=e.repo, dataset=dataset, split_result=split, partition=part,
-                                 audit_report=AUDIT_OK, train_config=cfg, numerical=numerical, preflight=e.pre)
+                                 audit_report=AUDIT_OK, train_config=cfg, numerical=numerical, preflight=e.pre, operational_roots=e.ops)
     e.expected = mf.ExpectedRun(purpose=mf.PURPOSE_CONFIRMATORY, branch="main", commit=git(e.repo, "rev-parse", "HEAD"), dataset_seed=6101,
                                 generator_fingerprint=dataset.fingerprint, dataset_fingerprint=split.report.dataset_fingerprint,
                                 split_seed=PRIMARY_SPLIT_SEED, split_manifest_sha256=split.manifest_sha256,
@@ -750,7 +753,8 @@ def forged(e, fn):
 
 def variant_manifest_bytes(e, **over):
     manifest = mf.build_manifest(purpose=mf.PURPOSE_CONFIRMATORY, created_utc=CREATED, repo_root=e.repo, dataset=e.dataset, split_result=e.split,
-                                 partition=e.part, audit_report=AUDIT_OK, train_config=e.cfg, numerical=e.numerical, preflight=e.pre, **over)
+                                 partition=e.part, audit_report=AUDIT_OK, train_config=e.cfg, numerical=e.numerical, preflight=e.pre,
+                                 operational_roots=e.ops, **over)
     data = mf.canonical_bytes(manifest)
     return dict(manifest_bytes=data, expected_manifest_sha256=mf.sha256_hex(data))
 

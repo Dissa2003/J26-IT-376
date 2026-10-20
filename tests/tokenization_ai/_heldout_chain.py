@@ -68,8 +68,12 @@ def build_chain(root: Path, n_templates: int = DEV_TEMPLATES) -> Chain:
     c.numerical = rn.prepare_numerical_configuration(c.cfg)
     c.pre = rn.preflight_report(c.cfg, c.part.validation, c.part.sealed_test)
     c.repo = make_default_repo(root / "repo", FROZEN)
+    c.attempts, c.results = root / "ops" / "attempts", root / "ops" / "results"  # the canonical directories the manifest binds
+    c.attempts.mkdir(parents=True)
+    c.results.mkdir()
     manifest = mf.build_manifest(purpose=mf.PURPOSE_CONFIRMATORY, created_utc=CREATED, repo_root=c.repo, dataset=c.dataset, split_result=c.split,
-                                 partition=c.part, audit_report=AUDIT_OK, train_config=c.cfg, numerical=c.numerical, preflight=c.pre)
+                                 partition=c.part, audit_report=AUDIT_OK, train_config=c.cfg, numerical=c.numerical, preflight=c.pre,
+                                 operational_roots={"attempt_root": c.attempts, "results_root": c.results})
     c.expected = mf.ExpectedRun(purpose=mf.PURPOSE_CONFIRMATORY, branch="main", commit=git(c.repo, "rev-parse", "HEAD"), dataset_seed=DEV_SEED,
                                 generator_fingerprint=c.dataset.fingerprint, dataset_fingerprint=c.split.report.dataset_fingerprint,
                                 split_seed=PRIMARY_SPLIT_SEED, split_manifest_sha256=c.split.manifest_sha256,

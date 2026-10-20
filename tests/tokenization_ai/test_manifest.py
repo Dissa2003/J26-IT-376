@@ -1,4 +1,4 @@
-"""Tests for pre-run-manifest-1 (draft protocol heldout-eval-1.2.0-draft, section 12.12).
+"""Tests for pre-run-manifest-2 (draft protocol heldout-eval-1.2.0-draft, sections 12.12 and 12.15).
 
 No model is fitted or scored and no confirmatory dataset exists. Dataset objects come from the *development* seed 6101 (structure only); Git
 behavior is tested in throw-away repositories under pytest's temporary directory, never in the user's repository (which is only read, for hashes).
@@ -94,11 +94,16 @@ class Ctx:
         self.kw = {"source_files": SRC, "config_files": CFG, "protocol_path": PROTO}
         self.out = tmp / "out"
         self.out.mkdir(exist_ok=True)
+        self.ops = {"attempt_root": tmp / "ops" / "attempts", "results_root": tmp / "ops" / "results"}
+        for d in self.ops.values():
+            d.mkdir(parents=True, exist_ok=True)
 
-    def build(self, purpose: str = mf.PURPOSE_INFRASTRUCTURE) -> dict:
+    def build(self, purpose: str = mf.PURPOSE_INFRASTRUCTURE, **over) -> dict:
+        """Confirmatory manifests bind this context's canonical directories unless ``operational_roots`` is given explicitly."""
         o = self.objs
+        kw = {"operational_roots": self.ops if purpose == mf.PURPOSE_CONFIRMATORY else None, **self.kw, **over}
         return build_manifest(purpose=purpose, created_utc=CREATED, repo_root=self.repo, dataset=o["ds"], split_result=o["split"],
-                              partition=o["part"], audit_report=AUDIT_OK, train_config=o["cfg"], numerical=o["num"], preflight=o["pre"], **self.kw)
+                              partition=o["part"], audit_report=AUDIT_OK, train_config=o["cfg"], numerical=o["num"], preflight=o["pre"], **kw)
 
     def expected(self, **over) -> ExpectedRun:
         o = self.objs
@@ -170,7 +175,8 @@ def test_nested_duplicate_keys_are_rejected():
 
 def test_built_manifest_is_valid_complete_and_json_serializable(ctx):
     m = ctx.build()
-    assert m["manifest_version"] == "pre-run-manifest-1" and m["purpose"] == "infrastructure_test" and m["confirmatory"] is False
+    assert m["manifest_version"] == "pre-run-manifest-2" and m["purpose"] == "infrastructure_test" and m["confirmatory"] is False
+    assert m["operations"] is None  # an infrastructure manifest may leave the operational directories unbound
     assert set(m) == mf._TOP_KEYS
     assert m["protocol"]["status"] == "DRAFT" and m["protocol"]["approved_for_confirmatory"] is False
     assert m["git"]["branch"] == "main" and m["git"]["commit"] == git(ctx.repo, "rev-parse", "HEAD") and m["git"]["clean"] is True
@@ -234,7 +240,10 @@ def test_manifest_module_source_has_no_label_or_model_access():
     lambda m: m["protocol"].update(sha256="short"),
     lambda m: m["protocol"].update(status="DRAFTY"),
     lambda m: m.update(created_utc="yesterday"),
-    lambda m: m.update(manifest_version="pre-run-manifest-2"),
+    lambda m: m.update(manifest_version="pre-run-manifest-1"),  # the superseded version (no operational-directory binding) is no longer accepted
+    lambda m: m.update(manifest_version="pre-run-manifest-3"),
+    lambda m: m.pop("operations"),
+    lambda m: m.update(operations={"policy": "operations-binding-1"}),
     lambda m: m.update(purpose="other"),
     lambda m: m.update(confirmatory=True),
     lambda m: m.update(sha256="a" * 64),  # a self-reported digest is not an accepted field
@@ -537,6 +546,86 @@ def test_frozen_protocol_authorization_is_required_for_a_confirmatory_manifest(t
         frozen.write(manifest, expected=frozen.expected(**confirmatory))
     assert not (frozen.out / "m.json").exists()
     assert frozen.verify_dict(manifest, frozen.expected(approved_protocol_sha256=protocol_hash, **confirmatory)).ok
+
+
+def frozen_ctx(tmp_path, objs, monkeypatch) -> Ctx:
+    monkeypatch.setattr(mf, "CONFIRMATORY_SEEDS", (6101,))
+    return Ctx(make_repo(tmp_path / "repo", FROZEN_HEADER), tmp_path, objs)
+
+
+def test_a_confirmatory_manifest_binds_distinct_canonical_operational_directories(tmp_path, objs, monkeypatch):
+    frozen = frozen_ctx(tmp_path, objs, monkeypatch)
+    manifest = frozen.build(purpose=mf.PURPOSE_CONFIRMATORY)
+    ops = manifest["operations"]
+    assert ops["policy"] == "operations-binding-1" and set(ops) == {"policy", "scope", "attempt_root", "results_root"}
+    for name, path in frozen.ops.items():
+        assert ops[name] == mf.describe_directory(path) and ops[name]["inode"] != 0
+        assert ops[name]["path"] == os.path.normcase(os.path.realpath(path))
+    approved = frozen.expected(purpose=mf.PURPOSE_CONFIRMATORY, approved_protocol_sha256=manifest["protocol"]["sha256"])
+    assert frozen.verify_dict(manifest, approved).ok and "operational_directories" in frozen.verify_dict(manifest, approved).checks
+    with pytest.raises(ManifestSchemaError):  # a confirmatory manifest without the binding is invalid
+        frozen.build(purpose=mf.PURPOSE_CONFIRMATORY, operational_roots=None)
+    with pytest.raises(ManifestSchemaError):
+        frozen.build(purpose=mf.PURPOSE_CONFIRMATORY, operational_roots={"attempt_root": frozen.ops["attempt_root"]})
+    with pytest.raises(ManifestSchemaError):  # the same directory twice
+        frozen.build(purpose=mf.PURPOSE_CONFIRMATORY, operational_roots={"attempt_root": frozen.ops["attempt_root"],
+                                                                         "results_root": frozen.ops["attempt_root"]})
+    for bad in (tmp_path / "missing", frozen.repo / "docs", frozen.repo):
+        with pytest.raises(ManifestVerificationError):
+            frozen.build(purpose=mf.PURPOSE_CONFIRMATORY, operational_roots={**frozen.ops, "attempt_root": bad})
+    for mutation in (lambda m: m["operations"]["attempt_root"].update(inode=0), lambda m: m["operations"].update(policy="other"),
+                     lambda m: m["operations"]["results_root"].pop("device"), lambda m: m["operations"].update(scope="global"),
+                     lambda m: m["operations"].update(results_root=m["operations"]["attempt_root"]), lambda m: m.update(operations=None)):
+        with pytest.raises(ManifestSchemaError):
+            mf.validate_manifest(mutate(manifest, mutation))
+
+
+def test_a_moved_or_recreated_operational_directory_fails_verification(tmp_path, objs, monkeypatch):
+    frozen = frozen_ctx(tmp_path, objs, monkeypatch)
+    manifest = frozen.build(purpose=mf.PURPOSE_CONFIRMATORY)
+    approved = frozen.expected(purpose=mf.PURPOSE_CONFIRMATORY, approved_protocol_sha256=manifest["protocol"]["sha256"])
+    results = frozen.ops["results_root"]
+    results.rename(results.with_name("parked"))
+    with pytest.raises(ManifestVerificationError) as caught:
+        frozen.verify_dict(manifest, approved)
+    assert "operations.results_root" in str(caught.value)
+    results.mkdir()  # the same path, a new directory
+    with pytest.raises(ManifestVerificationError):
+        frozen.verify_dict(manifest, approved)
+    results.rmdir()
+    results.with_name("parked").rename(results)
+    assert frozen.verify_dict(manifest, approved).ok
+
+
+def test_directory_identity_resolves_aliases_and_refuses_other_directories(tmp_path):
+    target, other = tmp_path / "target", tmp_path / "other"
+    target.mkdir()
+    other.mkdir()
+    ident = mf.describe_directory(target)
+    assert mf.describe_directory(str(target) + os.sep) == ident and mf.describe_directory(other) != ident
+    if os.name == "nt":
+        assert mf.describe_directory(str(target).upper()) == ident
+    alias = tmp_path / "alias"
+    try:
+        os.symlink(target, alias, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        alias = None
+        if os.name == "nt":
+            import _winapi
+            alias = tmp_path / "junction"
+            _winapi.CreateJunction(str(target), str(alias))
+    if alias is not None:
+        assert mf.describe_directory(alias) == ident
+    ops = {"policy": mf.OPERATIONS_POLICY, "attempt_root": ident}
+    assert mf.check_bound_directory(ops, "attempt_root", target) == Path(os.path.realpath(target))
+    for wrong in (other, tmp_path / "missing"):
+        with pytest.raises(ManifestVerificationError):
+            mf.check_bound_directory(ops, "attempt_root", wrong)
+    for bad_ops in (None, {}, {"policy": "other", "attempt_root": ident}):
+        with pytest.raises(ManifestVerificationError):
+            mf.check_bound_directory(bad_ops, "attempt_root", target)
+    with pytest.raises(ManifestVerificationError):
+        mf.check_bound_directory(ops, "artifact_root", target)  # only the two bound kinds exist
 
 
 def test_a_draft_protocol_file_cannot_pass_as_frozen_even_with_a_forged_manifest(ctx, monkeypatch):

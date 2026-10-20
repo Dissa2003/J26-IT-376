@@ -594,7 +594,7 @@ def test_the_manifest_must_pass_its_own_independent_verifier(env):
 
 @pytest.mark.parametrize("field,value", [("sha256", "a" * 64), ("git_commit", "b" * 40), ("git_branch", "other"), ("dataset_seed", 6102),
                                          ("dataset_fingerprint", "c" * 64), ("generator_fingerprint", "d" * 64), ("split_seed", 1),
-                                         ("split_manifest_sha256", "e" * 64), ("protocol_sha256", "f" * 64), ("version", "pre-run-manifest-2"),
+                                         ("split_manifest_sha256", "e" * 64), ("protocol_sha256", "f" * 64), ("version", "pre-run-manifest-1"),
                                          ("purpose", "confirmatory"), ("protocol_version", "x")])
 def test_manifest_identity_fields_in_the_record_must_equal_the_manifest(env, field, value):
     with pytest.raises(SelectionRecordError):

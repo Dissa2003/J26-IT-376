@@ -1,4 +1,4 @@
-"""``pre-run-manifest-1``: the write-once pre-run manifest and its independent verifier (draft protocol heldout-eval-1.2.0-draft, section 12.12).
+"""``pre-run-manifest-2``: the write-once pre-run manifest and its independent verifier (draft protocol heldout-eval-1.2.0-draft, sections 12.12 and 12.15).
 
 Infrastructure only. This module trains nothing, scores nothing, generates no dataset and **reads no test label, score or prediction**; it records
 hashes, versions, counts and the train-only numerical configuration, and it never stores request bodies. A manifest produced here is authorization
@@ -33,6 +33,15 @@ Confirmatory versus infrastructure manifests
 ``purpose = "confirmatory"`` requires a protocol file whose header says ``Status: FROZEN``, an externally approved SHA-256 of that file, and a dataset seed
 in the confirmatory plan. ``purpose = "infrastructure_test"`` allows a draft protocol but forbids the confirmatory seeds, and is rejected by a verifier
 that expects a confirmatory run. The protocol is currently a DRAFT, so no confirmatory manifest can be created yet.
+
+Canonical operational directories (``operations-binding-1``, version 2 of the manifest)
+------------------------------------------------------------------------------------
+A confirmatory manifest binds the **attempt root** (where the one-time marker and failure reports live) and the **results root** (where the single test
+result is written) by their real path, device number and inode / file index, read from the live filesystem when the manifest is built. Verification re-reads
+both, so a missing, moved or recreated directory stops every later stage; the gate and the scoring stage refuse any other directory. The one-time property
+therefore holds per verified manifest on one local filesystem: a second attempt needs a different manifest, hence a different externally recorded digest and
+retrained artifacts. It is **not** cross-machine or registry-backed, and it cannot detect a marker file deleted by hand; the external digest log of the freeze
+procedure (protocol 12.15) covers that.
 """
 
 from __future__ import annotations
@@ -61,7 +70,11 @@ from .runner import NumericalConfiguration, Partition, TrainConfiguration
 from .splits import PROTOCOL_VERSION as SPLIT_PROTOCOL_VERSION
 from .splits import TEMPLATE_VERSION, SplitResult
 
-MANIFEST_VERSION = "pre-run-manifest-1"
+MANIFEST_VERSION = "pre-run-manifest-2"
+OPERATIONS_POLICY = "operations-binding-1"
+OPERATIONAL_ROOTS = ("attempt_root", "results_root")
+OPERATIONS_SCOPE = ("one-time protection per verified manifest on one local filesystem; not cross-machine, not registry-backed; a marker deleted by hand "
+                    "is detected only through the externally logged digests")
 PURPOSE_CONFIRMATORY = "confirmatory"
 PURPOSE_INFRASTRUCTURE = "infrastructure_test"
 PURPOSES = (PURPOSE_CONFIRMATORY, PURPOSE_INFRASTRUCTURE)
@@ -282,6 +295,47 @@ def hash_files(repo_root: str | os.PathLike[str], relative_paths: Sequence[str])
     return dict(sorted(out.items()))
 
 
+def describe_directory(path: str | os.PathLike[str], repo_root: str | os.PathLike[str] | None = None) -> dict[str, Any]:
+    """Identity of an existing directory outside the repository: normalized real path, device number and inode (file index on Windows).
+
+    Symbolic links, junctions and case or short-name variants resolve to the same identity. Raises :class:`ManifestVerificationError` if the directory is
+    missing, lies inside the repository, or the filesystem reports no usable identity (an inode of 0 cannot tell directories apart, so it fails closed).
+    """
+    try:
+        real = Path(os.path.realpath(path))
+        if not real.is_dir():
+            raise ManifestVerificationError("an operational directory does not exist")
+        st = os.stat(real)
+    except (OSError, TypeError, ValueError):
+        raise ManifestVerificationError("an operational directory could not be inspected") from None
+    if repo_root is not None:
+        repo = Path(os.path.realpath(repo_root))
+        if real == repo or repo in real.parents:
+            raise ManifestVerificationError("an operational directory must be outside the repository")
+    if not st.st_ino:
+        raise ManifestVerificationError("the filesystem reports no directory identity; the canonical directory cannot be bound")
+    return {"path": os.path.normcase(str(real)), "device": int(st.st_dev), "inode": int(st.st_ino)}
+
+
+def operations_section(roots: Mapping[str, str | os.PathLike[str]], repo_root: str | os.PathLike[str]) -> dict[str, Any]:
+    """The ``operations`` section binding the canonical attempt and results directories (they must already exist and be distinct)."""
+    if not isinstance(roots, Mapping) or set(roots) != set(OPERATIONAL_ROOTS):
+        raise ManifestSchemaError(f"operational roots must name exactly: {', '.join(OPERATIONAL_ROOTS)}")
+    bound = {name: describe_directory(roots[name], repo_root) for name in OPERATIONAL_ROOTS}
+    if len({(b["device"], b["inode"]) for b in bound.values()}) != len(bound):
+        raise ManifestSchemaError("the attempt root and the results root must be different directories")
+    return {"policy": OPERATIONS_POLICY, **bound, "scope": OPERATIONS_SCOPE}
+
+
+def check_bound_directory(operations: Any, name: str, path: str | os.PathLike[str], repo_root: str | os.PathLike[str] | None = None) -> Path:
+    """Return the real path of ``path`` if it is the canonical directory ``name`` bound by a manifest's ``operations`` section; raise otherwise."""
+    if not isinstance(operations, Mapping) or operations.get("policy") != OPERATIONS_POLICY or name not in OPERATIONAL_ROOTS:
+        raise ManifestVerificationError("the manifest binds no canonical operational directories")
+    if describe_directory(path, repo_root) != operations.get(name):
+        raise ManifestVerificationError(f"{name}: not the canonical directory bound by the verified manifest (other path, moved or recreated)")
+    return Path(os.path.realpath(path))
+
+
 def parse_protocol_header(text: str) -> tuple[str, str]:
     """``(version, status)`` from the protocol's first lines; status is ``DRAFT`` or ``FROZEN``."""
     head = text[:3000]
@@ -401,9 +455,12 @@ def build_manifest(
     partition: Partition, audit_report: Mapping[str, Any], train_config: TrainConfiguration, numerical: NumericalConfiguration,
     preflight: Mapping[str, Any], reserve_seed_log: Sequence[Mapping[str, Any]] = (),
     source_files: Sequence[str] = DEFAULT_SOURCE_FILES, config_files: Sequence[str] = DEFAULT_CONFIG_FILES,
-    protocol_path: str = DEFAULT_PROTOCOL_PATH,
+    protocol_path: str = DEFAULT_PROTOCOL_PATH, operational_roots: Mapping[str, str | os.PathLike[str]] | None = None,
 ) -> dict[str, Any]:
-    """Assemble a manifest from the live repository and the real runner objects (nothing is written). Raises if the result is not valid."""
+    """Assemble a manifest from the live repository and the real runner objects (nothing is written). Raises if the result is not valid.
+
+    ``operational_roots`` (``attempt_root`` and ``results_root``, existing directories outside the repository) is required for a confirmatory manifest.
+    """
     if purpose not in PURPOSES:
         raise ManifestSchemaError("purpose must be 'confirmatory' or 'infrastructure_test'")
     if not (isinstance(dataset, SyntheticDataset) and isinstance(split_result, SplitResult) and isinstance(partition, Partition)
@@ -454,6 +511,7 @@ def build_manifest(
         },
         "selection": selection_section(), "statistics": statistics_section(),
         "environment": collect_environment(), "limitations": list(LIMITATIONS),
+        "operations": None if operational_roots is None else operations_section(operational_roots, repo_root),
     }
     manifest = _plain(manifest)
     validate_manifest(manifest)
@@ -481,7 +539,7 @@ def _scan_forbidden(value: Any, path: str, problems: list[str]) -> None:
 
 
 _TOP_KEYS = {"manifest_version", "purpose", "confirmatory", "created_utc", "protocol", "git", "sources", "config_files", "data", "arms", "numerics",
-             "selection", "statistics", "environment", "limitations"}
+             "selection", "statistics", "environment", "limitations", "operations"}
 _SECTION_KEYS = {
     "protocol": {"version", "status", "sha256", "approved_for_confirmatory", "note"},
     "git": {"branch", "commit", "clean", "untracked_files_considered"},
@@ -590,6 +648,29 @@ def _check_data(m: Mapping[str, Any], problems: list[str]) -> None:
         problems.append("data.generator: version differs from the code")
 
 
+def _check_operations(m: Mapping[str, Any], problems: list[str]) -> None:
+    ops = m["operations"]
+    if ops is None:
+        if m["purpose"] == PURPOSE_CONFIRMATORY:
+            problems.append("operations: a confirmatory manifest must bind the canonical attempt and results directories")
+        return
+    if not isinstance(ops, dict) or set(ops) != {"policy", "scope", *OPERATIONAL_ROOTS} or ops["policy"] != OPERATIONS_POLICY \
+            or ops["scope"] != OPERATIONS_SCOPE:
+        problems.append("operations: missing or unexpected fields")
+        return
+    identities = []
+    for name in OPERATIONAL_ROOTS:
+        b = ops[name]
+        ok = (isinstance(b, dict) and set(b) == {"path", "device", "inode"} and isinstance(b["path"], str) and bool(b["path"])
+              and all(isinstance(b[k], int) and not isinstance(b[k], bool) for k in ("device", "inode")) and b["inode"] != 0)
+        if not ok:
+            problems.append(f"operations.{name}: needs a path, a device number and a non-zero inode")
+            return
+        identities.append((b["device"], b["inode"]))
+    if len(set(identities)) != len(identities):
+        problems.append("operations: the attempt root and the results root must be different directories")
+
+
 def validate_manifest(m: Any) -> None:
     """Structure and internal consistency of a manifest dictionary (no repository access). Raises :class:`ManifestSchemaError` listing field paths."""
     problems: list[str] = []
@@ -628,7 +709,7 @@ def validate_manifest(m: Any) -> None:
         problems.append("statistics: differs from the approved statistical protocol")
     if not isinstance(m["environment"], dict) or not {"python", "numpy", "platform", "threads"} <= set(m["environment"]):
         problems.append("environment: incomplete")
-    for label, check in (("data", _check_data), ("arms", _check_arms), ("numerics", _check_numerics)):
+    for label, check in (("data", _check_data), ("arms", _check_arms), ("numerics", _check_numerics), ("operations", _check_operations)):
         try:
             check(m, problems)
         except (KeyError, TypeError, ValueError, AttributeError, IndexError):
@@ -687,6 +768,13 @@ def _independent_checks(m: Mapping[str, Any], *, repo_root: Path, expected: Expe
     for rel, key in (("tokenization_ai/heldout_eval/numerics.py", "numerics_sha256"), ("tokenization_ai/model.py", "model_sha256")):
         if rel in m["sources"] and prov.get(key) != m["sources"][rel]:
             failures.append(f"numerics.provenance.{key} differs from the hashed source")
+    ops = m["operations"]
+    if ops is not None:
+        for name in OPERATIONAL_ROOTS:
+            try:
+                check_bound_directory(ops, name, ops[name]["path"], repo_root)
+            except ManifestVerificationError:
+                failures.append(f"operations.{name}: the canonical directory is missing, moved, recreated or inside the repository")
     env_diffs = environment_differences(m["environment"])
     if env_diffs and not allow_environment_mismatch:
         raise EnvironmentMismatchError(f"the running environment differs from the recorded one ({', '.join(env_diffs)})")
@@ -708,7 +796,8 @@ class VerificationResult:
 
 
 _CHECKS = ("expected_digest", "canonical_serialization", "schema_and_consistency", "git_clean_branch_commit", "source_and_config_hashes",
-           "protocol_status_and_hash", "dataset_split_provenance", "numerical_configuration", "statistical_protocol", "environment")
+           "protocol_status_and_hash", "dataset_split_provenance", "numerical_configuration", "statistical_protocol", "operational_directories",
+           "environment")
 
 
 def verify_manifest_bytes(data: bytes, *, expected_sha256: str, repo_root: str | os.PathLike[str], expected: ExpectedRun,

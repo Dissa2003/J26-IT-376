@@ -24,6 +24,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 import numpy as np
@@ -132,8 +133,13 @@ def build_env(root: Path, header: str, purpose: str) -> Env:
     pre = rn.preflight_report(cfg, part.validation, part.sealed_test)
     e.kw = {}  # the gate and the verifiers use only the code-defined lists; nothing is overridden
     e.cfg, e.numerical, e.pre = cfg, numerical, pre
+    e.attempt_root, e.results_root = root / "ops" / "attempts", root / "ops" / "results"  # the canonical directories this manifest binds
+    e.attempt_root.mkdir(parents=True)
+    e.results_root.mkdir()
+    e.ops = {"attempt_root": e.attempt_root, "results_root": e.results_root}
+    e.attempt_binding = mf.describe_directory(e.attempt_root)
     manifest = mf.build_manifest(purpose=purpose, created_utc=CREATED, repo_root=e.repo, dataset=ds, split_result=split, partition=part,
-                                 audit_report=AUDIT_OK, train_config=cfg, numerical=numerical, preflight=pre, **e.kw)
+                                 audit_report=AUDIT_OK, train_config=cfg, numerical=numerical, preflight=pre, operational_roots=e.ops, **e.kw)
     approved = manifest["protocol"]["sha256"] if purpose == mf.PURPOSE_CONFIRMATORY else None
     e.expected = mf.ExpectedRun(purpose=purpose, branch="main", commit=git(e.repo, "rev-parse", "HEAD"), dataset_seed=6101,
                                 generator_fingerprint=ds.fingerprint, dataset_fingerprint=split.report.dataset_fingerprint,
@@ -206,11 +212,27 @@ def attempt(env, root, provider=None, **over):
     return gate.open_test_attempt(**kwargs)
 
 
+def empty_directory(path: Path) -> None:
+    """TEST FIXTURE ONLY: production code never deletes a marker. Emptying the canonical directory simulates a fresh disposable fixture between tests
+    (the manifest binds one canonical attempt directory, so tests can no longer use a fresh directory per attempt)."""
+    for p in Path(path).iterdir():
+        if p.is_dir() and not p.is_symlink():
+            shutil.rmtree(p)
+        else:
+            os.chmod(p, stat.S_IWRITE | stat.S_IREAD)
+            p.unlink()
+
+
 @pytest.fixture()
-def root(tmp_path):
-    path = tmp_path / "attempts"
-    path.mkdir()
-    return path
+def root(env):
+    empty_directory(env.attempt_root)
+    yield env.attempt_root
+    empty_directory(env.attempt_root)
+
+
+def scratch(env) -> Path:
+    """A fresh directory outside the canonical attempt directory."""
+    return Path(tempfile.mkdtemp(dir=env.root))
 
 
 def experiment_id(env) -> str:
@@ -221,7 +243,7 @@ def fake_verified(env, **over) -> gate.VerifiedAttempt:
     fields = dict(experiment_id=experiment_id(env), manifest_sha256=env.manifest_sha, selection_record_sha256=env.record_sha, dataset_seed=6101,
                   dataset_fingerprint=env.split.report.dataset_fingerprint, generator_fingerprint=env.ds.fingerprint,
                   split_manifest_sha256=env.split.manifest_sha256, test_ids_sha256=env.manifest["arms"]["alignment"]["test_ids_sha256"],
-                  test_records=len(env.sealed))
+                  test_records=len(env.sealed), attempt_root=env.attempt_binding)
     fields.update(over)
     return gate.VerifiedAttempt(gate._KEY, **fields)
 
@@ -321,7 +343,7 @@ def test_a_selection_record_for_another_manifest_is_rejected(env, root):
                               split_result=env.split, partition=env.part, audit_report=AUDIT_OK, train_config=rn.prepare_train_configuration(env.part.train),
                               numerical=rn.prepare_numerical_configuration(rn.prepare_train_configuration(env.part.train)),
                               preflight=rn.preflight_report(rn.prepare_train_configuration(env.part.train), env.part.validation, env.part.sealed_test),
-                              **env.kw)
+                              operational_roots=env.ops, **env.kw)
     other_bytes = mf.canonical_bytes(other)
     assert_blocked(env, root, manifest_bytes=other_bytes, expected_manifest_sha256=mf.sha256_hex(other_bytes))
 
@@ -375,7 +397,7 @@ def test_the_real_draft_protocol_means_no_real_run_can_open_the_gate(env, root):
 
 
 def writable_copy_of_artifacts(env, root) -> Path:
-    copy_dir = root.parent / "artifacts_copy"
+    copy_dir = scratch(env) / "artifacts_copy"
     shutil.copytree(env.artifact_dir, copy_dir)
     for p in copy_dir.iterdir():
         os.chmod(p, stat.S_IWRITE | stat.S_IREAD)
@@ -392,7 +414,7 @@ def test_wrong_validation_evidence_is_rejected_by_the_real_selection_verifier(en
     assert_blocked(env, root, evidence=dataclasses.replace(env.evidence, artifact_dir=tampered))
     # (2) the original meaning: a *wrong model* for a candidate. Here a validly persisted artifact with different weights, whose digest the caller trusts:
     # it no longer reproduces the recorded validation AP of that candidate.
-    swapped = root.parent / "artifacts_swapped"
+    swapped = scratch(env) / "artifacts_swapped"
     shutil.copytree(env.artifact_dir, swapped)
     cid = rn.canonical_candidate_id(ARM_A, 1024, 150, 0.3)
     old_file = swapped / ma.artifact_filename(env.manifest_sha, cid)
@@ -418,7 +440,7 @@ def test_the_gate_requires_the_full_81_candidate_artifact_evidence(env, root):
     assert sum(1 for k in env.digests if k.startswith(ARM_B)) == 27 and sum(1 for k in env.digests if k.startswith(ARM_C)) == 27
     assert_blocked(env, root, evidence=dataclasses.replace(env.evidence, artifact_digests={k: v for k, v in env.digests.items() if k != cid}))
     assert_blocked(env, root, evidence=dataclasses.replace(env.evidence, artifact_digests={**env.digests, cid: "0" * 64}))
-    assert_blocked(env, root, evidence=dataclasses.replace(env.evidence, artifact_dir=root.parent / "no_such_directory"))
+    assert_blocked(env, root, evidence=dataclasses.replace(env.evidence, artifact_dir=scratch(env) / "no_such_directory"))
     with pytest.raises(TypeError):
         dataclasses.replace(env.evidence, models={})  # the obsolete selected-only evidence no longer exists
 
@@ -434,7 +456,8 @@ NEW_MODULES = ("tokenization_ai/heldout_eval/selection_record.py", "tokenization
 def variant_manifest(env, **over):
     """A genuine, valid manifest of the fixture repository built with some deviation (for example a shorter source list)."""
     return mf.build_manifest(purpose=mf.PURPOSE_CONFIRMATORY, created_utc=CREATED, repo_root=env.repo, dataset=env.ds, split_result=env.split,
-                            partition=env.part, audit_report=AUDIT_OK, train_config=env.cfg, numerical=env.numerical, preflight=env.pre, **over)
+                            partition=env.part, audit_report=AUDIT_OK, train_config=env.cfg, numerical=env.numerical, preflight=env.pre,
+                            operational_roots=env.ops, **over)
 
 
 def blocked_by_manifest(env, root, manifest: dict, fragment: str | None = None):
@@ -771,6 +794,170 @@ def test_the_marker_survives_a_restart(env, root):
     assert done.stdout.split() == ["consumed", "blocked"]
 
 
+# -- the canonical attempt directory bound by the manifest (D4-7E1, freeze blocker B5) -------------------------------------------------------------
+
+
+def make_alias(target: Path, alias: Path) -> bool:
+    """A directory symlink or, on Windows, a junction pointing at ``target``. False if the platform allows neither."""
+    try:
+        os.symlink(target, alias, target_is_directory=True)
+        return True
+    except (OSError, NotImplementedError):
+        pass
+    if os.name == "nt":
+        try:
+            import _winapi
+            _winapi.CreateJunction(str(target), str(alias))
+            return True
+        except (OSError, ImportError, AttributeError):
+            return False
+    return False
+
+
+def test_the_manifest_binds_distinct_canonical_attempt_and_results_directories(env):
+    ops = env.manifest["operations"]
+    assert ops["policy"] == "operations-binding-1" and ops["attempt_root"] == env.attempt_binding
+    assert ops["results_root"] == mf.describe_directory(env.results_root) and ops["attempt_root"] != ops["results_root"]
+    assert ops["attempt_root"]["inode"] != 0 and "not cross-machine" in ops["scope"]
+
+
+def test_another_directory_is_refused_before_anything_is_created(env, root):
+    other = scratch(env)
+    assert_blocked(env, other)  # the full gate: verification passes, the directory does not
+    with pytest.raises(gate.GateVerificationError):
+        gate.create_attempt_marker(other, fake_verified(env))  # the primitive refuses it too
+    assert list(other.iterdir()) == [] and marker_files(root) == []
+
+
+def test_a_second_attempt_from_another_directory_is_refused_after_the_first(env, root):
+    first = attempt(env, root)
+    for other in (scratch(env), env.results_root):
+        provider = Provider(env.source)
+        with pytest.raises(gate.GateVerificationError):
+            attempt(env, other, provider)
+        assert provider.calls == 0 and list(other.iterdir()) == []
+    assert marker_files(root) == [Path(first.marker_path).name]
+
+
+def test_an_alias_of_the_canonical_directory_meets_the_same_marker(env, root):
+    alias = scratch(env) / "alias"
+    if not make_alias(root, alias):
+        pytest.skip("this platform allows neither a directory symlink nor a junction")
+    outcome = attempt(env, alias)
+    assert os.path.normcase(str(Path(outcome.marker_path).parent)) == env.attempt_binding["path"]
+    spellings = [root, alias, Path(str(root) + os.sep + ".")] + ([Path(str(root).upper())] if os.name == "nt" else [])
+    provider = Provider(env.source)
+    for spelling in spellings:
+        with pytest.raises(gate.AttemptAlreadyConsumed):
+            attempt(env, spelling, provider)
+    assert provider.calls == 0 and marker_files(root) == [Path(outcome.marker_path).name]
+
+
+def test_a_moved_or_recreated_canonical_directory_stops_every_attempt(env, root):
+    parked = env.attempt_root.with_name("attempts-parked")
+    env.attempt_root.rename(parked)
+    try:
+        assert_blocked(env, scratch(env))  # missing: the manifest verifier itself refuses
+        env.attempt_root.mkdir()  # the same path, a new directory: a different identity
+        try:
+            provider = Provider(env.source)
+            with pytest.raises(gate.GateVerificationError):
+                attempt(env, env.attempt_root, provider)
+            assert provider.calls == 0 and list(env.attempt_root.iterdir()) == []
+        finally:
+            env.attempt_root.rmdir()
+    finally:
+        parked.rename(env.attempt_root)
+    assert mf.describe_directory(env.attempt_root) == env.attempt_binding
+
+
+def test_concurrent_full_gate_attempts_through_different_spellings_yield_one_attempt(env, root):
+    alias = scratch(env) / "alias"
+    spellings = [root, root, alias if make_alias(root, alias) else root, root]
+    barrier = threading.Barrier(len(spellings))
+    results: list = []
+
+    def worker(path):
+        barrier.wait()
+        try:
+            results.append(attempt(env, path))
+        except gate.AttemptGateError as exc:
+            results.append(exc)
+
+    threads = [threading.Thread(target=worker, args=(p,)) for p in spellings]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    winners = [r for r in results if isinstance(r, gate.AttemptOutcome)]
+    assert len(results) == len(spellings) and len(winners) == 1
+    assert all(isinstance(r, gate.AttemptAlreadyConsumed) for r in results if not isinstance(r, gate.AttemptOutcome))
+    assert marker_files(root) == [Path(winners[0].marker_path).name] and failure_files(root) == []
+
+
+def test_exactly_one_of_several_processes_creates_the_marker(env, root):
+    signals = scratch(env)
+    code = ("import os, sys, time\nfrom tokenization_ai.heldout_eval import attempt_gate as g\n"
+            "open(os.path.join(sys.argv[3], 'ready-' + sys.argv[4]), 'w').close()\n"
+            "while not os.path.exists(os.path.join(sys.argv[3], 'go')):\n    time.sleep(0.001)\n"
+            "try:\n    g._write_exclusive(g.marker_path(sys.argv[1], sys.argv[2]), b'x')\n    print('won')\n"
+            "except g.AttemptAlreadyConsumed:\n    print('blocked')\n")
+    n = 6
+    procs = [subprocess.Popen([sys.executable, "-c", code, str(root), experiment_id(env), str(signals), str(i)], cwd=str(REPO_ROOT),
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for i in range(n)]
+    deadline = time.monotonic() + 120
+    while len(list(signals.glob("ready-*"))) < n and time.monotonic() < deadline:
+        time.sleep(0.01)
+    (signals / "go").write_text("", encoding="utf-8")
+    outputs = [p.communicate(timeout=120) for p in procs]
+    assert all(p.returncode == 0 for p in procs), [err for _, err in outputs]
+    assert sorted(out.strip() for out, _ in outputs) == ["blocked"] * (n - 1) + ["won"]
+    assert marker_files(root) == [f"test-attempt-{experiment_id(env)}.json"]
+
+
+def test_labels_are_released_only_for_a_marker_in_the_canonical_directory(env, root):
+    elsewhere = scratch(env)
+    path = gate.marker_path(elsewhere, experiment_id(env))
+    path.write_bytes(b"x")
+    receipt = gate.MarkerReceipt(gate._KEY, fake_verified(env), str(path), b"x")  # test-constructed: a receipt for a marker outside the canonical root
+    provider = Provider(env.source)
+    with pytest.raises(gate.LabelRecoveryError) as caught:
+        gate.recover_test_labels(receipt, env.sealed, env.split, provider)
+    assert caught.value.category == "marker_unverifiable" and provider.calls == 0
+
+
+def test_a_failure_report_without_its_marker_still_blocks_a_new_attempt(env, root):
+    def crash():
+        raise RuntimeError("x")
+
+    with pytest.raises(gate.PostMarkerFailure):
+        attempt(env, root, crash)
+    marker = gate.marker_path(root, experiment_id(env))
+    os.chmod(marker, stat.S_IWRITE | stat.S_IREAD)
+    marker.unlink()  # a marker removed by hand (the act the external digest log exists for); the failure report remains
+    assert gate.inspect_attempt(root, experiment_id(env)).state == "report_without_marker"
+    provider = Provider(env.source)
+    with pytest.raises(gate.AttemptAlreadyConsumed):
+        attempt(env, root, provider)
+    with pytest.raises(gate.AttemptAlreadyConsumed):
+        gate.create_attempt_marker(root, fake_verified(env))
+    assert provider.calls == 0 and marker_files(root) == [] and len(failure_files(root)) == 1
+
+
+def test_failure_reports_always_go_to_the_canonical_directory(env, root):
+    alias = scratch(env) / "alias"
+    target = alias if make_alias(root, alias) else root
+
+    def crash():
+        raise RuntimeError("x")
+
+    with pytest.raises(gate.PostMarkerFailure) as caught:
+        attempt(env, target, crash)
+    assert os.path.normcase(str(Path(caught.value.report_path).parent)) == env.attempt_binding["path"] and len(failure_files(root)) == 1
+    params = set(inspect.signature(gate.report_post_marker_failure).parameters)
+    assert params == {"outcome", "stage", "category"}  # no caller-chosen directory
+
+
 # -- ordering of the label provider -----------------------------------------------------------------------------------------------------------------
 
 
@@ -805,7 +992,8 @@ def test_recovery_requires_a_marker_receipt_and_an_intact_marker(env, root):
 
 
 def recover(env, root, rows, **over):
-    receipt = gate.create_attempt_marker(Path(tempfile.mkdtemp(dir=root)), fake_verified(env))  # a fresh attempt directory per call
+    fresh = scratch(env)  # a fresh directory per call, bound into the (test-constructed) verified attempt, so each call has its own marker
+    receipt = gate.create_attempt_marker(fresh, fake_verified(env, attempt_root=mf.describe_directory(fresh)))
     args = dict(sealed_test=env.sealed, split_result=env.split)
     args.update(over)
     return gate.recover_test_labels(receipt, args["sealed_test"], args["split_result"], lambda: rows)

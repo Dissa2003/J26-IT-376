@@ -4,7 +4,9 @@ and 12.12.10).
 :func:`score_test_once` is the only test-scoring path. It never touches a test label itself before the one-time gate has opened:
 
 1. Before the gate (nothing is created): the training configuration must be the one bound by the manifest (frozen vocabulary hash, token budget, training
-   record ids), the results directory must be a trusted directory outside the repository, and no result may exist yet.
+   record ids), and the attempt and results directories must be the canonical directories bound by the manifest (``operations``: real path, device and
+   inode; outside the repository). A caller cannot choose a replacement directory. The results directory must be empty: a leftover result stops the run
+   before the gate, so it can never consume the attempt.
 2. ``attempt_gate.open_test_attempt`` verifies the frozen pre-run manifest and the validation-selection record with the real verifiers (including the
    recomputation of all 81 validation APs), creates the atomic one-time marker, and only then recovers the authentic test labels.
 3. After the marker: exactly the three candidates selected on validation (read from the verified record) are loaded through the strict artifact loader; the
@@ -81,7 +83,8 @@ class ScoringOutcome:
     marker_path: str
 
 
-def _pre_gate_checks(manifest_bytes: bytes, train_config: runner.TrainConfiguration, results_dir: Path, repo_root: Any) -> None:
+def _pre_gate_checks(manifest_bytes: bytes, train_config: runner.TrainConfiguration, results_dir: Any, attempt_root: Any, repo_root: Any) -> Path:
+    """Checks that create nothing; returns the real path of the canonical results directory."""
     if not isinstance(train_config, runner.TrainConfiguration):
         raise ScoringError("the runner's TrainConfiguration is required to encode the test requests")
     try:
@@ -93,11 +96,18 @@ def _pre_gate_checks(manifest_bytes: bytes, train_config: runner.TrainConfigurat
     if (cfg["vocabulary"].get("sha256") != arms.get("vocabulary", {}).get("sha256") or cfg["train_ids_sha256"] != arms.get("alignment", {}).get("train_ids_sha256")
             or train_config.decision.selected_max_length != arms.get("budget", {}).get("selected_max_length")):
         raise ScoringError("the training configuration is not the one bound by the manifest")
-    if not results_dir.is_dir():
-        raise ScoringError("the results directory does not exist")
-    resolved, root = results_dir.resolve(), Path(repo_root).resolve()
-    if resolved == root or root in resolved.parents:
-        raise ScoringError("the results directory must be outside the repository")
+    try:
+        results = mf.check_bound_directory(manifest.get("operations"), "results_root", results_dir, repo_root)
+        mf.check_bound_directory(manifest.get("operations"), "attempt_root", attempt_root, repo_root)
+    except mf.ManifestVerificationError:
+        raise ScoringError("the results and attempt directories must be the canonical directories bound by the manifest") from None
+    try:
+        leftovers = any(results.iterdir())
+    except OSError:
+        leftovers = True
+    if leftovers:
+        raise ScoringError("the canonical results directory is not empty: an earlier result or leftover file needs review; nothing was created")
+    return results
 
 
 def _per_arm(logits: list[float], labels: list[int], threshold: float | None) -> dict[str, Any]:
@@ -127,8 +137,7 @@ def score_test_once(*, attempt_root: str | os.PathLike[str], results_dir: str | 
                     evidence: sr.ValidationEvidence, sealed_test: runner.SealedTestSet, label_provider: Callable[[], Iterable[EvalRecord]],
                     train_config: runner.TrainConfiguration, created_utc: str | None = None) -> ScoringOutcome:
     """Open the one-time gate and score the three validation-selected models on the test split exactly once. See the module docstring."""
-    results = Path(results_dir)
-    _pre_gate_checks(manifest_bytes, train_config, results, repo_root)
+    results = _pre_gate_checks(manifest_bytes, train_config, results_dir, attempt_root, repo_root)
     outcome = gate.open_test_attempt(attempt_root=attempt_root, manifest_bytes=manifest_bytes, expected_manifest_sha256=expected_manifest_sha256,
                                      record_bytes=record_bytes, expected_record_sha256=expected_record_sha256, repo_root=repo_root, expected_run=expected_run,
                                      evidence=evidence, sealed_test=sealed_test, label_provider=label_provider, created_utc=created_utc)
@@ -178,7 +187,7 @@ def score_test_once(*, attempt_root: str | os.PathLike[str], results_dir: str | 
         }
         digest = _write_result(result_path, result)
     except Exception:  # noqa: BLE001 - any failure after the marker is reported by category only and never retried
-        report = gate.report_post_marker_failure(attempt_root, outcome, "test_scoring", "scoring_failed")
+        report = gate.report_post_marker_failure(outcome, "test_scoring", "scoring_failed")
         raise gate.PostMarkerFailure("scoring_failed", "test_scoring", report) from None
     return ScoringOutcome(result_path=str(result_path), result_sha256=digest, experiment_id=outcome.experiment_id,
                           primary_decision=result["primary"]["decision"], marker_path=outcome.marker_path)

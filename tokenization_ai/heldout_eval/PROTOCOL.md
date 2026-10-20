@@ -38,6 +38,7 @@
 | `1.2.0-draft` (D4-7C1) | **Gate-side source-coverage enforcement** (`attempt_gate.py`, section 12.12.7): the test attempt gate no longer forwards any verifier override (source list, configuration list, protocol path, environment-mismatch flag); it runs the real manifest verifier with the trusted code constants, then its own coverage check (exact required source table re-hashed from the live repository, gate-critical modules in the required list, verifier coverage report), all before the marker. Nothing is trained or scored, no real manifest or marker exists, the runner gates stay blocked, and nothing is frozen. |
 | `1.2.0-draft` (D4-7C2) | **Verified training authorization** (`runner.authorize_training`, section 12.12.8): a `TrainingAuthorization` context is obtainable only after the real manifest verifier succeeds with the trusted code-defined lists (no override), the gate's complete-source-coverage check passes, and the verified manifest matches the dataset, split, training configuration, numerical configuration, 81-candidate grid, recomputed preflight and sealed-test binding the runner prepared. Nothing is fitted, scored or unsealed, no marker or artifact is created, no real manifest or authorization exists, `request_test_access()` and the argument-free `request_training_authorization()` stay disabled, and nothing is frozen. |
 | `1.2.0-draft` (D4-7D) | **Training stage, validation selection and one-time test scoring implemented; freeze-readiness audit** (`training.py`, `confirmatory_scoring.py`, sections 12.12.9-12.12.11 and 12.14): a verified, deterministic 81-candidate training plan that re-derives every binding from the authorized run; training on training records and labels only with write-once, bit-exact artifacts and a ledger; validation scoring and the real selection-record writer and verifier; one-time test scoring through the gate with the fixed bootstrap and decision rule; manifest source coverage extended to 27 files; a re-check of the live repository at training time; a post-marker failure report for scoring. Exercised only on disposable development fixtures: no confirmatory data, manifest, model, record, marker or result exists, no metric is reported, and nothing is frozen. |
+| `1.2.0-draft` (D4-7E) | **One-time attempt security, operational procedure, open decisions and a full-scale development dry run** (sections 12.12.12, 12.14 update, 12.15-12.17): the confirmatory manifest (`pre-run-manifest-2`) binds the canonical attempt and results directories by real path, device and inode; the gate and the scoring stage refuse any other directory before anything is created; failure reports always go to the canonical directory; a failure report without its marker and a non-empty results directory also block. The run procedure, the go/no-go checklist and the manual-review rules are written (not executed); the remaining scientific decisions are tabulated with recommendations (not decided). A development-only dry run (seed 6101, 2,000 templates, disposable fixture repository) trained all 81 candidates and wrote and verified a selection record; no test gate was opened and no metric is reported. Nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -1654,7 +1655,8 @@ templates, a throw-away FROZEN fixture repository); **no research model has been
 fixtures; **the real one-time test attempt has not been executed and no test result exists.**
 
 - **Before the gate (nothing is created):** the supplied training configuration must be the one bound by the manifest (vocabulary hash, token budget, training ids); the results
-  directory must exist outside the repository.
+  directory must exist outside the repository. *(D4-7E1: the attempt and results directories must be the canonical directories bound by the manifest and the results directory
+  must be empty, 12.12.12.)*
 - **Gate:** `attempt_gate.open_test_attempt` verifies the frozen manifest and the selection record with the real verifiers (all 81 APs recomputed), creates the atomic marker, and
   only then recovers the authentic labels.
 - **After the marker:** loads exactly the three validation-selected candidates named by the verified record (digest, identity, learning rate, model hash, and the record's weight
@@ -1675,6 +1677,45 @@ fixtures; **the real one-time test attempt has not been executed and no test res
 `manifest.DEFAULT_SOURCE_FILES` / `REQUIRED_SOURCE_FILES` now hold **27** files: the 25 of 12.12.6 plus `training.py` and `confirmatory_scoring.py`. `attempt_gate.GATE_CRITICAL_SOURCES`
 also includes both. The dependency test confirms that every `heldout_eval/*.py` module and every core module they import is listed, so neither training authorization nor the gate
 can approve an unprotected evaluation dependency. Hashing remains normalized-content SHA-256.
+
+#### 12.12.12 Canonical operational directories `operations-binding-1` (implemented in D4-7E1; manifest version `pre-run-manifest-2`)
+
+**Threat addressed (freeze blocker B5).** Before D4-7E1 the one-time marker was exclusive only inside the directory the caller passed. Choosing another directory
+(by mistake, after a restart, or through a different spelling of the same location) would have allowed a second attempt on the same experiment, and a failure
+report could have been written anywhere.
+
+**What the code now does.**
+- `manifest.build_manifest(..., operational_roots={"attempt_root": ..., "results_root": ...})` binds both directories into the write-once manifest as
+  `operations`: the normalized real path, the device number and the inode / file index, read from the live filesystem. Both must exist, lie outside the
+  repository and be different directories; an inode of 0 (no usable identity) fails closed. **A confirmatory manifest without this section is invalid**; an
+  infrastructure manifest may leave it `null`. The manifest version is therefore `pre-run-manifest-2` (version 1 is no longer accepted; no real manifest of
+  either version exists).
+- Manifest verification re-reads both directories: a missing, moved or recreated directory (same path, new identity) stops verification, and with it
+  training authorization, the selection-record verifier and the gate.
+- The gate refuses any attempt directory other than the bound one **before anything is created** (`GateVerificationError`); a symbolic link, junction,
+  case variant or trailing separator resolves to the same identity and meets the same marker. Labels are released only for a marker that lies in the bound
+  directory. Failure reports are always written there; `report_post_marker_failure(outcome, stage, category)` no longer takes a directory.
+- `confirmatory_scoring.score_test_once` refuses, before the gate, a results or attempt directory that is not the bound one, and a results directory that is
+  not empty (a leftover result therefore stops the run without consuming the attempt).
+- A failure report of the experiment whose marker is missing (for example a marker removed by hand) also counts as a spent attempt
+  (`inspect_attempt` state `report_without_marker`; marker creation refuses with `AttemptAlreadyConsumed`).
+
+**What it does not do (stated limits).** The protection holds **per verified manifest on one local filesystem**. It is not cross-machine and not backed by a
+registry: a second, different manifest (with its own digest, retrained artifacts and a new selection record) could bind other directories, and a marker deleted
+by hand cannot be detected by code. Both are covered only by the operational procedure (12.15): the canonical directories and every digest are recorded in an
+external log before the attempt, and the log is the authority. In-process code can still bypass in-process checks; `O_EXCL` atomicity is a local-filesystem
+property.
+
+**Artifact and selection-record directories are not bound in code.** Training and validation are deterministic and every artifact, the ledger and the record
+are verified by digest; their canonical locations are fixed by the procedure (12.15) and their digests go into the external log.
+
+**Tests.** `test_attempt_gate.py` (new: different directory refused before anything exists, a second attempt from another directory refused after the first,
+alias/junction and case variants meet the same marker, a moved or recreated directory stops every attempt, concurrent full-gate attempts through different
+spellings yield one attempt, exactly one of six processes creates the marker, labels released only for a marker in the canonical directory, failure reports
+always in the canonical directory), `test_manifest.py` (binding, distinctness, refusal of missing / in-repository directories, schema mutations, a moved or
+recreated directory fails verification, alias resolution), `test_confirmatory_scoring.py` (other directories refused before the gate). A mutation check
+(disabling the canonical-root check) makes the targeted gate tests fail. Existing tests that reused one manifest with a fresh directory per attempt now use the
+single canonical directory and empty it between tests (a test-fixture act; production code never deletes a marker).
 
 ### 12.14 Freeze-readiness audit (D4-7D; the protocol remains a DRAFT)
 
@@ -1711,6 +1752,157 @@ templates: about 10 s for the largest candidate fit, so the whole stage takes mi
 evidence of M1-M3 integration; in-process guards are not a boundary against malicious code; `O_EXCL` atomicity is a local-filesystem property; the gate cannot see what unrelated code
 read; bootstrap intervals describe generator sampling uncertainty for one dataset and one split.
 
+#### 12.14.1 Freeze-readiness status after D4-7E
+
+| Blocker | Status after D4-7E |
+|---|---|
+| B1 Freeze act | **Open, your action:** reviewed freeze commit, supervisor approval and the external log (12.15 item 3). |
+| B2 Secondary analyses | **Awaiting your decision** (12.16): descope, or implement the post-marker family analysis with an approved small-family rule. |
+| B3 Audit timing | **Awaiting your decision** (12.16); recommendation (a). |
+| B4 Other open items | **Awaiting your confirmation** (12.16): exclude leave-family-out and the separate ablation; report prevalence only. |
+| B5 Operational controls | **Implemented and tested** in code for the attempt and results directories (12.12.12); **procedure written** for the remaining directories and the external digest log (12.15); not independently approved. |
+| B6 Manual review | **Procedure written** (12.15 item 10); not approved. |
+| B7 Split protocol label | **Recommendation: keep** as a historical split-code label (12.16); needs your confirmation; no code change. |
+| B8 Dry run | **Done** on the development seed (12.17). |
+| B9 Environment | **Procedure written** (12.15 item 2); the manifest records and enforces it. |
+| B10 Group integration (added in D4-7F, 12.18) | **Open, needs the group:** the group branch `origin/dev` changed hashed Member 4 sources (`model.py`, `vocabulary.py`) and `requirements.txt`. The freeze commit must be the commit that contains the agreed integration, or the confirmatory provenance will not describe the code the group ships. |
+
+### 12.15 Operational freeze and run procedure (D4-7E3; draft procedure, not yet executed)
+
+This procedure is part of the protocol text, so it is frozen and hashed with it. Nothing in it has been executed for a confirmatory run. "External log" means a
+plain-text log kept **outside the repository and outside every run directory** (for example on a second device or in a dated, signed e-mail to the supervisor),
+written by hand at each step; it is the independently trusted record of every digest. The code never reads it; a person compares it.
+
+**1. Canonical locations (fixed before the manifest is built).** One run root outside the repository on a local, non-network disk, for example
+`C:\LogiShield-HeldOut\run-7101\`, with exactly these subdirectories, created empty: `manifest\`, `artifacts\`, `records\`, `attempts\` (bound in code as
+`attempt_root`), `results\` (bound in code as `results_root`), `logs\`. Record the absolute paths in the external log. Never create a second run root for the
+same seed. Do not place the run root in a synced folder (OneDrive or similar) or on a network share.
+
+**2. Environment (fixed before the manifest is built).** The repository's `.venv` with the exact Python and NumPy versions of the dry run (12.17); the thread
+variables `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS`, `NUMEXPR_NUM_THREADS`, `VECLIB_MAXIMUM_THREADS` either all unset or all set to the
+same values for every stage (the manifest records them and verification refuses any difference). Record `python --version`, `numpy.__version__` and
+`numpy.show_config()` BLAS name and version in the external log.
+
+**3. Protocol approval record.** The freeze commit sets the header to `Status: FROZEN` with a new version and a change-history entry, after the decisions of
+12.16 are recorded. The supervisor's approval (date, protocol version, SHA-256 of the frozen `PROTOCOL.md` computed with LF line endings, commit hash) goes
+into the external log. The manifest is accepted only with that externally supplied hash.
+
+**4. Source, commit and clean-tree checks (before every stage).** `git status --porcelain --untracked-files=all` must be empty; `git rev-parse HEAD` and the
+branch must equal the logged freeze commit. The code re-checks all 27 required source hashes at manifest writing, training authorization, training, record
+writing and the gate; the person checks the commit against the log.
+
+**5. Manifest.** Generate seed 7101 (or a logged reserve seed under 12.5), run the construction audit under the policy decided for B3 (12.16), build and write
+the manifest once into `manifest\` with `operational_roots` = `attempts\` and `results\`. Log its SHA-256 immediately. The manifest is never rebuilt; if writing
+fails, the partial file stays and work stops for review.
+
+**6. Training.** `authorize_training` with the logged manifest digest, then `build_training_plan`, then `train_candidates` into `artifacts\`. Log the ledger
+SHA-256. Training is deterministic; it is never retried into another directory. A failure part-way leaves the partial artifacts; stop and review (item 9).
+
+**7. Validation selection.** `select_on_validation` writes `records\selection.json`. Log its SHA-256. Do not look at the recorded validation APs before the
+record is written and logged (they cannot change anything afterwards, but the order keeps the record honest).
+
+**8. Pre-attempt go/no-go checklist** (all must be "yes"; otherwise no attempt):
+1. The external log holds: run root paths, environment, approved protocol hash, freeze commit, manifest digest, ledger digest, record digest.
+2. The working tree is clean and at the freeze commit; the branch is the logged branch.
+3. `attempts\` and `results\` are empty and are the directories named in the manifest (`operations`).
+4. The environment (Python, NumPy, BLAS, thread variables) equals the logged one.
+5. The manifest, ledger and record digests recomputed now equal the logged ones.
+6. No earlier attempt for this seed exists anywhere: no marker, no failure report, no result file (check the log as well as the disk).
+7. The person running the attempt has the label provider ready (the original generator output) and will not inspect test labels in any other way.
+8. The supervisor (or the named reviewer) knows the attempt is about to run.
+
+**9. Crash and partial-artifact handling.** Before the marker: any failure leaves nothing to undo; fix the cause only if it is an infrastructure fault that does
+not change any scientific choice, log it, and restart from the failed stage with the same manifest (a changed source means a new commit, hence a new manifest,
+retraining and a new record, all logged). Partial training artifacts are kept for review and never overwritten; a restart after a partial failure needs a
+logged review decision. After the marker: see item 10.
+
+**10. Failure after the marker, manual review.** The attempt is spent. A failure report (`test-attempt-<id>.failure-<n>.json`) holds only the stage and
+category. The reviewer (Member 4 with the supervisor as the named responsible reviewer) reads the report and the console output (which never contains labels or
+scores), records in the external log what failed, whether any test label or score could have been seen, and the conclusion. **No automatic retry exists and
+none may be scripted.** Any further attempt needs a protocol revision with the reason, a new manifest and the supervisor's written approval; it must be reported
+as a second attempt, never as the first.
+
+**11. No retries.** No stage is re-run to obtain a different number. Re-running a deterministic stage for a logged infrastructure reason is allowed only before
+the marker and must reproduce the logged digests.
+
+**12. Evidence collection (after a successful attempt).** Log the marker SHA-256 and the result SHA-256. Archive (copy, not move) `manifest\`, `records\`,
+`attempts\`, `results\` and the ledger, with the external log, into a read-only evidence folder. The result file holds aggregates only. Do not export
+per-record labels, scores or request content; the label source stays with the generator configuration.
+
+### 12.16 Secondary analyses and open decisions (D4-7E2; recommendations, not decisions)
+
+| Item | Finding | Options | Recommendation | Needs your approval |
+|---|---|---|---|---|
+| **B2** recall by scenario family; FP/FN review by family and template group, hard cases separately (section 7, listed as secondary) | Listed in the draft protocol; **not implemented**. The gate releases labels only (`EvalRecord`), not scenario families. The generator fingerprint covers every record's family, so a family list supplied after the marker can be verified by recomputing the fingerprint from the full dataset. Section 7 says "small families flagged as unreliable" but defines no threshold. | (a) Descope explicitly before the freeze and report the omission. (b) Implement a post-marker family provider verified against the generator fingerprint, with descriptive per-family counts and recall/false-positive rates, no intervals, never used for any decision, and a pre-specified small-family rule (for example "fewer than 10 test templates in the family: reported as unreliable"). | (b) if time allows before the freeze, otherwise (a). Either way it is secondary and cannot change the primary result. | Choice of (a)/(b); the small-family threshold; whether template-group review is counts only. |
+| **B3** label-conditioned audit timing (open item 11) | The manifest requires an audit summary and `audit.build_pilot_report` is label-conditioned on all splits, including test. The reserve-seed rule (12.5) needs construction errors to be found before training, which implies running the construction audit on the full dataset. | (a) Full-dataset audit before the manifest, recording only error/warning counts and pass/fail; nobody inspects test-split descriptive statistics before the attempt. (b) Audit on train and validation only before the manifest; full audit after the marker (cannot trigger a reserve seed). | (a): construction errors are defects of the generator, not information about model performance, and 12.5 requires finding them before training. Add the rule that the full audit report is stored unread in `logs\` and only its counts are logged. | Choose (a) or (b). (a) needs no code change; (b) needs a split-restricted audit. |
+| **B4a** leave-family-out split (item 4) | Not implemented; a different generalization question (unseen attack families). | Exclude; or add as a future secondary study under a new protocol version. | **Not necessary for PP1 or the main question**; record as excluded. | Confirm exclusion. |
+| **B4b** prevalence sensitivities (item 7) | Not implemented; PR-AUC depends on prevalence. | Exclude; or report test-set prevalence and note that AP depends on it. | **Valuable optional**; minimum: report record- and template-level prevalence (already in the manifest counts). No new experiment. | Confirm "report prevalence only". |
+| **B4c** flat-versus-structure-aware ablation (item 3) | Arm C (character 3-grams) already contrasts structure-aware tokens with a flat representation of the same request; a separate ablation would add candidates and a new search. | Exclude, stating that Arm C is the flat comparison; or add a new arm (new grid, new protocol). | **Exclude**; describe Arm C as the flat baseline. | Confirm. |
+| **B7** `splits.PROTOCOL_VERSION = "heldout-eval-1.0.0-draft"` | The constant labels the splitting code and is part of every split-manifest hash; a test pins it deliberately. It is not the evaluation protocol version. | Keep and document as a historical split-code label; or change it (changes every split hash; split-code change). | **Keep**; this paragraph is the explanation. No code change is needed. | Confirm. |
+
+None of these items is required to answer the primary question (AP(B) - AP(A) with the fixed bootstrap rule).
+
+### 12.17 Full-scale development dry run (D4-7E4; development seed 6101 only; non-confirmatory)
+
+**What was run.** A scratch script outside the repository ran the real code path on the development seed 6101 at the planned scale (2,000 requested
+templates), primary split seed 4401 and the approved 81-candidate grid, against a disposable fixture repository whose header says FROZEN (the development seed
+stood in for the confirmatory seed in that process only, as in the tests). Stages: generation, group-aware split, partition, train-only vocabulary and budget,
+train-only numerical configuration, label-free preflight, the **real construction audit** on the full development dataset, manifest (`pre-run-manifest-2`,
+with bound attempt and results directories), training authorization, training plan, training of all 81 candidates, validation scoring with the writer's
+recomputation and verification of the selection record, an independent re-verification, and a re-fit of the largest candidate of each arm. **The test gate was
+not opened, no test label or test score was accessed, and no AP, threshold or selected candidate is reported.** Nothing from this run is a research result.
+
+**Outcome (2026-10-21, Windows 10, 8 logical CPUs, Python 3.14.7, NumPy 2.5.3, thread variables unset).**
+
+| Check | Result |
+|---|---|
+| Templates / records | 2,000 of 2,000 (no shortfall); 12,068 records; 208 mixed-label templates |
+| Split (records / groups) | train 8,450 / 1,269; validation 1,811 / 366; test 1,807 / 365; requirements met; 0 excluded; 0 groups shared between splits |
+| Construction audit | passed; 0 errors; 0 warnings |
+| Shared budget | `max_length` 192 selected on training data |
+| Candidates | 81 trained; 81 distinct artifact digests and 81 distinct weight digests; 2,225,068 bytes on disk |
+| Selection record | written with 81 candidates scored on validation, verified by the writer and again independently |
+| Determinism | re-fitting the largest candidate (4,096 buckets, 400 epochs, c = 0.8) of each arm reproduced the persisted weights bit for bit |
+| Attempt and results directories | untouched (empty) |
+
+| Stage | Wall time (s) | CPU time (s) |
+|---|---|---|
+| Generation + split + partition | 2.9 | 2.9 |
+| Training configuration (vocabulary, budget, inputs) | 6.9 | 6.8 |
+| Numerical configuration (eigenvalues, learning rates) | 13.3 | 17.3 |
+| Preflight | 1.1 | 1.1 |
+| Construction audit (full dataset) | 29.2 | 28.8 |
+| Manifest + authorization | 1.6 | 1.3 |
+| Training plan (recomputes configuration and numerics) | 22.0 | 25.7 |
+| **Training of 81 candidates** | **295.4** | 1,291.8 |
+| Validation scoring + record writing and verification | 96.8 | 95.3 |
+| Independent record re-verification | 30.1 | 29.0 |
+| Total (including the determinism re-fits, 30.0 s) | **529.4** | |
+
+CPU time above wall time during training shows that NumPy's BLAS used several threads; bit-identical re-fits were obtained in the same environment. Peak memory
+was **not measured** (the Windows process-memory query returned no value). Failure categories observed: none. Evidence (summary JSON, console log and the
+disposable artifacts) is in the session scratch directory, not in the repository; the digests above identify that disposable run only.
+
+**Consequence for the freeze.** B8 is satisfied: the full workflow up to the selection record runs end to end at the planned scale in about 9 minutes. The
+confirmatory run must use the same environment and thread settings (12.15 item 2); the run time leaves no reason to change the grid or the scale.
+
+### 12.18 Group-branch integration and evaluation provenance (D4-7F; read-only audit, nothing merged)
+
+On 2026-10-21 the remote `origin/dev` (tip `e9e040a`) was compared with this branch (`0679a6e` plus uncommitted D4-7E work). Member 4 code reached `dev` only
+up to `a76ba11` (2026-10-15), indirectly, through `feature/policy_verification` (merge commit `6a68a96`); the held-out evaluation (`heldout_eval/`) is not on
+`dev`. Relevant to this protocol:
+
+- `dev` changed two hashed core sources: `model.py` (an optional `initialize_calibrated` constructor flag that sets seeded random weights and marks the model
+  trained) and `vocabulary.py` (the default `max_literal_vocab_size` becomes 5,000; the held-out runner passes `None` explicitly, so the study's vocabulary
+  is unaffected). Training here constructs `LightweightAnomalyModel(num_buckets)` without the flag, so the evaluated model class behaves as before; the hashes
+  in any future manifest will nevertheless differ, and the change needs Member 4 review before it is accepted.
+- `dev` changed `requirements.txt` (one of the two hashed configuration files) by adding `z3-solver` and `pymongo`.
+- `dev` edited the archived, frozen KPI 1-3 protocol and the curated KPI fixture (a renaming of member labels); on `dev` their SHA-256 no longer matches the
+  archived KPI pre-run manifest. This does not affect the held-out study, but the archived evidence stays tied to the original files (section 10).
+
+Consequence: no confirmatory manifest may be built before the integration is settled; the freeze commit (B1) must already contain the agreed merge, and every
+hash is then taken from that commit (blocker B10).
+
 ## 13. Chronological record
 
 This record separates what was found in exploratory data, what was revised in the design, what was decided before
@@ -1741,6 +1933,8 @@ the confirmatory run, and what confirmatory evidence exists. It holds no perform
 | 9l | D4-7C1 | Design revision (implemented) | The test attempt gate enforces complete, trusted manifest source coverage (12.12.7) and accepts no verifier overrides; tested with a complete-layout disposable repository and negative cases. No real manifest or marker, no fit, no score. |
 | 9m | D4-7C2 | Design revision (implemented) | Verified training authorization written (12.12.8): authorization requires the real manifest verifier with trusted lists, complete source coverage and bindings to the prepared run; it grants no test access. No real manifest or authorization, no fit, no score. |
 | 9n | D4-7D | Design revision (implemented) | Training stage, validation selection and one-time test scoring implemented and tested on disposable development fixtures (12.12.9-12.12.11); freeze-readiness audit recorded (12.14). No confirmatory data, no reported metric, nothing frozen. |
+| 9o | D4-7E | Design revision (implemented) and development dry run | Canonical attempt and results directories bound by the manifest and enforced (12.12.12); operational procedure written (12.15); open decisions tabulated with recommendations (12.16); full-scale development-only dry run on seed 6101 up to a verified selection record, timings only (12.17). No confirmatory data, no test access, no reported metric, nothing frozen. |
+| 9p | D4-7F | Integration audit (read-only) | The group branch `origin/dev` was compared with this branch; changes to hashed sources, `requirements.txt` and archived KPI files were recorded (12.18) and blocker B10 added. Nothing merged, no confirmatory data, nothing frozen. |
 | 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; runner and manifest code (estimator and logit extraction: D4-6C2, 12.11.3). *Code implemented through D4-7D (row 9n); the freeze decisions in 12.14 remain.* |
 | 11 | Pending | Pre-run decision | Write-once pre-run manifest, before any training or scoring. *Writer and verifier implemented (12.12.2); no real manifest exists.* |
 | 12 | Pending | Confirmatory evidence | Confirmatory dataset (seed 7101), validation-only selection, one scored test run. **No confirmatory evidence exists yet.** |

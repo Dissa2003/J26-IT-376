@@ -14,10 +14,12 @@ Order of operations (each step must succeed before the next)
    recomputation from trusted validation evidence). The expected run must be ``confirmatory``. There is no flag, callback or "already verified" object a
    caller can pass; the :class:`VerifiedAttempt` it returns can only be made by this function. The sealed test set must match the manifest (id hash, count, group
    count, split hash) and the supplied split result.
-2. :func:`create_attempt_marker`: creates the one-time marker with ``O_CREAT | O_EXCL`` in a **trusted attempt directory outside the repository**, flushes and
-   fsyncs, reads the bytes back and compares. The path is derived only from the experiment identity of the verified manifest, never from record metadata. An
-   existing marker, even a partial or malformed one, blocks the attempt. Markers are never overwritten, reset or deleted by code.
-3. :func:`recover_test_labels`: only now is the caller-supplied ``label_provider`` invoked. The authentic labels are recovered from the original source
+2. :func:`create_attempt_marker`: creates the one-time marker with ``O_CREAT | O_EXCL`` in the **canonical attempt directory bound by the verified manifest**
+   (``operations.attempt_root``: real path, device and inode; any other directory, including a recreated one, is refused before anything is created; a
+   symbolic link or junction to the canonical directory resolves to it and meets the same marker), flushes and fsyncs, reads the bytes back and compares.
+   The file name is derived only from the experiment identity of the verified manifest, never from record metadata. An existing marker, even a partial or
+   malformed one, blocks the attempt. Markers are never overwritten, reset or deleted by code.
+3. :func:`recover_test_labels`: requires a receipt whose marker lies in that canonical directory; only then is the caller-supplied ``label_provider`` invoked. The authentic labels are recovered from the original source
    records and validated (exact id alignment, request-content equality with the sealed set, split and group binding, binary labels; the blinded placeholder
    ``-1`` is refused). The labels are returned in a redacted holder; nothing is scored.
 :func:`open_test_attempt` runs 1-3 and, for any failure after the marker exists, writes a versioned failure report that holds only stage, category and the
@@ -26,7 +28,8 @@ authorization mechanism that does not exist.
 
 Trust boundaries: the gate cannot know what unrelated code already read (the caller owns the source records); filesystem atomicity is that of
 ``O_EXCL`` on a local filesystem (not guaranteed on some network filesystems); in-process code can bypass any in-process check, so the guards prevent
-accidents and make misuse visible, not malicious control of the process.
+accidents and make misuse visible, not malicious control of the process. The one-time property holds per verified manifest on one filesystem: it is not
+cross-machine or registry-backed, and a marker deleted by hand is detectable only through the externally logged digests (protocol 12.15).
 """
 
 from __future__ import annotations
@@ -121,7 +124,7 @@ class VerifiedAttempt:
     """Evidence that :func:`verify_attempt_inputs` succeeded. Constructible only with this module's private key."""
 
     __slots__ = ("experiment_id", "manifest_sha256", "selection_record_sha256", "dataset_seed", "dataset_fingerprint", "generator_fingerprint",
-                 "split_manifest_sha256", "test_ids_sha256", "test_records")
+                 "split_manifest_sha256", "test_ids_sha256", "test_records", "attempt_root")  # attempt_root: the manifest's bound directory identity
 
     def __init__(self, key: object, **fields: Any) -> None:
         if key is not _KEY:
@@ -165,6 +168,14 @@ def _check_attempt_root(attempt_root: str | os.PathLike[str], repo_root: str | o
     return resolved
 
 
+def _require_canonical_root(attempt_root: str | os.PathLike[str], verified: VerifiedAttempt, repo_root: str | os.PathLike[str] | None) -> Path:
+    """The real path of ``attempt_root`` if it is the attempt directory bound by the verified manifest; :class:`GateVerificationError` otherwise."""
+    try:
+        return mf.check_bound_directory({"policy": mf.OPERATIONS_POLICY, "attempt_root": verified.attempt_root}, "attempt_root", attempt_root, repo_root)
+    except mf.ManifestVerificationError:
+        raise GateVerificationError("the attempt directory is not the canonical attempt directory bound by the verified manifest; nothing was created") from None
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -199,7 +210,9 @@ def parse_marker_bytes(data: bytes) -> dict[str, Any]:
 
 @dataclass(frozen=True)
 class AttemptStatus:
-    state: str  # "absent", "consumed" (a valid marker) or "invalid_marker" (partial, malformed or substituted: also a consumed attempt)
+    # "absent", "consumed" (a valid marker), "invalid_marker" (partial, malformed or substituted: also a consumed attempt) or "report_without_marker"
+    # (a failure report of this experiment exists but its marker does not, for example a marker removed by hand: also a consumed attempt)
+    state: str
     path: str
     marker: dict[str, Any] | None = None
 
@@ -208,11 +221,16 @@ class AttemptStatus:
         return self.state != "absent"
 
 
+def _failure_reports(attempt_root: str | os.PathLike[str], experiment_id: str) -> list[Path]:
+    return sorted(Path(attempt_root).glob(f"test-attempt-{experiment_id}.failure-*.json"))
+
+
 def inspect_attempt(attempt_root: str | os.PathLike[str], experiment_id: str) -> AttemptStatus:
-    """What is on disk for this experiment. Any file at the marker path blocks a new attempt, valid or not. Reports never unlock anything."""
+    """What is on disk for this experiment. Any file at the marker path blocks a new attempt, valid or not, and so does a failure report of this experiment
+    whose marker is missing. Reports never unlock anything."""
     path = marker_path(attempt_root, experiment_id)
     if not os.path.lexists(path):
-        return AttemptStatus("absent", str(path))
+        return AttemptStatus("report_without_marker" if _failure_reports(attempt_root, experiment_id) else "absent", str(path))
     try:
         marker = parse_marker_bytes(path.read_bytes())
         if marker["experiment_id"] != experiment_id:
@@ -264,13 +282,17 @@ def _write_exclusive(path: Path, data: bytes) -> None:
 
 def create_attempt_marker(attempt_root: str | os.PathLike[str], verified: VerifiedAttempt, *, repo_root: str | os.PathLike[str] | None = None,
                           created_utc: str | None = None) -> MarkerReceipt:
-    """Atomically create the one-time marker for a verified experiment. Fails if any file already exists at the marker path."""
+    """Atomically create the one-time marker for a verified experiment in its canonical attempt directory. Fails if any file already exists at the marker
+    path, and refuses (creating nothing) any directory other than the one bound by the verified manifest."""
     if not isinstance(verified, VerifiedAttempt):
         raise GateVerificationError("a VerifiedAttempt from verify_attempt_inputs is required")
     stamp = _utc_now() if created_utc is None else created_utc
     if not isinstance(stamp, str) or not _UTC.fullmatch(stamp):
         raise MarkerCreationError("created_utc must look like 2026-01-01T00:00:00Z")
-    root = _check_attempt_root(attempt_root, repo_root)
+    _check_attempt_root(attempt_root, repo_root)
+    root = _require_canonical_root(attempt_root, verified, repo_root)
+    if _failure_reports(root, verified.experiment_id):
+        raise AttemptAlreadyConsumed("a failure report of this experiment exists although its marker does not; the attempt is spent and needs review")
     path = marker_path(root, verified.experiment_id)
     data = mf.canonical_bytes(_marker_content(verified, stamp))
     _write_exclusive(path, data)
@@ -314,7 +336,10 @@ def verify_attempt_inputs(*, manifest_bytes: bytes, expected_manifest_sha256: st
     if record["test_status"] != {"test_scored": False, "test_labels_accessed": False, "test_scores_accessed": False, "test_data_in_record": False}:
         raise GateVerificationError("the selection record reports prior test access")
     _check_sealed(manifest, evidence.split_result, sealed_test)
-    return VerifiedAttempt(_KEY, experiment_id=experiment_identity(manifest), manifest_sha256=expected_manifest_sha256,
+    operations = manifest.get("operations")
+    if not isinstance(operations, dict) or operations.get("policy") != mf.OPERATIONS_POLICY:
+        raise GateVerificationError("the verified manifest binds no canonical attempt directory")
+    return VerifiedAttempt(_KEY, attempt_root=dict(operations["attempt_root"]), experiment_id=experiment_identity(manifest), manifest_sha256=expected_manifest_sha256,
                            selection_record_sha256=expected_record_sha256, dataset_seed=manifest["data"]["dataset_seed"],
                            dataset_fingerprint=manifest["data"]["dataset_fingerprint"], generator_fingerprint=manifest["data"]["generator"]["fingerprint"],
                            split_manifest_sha256=manifest["data"]["split"]["manifest_sha256"],
@@ -401,13 +426,17 @@ def recover_test_labels(receipt: MarkerReceipt, sealed_test: runner.SealedTestSe
     """Invoke ``label_provider`` (only now) and validate the authentic labels it returns. Requires a receipt for an existing, intact marker."""
     if not isinstance(receipt, MarkerReceipt):
         raise LabelRecoveryError("marker_unverifiable", "a marker receipt is required before test labels can be recovered")
+    verified = receipt.verified
+    try:
+        _require_canonical_root(Path(receipt.path).parent, verified, None)
+    except GateVerificationError:
+        raise LabelRecoveryError("marker_unverifiable", "the marker is not in the canonical attempt directory of the verified manifest") from None
     try:
         on_disk = Path(receipt.path).read_bytes()
     except OSError:
         raise LabelRecoveryError("marker_unverifiable", "the attempt marker could not be read back") from None
     if on_disk != receipt.marker_bytes:
         raise LabelRecoveryError("marker_unverifiable", "the attempt marker on disk differs from the created marker")
-    verified = receipt.verified
     binding = sealed_test.binding() if isinstance(sealed_test, runner.SealedTestSet) else {}
     if (binding.get("ids_sha256") != verified.test_ids_sha256 or binding.get("split_manifest_sha256") != verified.split_manifest_sha256
             or not isinstance(split_result, SplitResult) or split_result.manifest_sha256 != verified.split_manifest_sha256
@@ -495,37 +524,40 @@ def open_test_attempt(*, attempt_root: str | os.PathLike[str], manifest_bytes: b
                       expected_record_sha256: str, repo_root: str | os.PathLike[str], expected_run: mf.ExpectedRun, evidence: sr.ValidationEvidence,
                       sealed_test: runner.SealedTestSet, label_provider: Callable[[], Iterable[EvalRecord]], created_utc: str | None = None,
                       ) -> AttemptOutcome:
-    """Verify both records, atomically create the one-time marker, and only then recover the authentic test labels. Scores nothing."""
+    """Verify both records, atomically create the one-time marker in the canonical attempt directory, and only then recover the authentic test labels.
+    Scores nothing. ``attempt_root`` must be that canonical directory (or an alias resolving to it); any other directory is refused before anything exists."""
     verified = verify_attempt_inputs(manifest_bytes=manifest_bytes, expected_manifest_sha256=expected_manifest_sha256, record_bytes=record_bytes,
                                      expected_record_sha256=expected_record_sha256, repo_root=repo_root, expected_run=expected_run, evidence=evidence,
                                      sealed_test=sealed_test)
     try:
         receipt = create_attempt_marker(attempt_root, verified, repo_root=repo_root, created_utc=created_utc)
     except MarkerPersistenceError:
-        _report(attempt_root, verified, "marker_persistence", "marker_persistence_failed")
+        _report(verified, "marker_persistence", "marker_persistence_failed")
         raise
     try:
         labels = recover_test_labels(receipt, sealed_test, evidence.split_result, label_provider)
     except LabelRecoveryError as exc:
-        raise PostMarkerFailure(exc.category, "label_recovery", _report(attempt_root, verified, "label_recovery", exc.category)) from None
+        raise PostMarkerFailure(exc.category, "label_recovery", _report(verified, "label_recovery", exc.category)) from None
     except Exception:  # noqa: BLE001 - any other failure after the marker is reported by category only
-        raise PostMarkerFailure("unexpected_error", "label_recovery", _report(attempt_root, verified, "label_recovery", "unexpected_error")) from None
+        raise PostMarkerFailure("unexpected_error", "label_recovery", _report(verified, "label_recovery", "unexpected_error")) from None
     return AttemptOutcome(labels=labels, experiment_id=verified.experiment_id, marker_path=receipt.path, marker_sha256=receipt.marker_sha256,
                           attempt=verified)
 
 
-def report_post_marker_failure(attempt_root: str | os.PathLike[str], outcome: AttemptOutcome, stage: str, category: str) -> str | None:
+def report_post_marker_failure(outcome: AttemptOutcome, stage: str, category: str) -> str | None:
     """Write the redacted failure report for a failure that happens after a successful :func:`open_test_attempt` (for example during test scoring).
 
-    It requires the gate's own outcome (so the attempt is bound to its verified records), leaves the marker in place and authorizes nothing.
+    It requires the gate's own outcome (so the attempt is bound to its verified records), writes into the canonical attempt directory, leaves the marker in
+    place and authorizes nothing.
     """
     if not isinstance(outcome, AttemptOutcome) or not isinstance(outcome.attempt, VerifiedAttempt):
         raise AttemptGateError("a post-marker failure report needs the gate's own AttemptOutcome")
-    return _report(attempt_root, outcome.attempt, stage, category)
+    return _report(outcome.attempt, stage, category)
 
 
-def _report(attempt_root: str | os.PathLike[str], verified: VerifiedAttempt, stage: str, category: str) -> str | None:
-    return write_failure_report(attempt_root, build_failure_report(verified=verified, stage=stage, category=category))
+def _report(verified: VerifiedAttempt, stage: str, category: str) -> str | None:
+    """Failure reports always go to the canonical attempt directory bound by the verified manifest, never to a caller-chosen one."""
+    return write_failure_report(verified.attempt_root["path"], build_failure_report(verified=verified, stage=stage, category=category))
 
 
 def source_sha256() -> str:

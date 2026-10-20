@@ -70,11 +70,14 @@ class Provider:
         return list(self.records)
 
 
-def dirs(c, tmp_path):
-    attempts, results = tmp_path / "attempts", tmp_path / "results"
-    attempts.mkdir()
-    results.mkdir()
-    return attempts, results
+def dirs(c, tmp_path=None):
+    """The chain's canonical attempt and results directories, emptied. TEST FIXTURE ONLY: production code never deletes a marker or a result; the manifest
+    binds one canonical directory of each kind, so a fresh disposable state is simulated by emptying them."""
+    for d in (c.attempts, c.results):
+        for p in d.iterdir():
+            os.chmod(p, stat.S_IWRITE | stat.S_IREAD)
+            p.unlink()
+    return c.attempts, c.results
 
 
 def score(c, attempts, results, provider=None, **over):
@@ -91,11 +94,8 @@ def experiment(c) -> str:
 
 
 @pytest.fixture(scope="module")
-def scored(chain, tmp_path_factory):
-    root = tmp_path_factory.mktemp("scored")
-    attempts, results = root / "attempts", root / "results"
-    attempts.mkdir()
-    results.mkdir()
+def scored(chain):
+    attempts, results = dirs(chain)
     provider = Provider(chain.source, attempts, experiment(chain))
     outcome = score(chain, attempts, results, provider)
     return outcome, provider, attempts, results
@@ -180,6 +180,40 @@ def test_the_result_contains_no_per_record_labels_scores_or_request_content(chai
     walk(result)
 
 
+def test_a_second_attempt_is_refused_and_the_result_is_untouched(chain, scored, tmp_path):
+    outcome, _, attempts, results = scored
+    before = Path(outcome.result_path).read_bytes()
+    provider = Provider(chain.source)
+    with pytest.raises(cs.ScoringError):  # the existing result stops the run before the gate
+        score(chain, attempts, results, provider)
+    assert provider.calls == 0 and Path(outcome.result_path).read_bytes() == before
+    parked = tmp_path / "parked.json"
+    os.replace(outcome.result_path, parked)  # even with the result moved away by hand, the marker still refuses the attempt
+    try:
+        with pytest.raises(gate.AttemptAlreadyConsumed):
+            score(chain, attempts, results, provider)
+        assert provider.calls == 0 and list(results.iterdir()) == []
+    finally:
+        os.replace(parked, outcome.result_path)
+    assert Path(outcome.result_path).read_bytes() == before
+
+
+def test_a_second_attempt_with_other_directories_is_refused_before_the_gate(chain, scored, tmp_path):
+    outcome, _, attempts, results = scored
+    before = Path(outcome.result_path).read_bytes()
+    other_attempts, other_results = tmp_path / "attempts", tmp_path / "results"
+    other_attempts.mkdir()
+    other_results.mkdir()
+    for over in (dict(attempt_root=other_attempts), dict(results_dir=other_results), dict(attempt_root=other_attempts, results_dir=other_results),
+                 dict(attempt_root=results, results_dir=attempts)):
+        provider = Provider(chain.source)
+        with pytest.raises(cs.ScoringError):
+            score(chain, over.get("attempt_root", attempts), over.get("results_dir", results), provider)
+        assert provider.calls == 0
+    assert list(other_attempts.iterdir()) == [] and list(other_results.iterdir()) == [] and Path(outcome.result_path).read_bytes() == before
+    assert chain.manifest["operations"]["results_root"] == mf.describe_directory(chain.results)
+
+
 def test_only_the_three_validation_selected_models_are_evaluated(chain, tmp_path, monkeypatch):
     attempts, results = dirs(chain, tmp_path)
     loads = []
@@ -205,15 +239,6 @@ def test_only_the_three_validation_selected_models_are_evaluated(chain, tmp_path
 # -- one attempt only ---------------------------------------------------------------------------------------------------------------------------
 
 
-def test_a_second_attempt_is_refused_and_the_result_is_untouched(chain, scored):
-    outcome, _, attempts, results = scored
-    before = Path(outcome.result_path).read_bytes()
-    provider = Provider(chain.source)
-    with pytest.raises(gate.AttemptAlreadyConsumed):
-        score(chain, attempts, results, provider)
-    assert provider.calls == 0 and Path(outcome.result_path).read_bytes() == before
-
-
 def test_a_failure_after_the_marker_is_reported_and_never_retried(chain, tmp_path, monkeypatch):
     attempts, results = dirs(chain, tmp_path)
 
@@ -234,21 +259,26 @@ def test_a_failure_after_the_marker_is_reported_and_never_retried(chain, tmp_pat
     assert provider.calls == 0
 
 
-def test_an_existing_result_file_is_never_overwritten(chain, tmp_path):
+def test_an_existing_result_or_leftover_file_stops_the_run_before_the_gate(chain, tmp_path):
     attempts, results = dirs(chain, tmp_path)
-    existing = results / cs.result_filename(experiment(chain))
-    existing.write_bytes(b"someone else's result")
-    with pytest.raises(gate.PostMarkerFailure):
-        score(chain, attempts, results)
-    assert existing.read_bytes() == b"someone else's result"
+    for name in (cs.result_filename(experiment(chain)), "leftover.txt"):
+        existing = results / name
+        existing.write_bytes(b"someone else's result")
+        provider = Provider(chain.source)
+        with pytest.raises(cs.ScoringError):
+            score(chain, attempts, results, provider)
+        assert existing.read_bytes() == b"someone else's result" and provider.calls == 0 and list(attempts.iterdir()) == []  # nothing consumed
+        existing.unlink()
 
 
 def test_failures_before_the_gate_create_nothing(chain, tmp_path):
     attempts, results = dirs(chain, tmp_path)
     import dataclasses
     bad_cfg = dataclasses.replace(chain.cfg, frozen=dataclasses.replace(chain.cfg.frozen, record={**chain.cfg.frozen.record, "sha256": "0" * 64}))
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
     for over in (dict(train_config=bad_cfg), dict(train_config="cfg"), dict(results_dir=tmp_path / "missing"), dict(results_dir=chain.repo),
-                 dict(manifest_bytes=b"not json")):
+                 dict(manifest_bytes=b"not json"), dict(results_dir=elsewhere), dict(attempt_root=elsewhere), dict(attempt_root=tmp_path / "missing")):
         provider = Provider(chain.source)
         with pytest.raises(cs.ScoringError):
             score(chain, attempts, results, provider, **over)
