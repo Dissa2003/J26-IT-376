@@ -19,6 +19,7 @@
 | `1.2.0-draft` (D3c-2) | **Generator `synthgen-3` / catalog `synthetic-catalog-3` implemented (G1 and G2 only).** Normal `/files/...` paths (`crud_read`, `hn_dotted_paths`) and comparable DELETE structures in both classes (`crud_write`; `traversal_like`, `sqli_like`, `cmdi_like`, `markup_like`). No label rule, weight, pool, split code, `simpol-1`, `policy_sim.py`, `policy_diagnostics.py` or audit threshold changed. The default dataset seed is now the development seed 6101. Design note, development-seed results and remaining limitations are in section 12.2.1. The confirmatory dataset is not generated and nothing is frozen. |
 | `1.2.0-draft` (D4-0) | **Descriptive structural-coverage diagnostics added to `audit.py`; audit protocol label corrected.** `structural_coverage` is a new, separate field of the audit report (section 12.2.2). Existing audit checks, thresholds, errors, warnings, `construction_checks_passed`, fingerprints and split logic are unchanged. The report's `protocol` label now reads `heldout-eval-1.2.0-draft` (it read `1.1.0-draft`); `splits.PROTOCOL_VERSION` is deliberately untouched. No generator, catalog, `simpol-1` or split change; nothing is frozen. |
 | `1.2.0-draft` (D4-1) | **`request_to_context-v1` implemented** (`request_context.py`, section 12.9.1). Pure mapping of a synthetic request to the pipeline's input context; no production module, generator, catalog, audit, split or rule change; no model run; nothing is frozen. |
+| `1.2.0-draft` (D4-2) | **`budget-rule-1` implemented** (`token_budget.py`, section 12.8.1): the training-only shared `max_length` selection and a post-selection exposure report. Tested on hand-made arrays and development-seed requests only; no model run, no confirmatory data; no production, generator, adapter, audit or split change; nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -402,7 +403,7 @@ protocol is frozen.
 | 2 | Decision rule and margin for A versus B; shortcut-flag handling | **Open.** Comparison plan recorded (12.11); the rule and any margin are fixed before the confirmatory scored run. |
 | 3 | Arm C | **Included** (12.10). Model-class compatibility and the feature-budget policy are **open** until checked before coding. A flat-versus-structure-aware tokenization ablation is **not included** and remains open. |
 | 4 | Leave-family-out split | **Open**, not decided. |
-| 5 | `max_length` identical across arms from training-split statistics only | **Rule decided** (12.8); the value is computed later from the confirmatory training split. Header handling is identical across arms by sharing `request_to_context-v1` (12.9). |
+| 5 | `max_length` identical across arms from training-split statistics only | **Rule decided and implemented** (12.8, 12.8.1); the value is computed later from the confirmatory training split. Header handling is identical across arms by sharing `request_to_context-v1` (12.9). |
 | 6 | Review of `simpol-1` and its diagnostics | **Resolved:** `simpol-1` is unchanged; SIM-P06 and SIM-P12 are documented limitations (12.3); SIM-P04 and SIM-P07 are addressed in the generator (12.2), not in the catalog. |
 | 7 | Final scale and prevalence sensitivities | Scale **proposed** (12.7, subject to feasibility). Prevalence sensitivities are **open**. |
 | 8 | Arm C feature-budget policy, n-gram settings and equal hyperparameter-search effort | **Open** (12.10). |
@@ -410,7 +411,7 @@ protocol is frozen.
 | 10 | Whether `audit.py` gains path-root and method-by-path-category summaries | **Implemented** (D4-0, section 12.2.2) as a separate descriptive field; audit thresholds, errors and warnings unchanged. |
 | 11 | Scope of label-conditioned audits relative to the sealed test split | **Open** (12.6). |
 | 12 | Whether development-seed (6101) dry runs report any detection metric | **Open.** Until decided, none is reported (12.5). |
-| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` exists so far (12.9.1). |
+| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` (12.9.1) and `budget-rule-1` (12.8.1) exist so far. |
 | 14 | Any generator correction beyond G1 and G2 | **Not approved.** Needs a documented reason and approval before the generator is fixed for the confirmatory study (12.2). |
 
 ## 12. Design decisions recorded in D3c-1 (documentation only)
@@ -673,6 +674,49 @@ training-split Arm B sequence no longer than the chosen value.
   sequences can exceed the training maximum.
 - The value is computed after the confirmatory dataset exists and recorded in the manifest (12.12). It is not
   computed in this step.
+
+#### 12.8.1 `budget-rule-1` (implemented in D4-2)
+
+`tokenization_ai/heldout_eval/token_budget.py` implements the rule of 12.8. It is evaluation infrastructure: it trains nothing, reads no
+label or metadata, and has not been run on any confirmatory data.
+
+- **Candidate grid and algorithm.** The grid is `(128, 192, 256, 384, 512)` (strictly ascending positive integers; validated).
+  `select_shared_max_length(train_arm_b_lengths)` takes one length per **training-split Arm B** sequence, keyed by opaque record id, and
+  returns the smallest grid value that is greater than or equal to the largest length (a length equal to the value fits). The same value is
+  then used for Arm A and Arm B. The result does not depend on input order.
+- **Training-only restriction.** The function's only data parameter is the training Arm B lengths; it cannot see validation or test
+  sequences, labels, scores or any metadata. Validation and test lengths are reported only afterwards by the exposure report against the
+  already fixed value, and nothing that report finds can change the budget: a finding triggers protocol review, not a larger
+  `max_length`, and no record is discarded.
+- **Input validation and failure.** Empty input, non-integer, boolean or non-positive lengths, empty or whitespace-padded record ids,
+  duplicate ids and an invalid grid raise `BudgetInputError` (messages never echo record content). If the longest training length exceeds the
+  largest candidate, the result has `status="no_candidate_fits"` and no selected value; `require_selected()` raises
+  `BudgetNotFeasibleError`. Nothing is truncated or chosen silently, and work stops until the rule is revised under a new protocol version.
+- **Sequence and framing semantics.** A length is `len(TokenSequence.tokens)` exactly as the tokenizer emits it and the tensorizer receives
+  it (token-to-id encoding is one-to-one). It already includes `[SEQ_START]`/`[SEQ_END]`, method, path and header tokens, payload tokens and
+  the whole rules segment (`[RULES_START] [RULES_END]` even with no rules, plus 20 tokens per simulated rule in Arm B). No framing overhead
+  is estimated. The real tensorizer never cuts framing or rules: a longer sequence has whole payload fields dropped (*truncated*), and a
+  sequence whose framing plus rules cannot fit even with an empty payload is *rejected* (`ValueError`). `tensorizer_outcome` reports
+  `fits` / `truncated` / `rejected` by running the tensorizer's own payload-truncation routine on the real sequence.
+- **`BudgetDecision` (recorded in the manifest).** `status`, `selected_max_length`, `rule_id` (`budget-rule-1`), `candidate_grid`, `basis`,
+  `train_records`, `length_statistics` (`min`, `mean` = sum/n rounded to 6 decimals, `median` = middle value or mean of the two middle values,
+  `p95` and `p99` by nearest rank = value at 1-based rank ceil(p * n) of the sorted lengths, `max`), `headroom` (selected value minus the
+  longest length), `records_over_candidate` (training records longer than each candidate), and `lengths_sha256`, the SHA-256 of the
+  compact ASCII JSON `[[record_id, length], ...]` sorted by record id (not Python `hash()`).
+- **Exposure report.** `exposure_report(decision, split, arm_a_lengths, arm_b_lengths, ...)` accepts only a decision with a selected value.
+  For one split it reports per arm the record count, the number and share over budget, the longest length and largest excess, and a
+  truncation-risk flag; optionally the tensorizer outcome counts and rejected ids; and the pairing (records in both arms, records present in
+  only one arm, ids capped at 20) and paired differences (over budget in either, only in Arm B, only in Arm A, both; mean and maximum B-minus-A
+  length; records where Arm A is longer, which is unexpected). `findings` lists, explicitly: pairing mismatches; Arm A longer than Arm B; an
+  over-budget training sequence in either arm (unexpected, since the rule fits Arm B by construction and does not cover Arm A); validation or test
+  records over the frozen budget; and records the tensorizer would reject (protocol section 3 requires removing those from all arms; the
+  report only reports them). `budget_changed_by_this_report` is always false and `records_excluded_by_this_report` is always 0.
+- **Manifest provenance.** The future pre-run manifest records the whole `BudgetDecision` dict, the SHA-256 of `token_budget.py`, and the
+  training-split Arm B length fingerprint. The exposure reports for validation and test are produced only after the manifest is written and
+  belong to the results, not to the manifest.
+- **Limitations.** The rule fits the longest training Arm B sequence, so a single outlier sets the budget; validation and test sequences
+  can still exceed it (payload truncation, reported per arm); Arm A is not part of the selection; the rule says nothing about whether a
+  budget is *sufficient* for detection. At this milestone it was exercised on hand-made arrays and development-seed (6101) requests only.
 
 ### 12.9 `request_to_context-v1`: production-faithful A/B mapping
 
