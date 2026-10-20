@@ -11,6 +11,7 @@ from pydantic import BaseModel, ValidationError
 from shared_contracts.models import RawEvent
 
 from .models import AnomalyPrediction, UnifiedApiContext, VerifiedRule, VerifiedRuleInfo
+from .runtime_handoff import RuntimeVerificationInput, to_runtime_verification_input
 
 # Keys Ingestion adds to ``RawEvent.payload`` for intercepted HTTP requests.
 HTTP_METADATA_KEY = "_http_metadata"
@@ -24,7 +25,7 @@ class InputContractError(ValueError):
 
 
 def to_unified_api_context(source: RawEvent | Mapping[str, Any]) -> UnifiedApiContext:
-    """Convert a Ingestion event into a unified API context.
+    """Convert an Ingestion event into a unified API context.
 
     Accepts a ``RawEvent`` (or its dict form) whose payload carries the
     interception metadata, or an interception envelope with top-level
@@ -73,9 +74,15 @@ def to_verified_rule_info(source: Mapping[str, Any] | str | bytes) -> VerifiedRu
     )
 
 
-def to_runtime_verification_output(prediction: AnomalyPrediction) -> Any:
-    """Convert an anomaly prediction into the contract expected by Runtime Verification."""
-    raise NotImplementedError
+def to_runtime_verification_output(prediction: AnomalyPrediction) -> RuntimeVerificationInput:
+    """Convert an anomaly prediction into Runtime Verification's existing score input.
+
+    Returns ``runtime-verification-input-1`` (see :mod:`tokenization_ai.runtime_handoff`), whose
+    ``evaluate_runtime_kwargs()`` are the ``event_id`` and ``score`` that
+    ``HybridVerificationService.evaluate_runtime`` takes. The score stays an uncalibrated model
+    output; no threshold or label is added. Raises ``TypeError`` for anything but a prediction.
+    """
+    return to_runtime_verification_input(prediction)
 
 
 def _context_from_event(event_id: Any, payload: Any, timestamp: Any = None) -> UnifiedApiContext:

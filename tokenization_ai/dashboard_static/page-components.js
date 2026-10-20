@@ -60,14 +60,14 @@ const INTEGRATION = [
   {
     link: "Formal Verification → LogiShield", what: "Verified rule information",
     status: ["Not integrated", "pending"],
-    evidence: "Documented schema mismatch: Formal Verification's verification report has no event id and a different shape from LogiShield's rule input.",
+    evidence: "request_decision_adapter.py converts Formal Verification's verify-request decision (verify-request-response-v1) into rule input. The response has no event id, so the event association is caller-asserted, and it holds one request-level decision, not per-policy outcomes. Nothing calls the adapter at runtime.",
     limit: "Every rule in the demos is a MOCK fixture. LogiShield never verifies rules; it only tokenizes the rule information it is given."
   },
   {
     link: "LogiShield → Runtime Verification", what: "Anomaly-aware signal",
     status: ["Pending contract", "pending"],
-    evidence: "adapters.to_runtime_verification_output raises NotImplementedError by design. No Runtime Verification input contract exists.",
-    limit: "Nothing is sent to Runtime Verification, and no Allow/Block decision exists anywhere in this system."
+    evidence: "adapters.to_runtime_verification_output returns runtime-verification-input-1: the event_id and score that Runtime Verification's evaluate_runtime already takes. The score is uncalibrated; the threshold, transport and failure handling are not agreed.",
+    limit: "Nothing is sent to Runtime Verification at runtime: the gateway does not route requests to LogiShield, and Runtime Verification still scores with its own StubModel."
   },
   {
     link: "KPI 5", what: "Downstream usability",

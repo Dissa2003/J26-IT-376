@@ -489,7 +489,7 @@ def test_module_imports_nothing_from_other_members_and_does_no_io():
 
 
 def test_existing_adapters_are_unchanged_in_behaviour():
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(TypeError):  # the runtime handoff accepts only an AnomalyPrediction
         adapters.to_runtime_verification_output(None)  # type: ignore[arg-type]
     assert not hasattr(adapters, "policy_reports_to_verified_rule_info")
 

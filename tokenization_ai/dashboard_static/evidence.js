@@ -130,11 +130,11 @@ export const KPIS = [
     sample: "No measurement exists.",
     verdict: ["Pending genuine Runtime Verification integration", "pending"],
     context: [
-      "It needs a documented Runtime Verification input contract and a running consumer. Neither exists in the repository."
+      "It needs an agreed Runtime Verification input contract (threshold, transport, failure handling) and a running consumer of LogiShield's output. Neither exists in the repository."
     ],
     limits: [
       "Any percentage computed today would be measured against a contract LogiShield invented, i.e. a self-assessment, so none is reported.",
-      "The adapter to Runtime Verification raises NotImplementedError by design."
+      "The handoff to Runtime Verification (runtime-verification-input-1) exists, but nothing consumes it at runtime."
     ],
     refs: ["tokenization_ai/INTEGRATION_STATUS.md §3–§4", "tokenization_ai/CONTRACT_PROPOSAL.md"]
   }

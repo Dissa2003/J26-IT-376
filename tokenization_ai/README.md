@@ -70,9 +70,10 @@ AnomalyPrediction(event_id, score, model_version)      ← handoff to Runtime Ve
 | Tracing | Per-stage timings and count-only summaries; never raw values | `tracing.py`, `metrics.py` |
 
 Not implemented (so not claimed): learned **embeddings** (token ids feed hashed n-gram
-features; there is no embedding table), a **rule-aligned signal**, a **Runtime Verification output
-adapter** (`adapters.to_runtime_verification_output` raises `NotImplementedError`), an anomaly **label /
-threshold**, and the request-only vs rule-fused **baseline comparison**.
+features; there is no embedding table), a **rule-aligned signal**, a **runtime connection** to Runtime
+Verification (`adapters.to_runtime_verification_output` returns the handoff `runtime-verification-input-1`, but nothing in
+the running system calls it), an anomaly **label / threshold**, and a request-only vs rule-fused **baseline result**
+(the held-out evaluation infrastructure exists; no confirmatory result does). See INTEGRATION_STATUS.md (2026-10-21).
 
 ## 3. Input and output structures
 
@@ -118,7 +119,8 @@ rule-aligned signal.
 *(Synthetic illustration, not output of any running system.)*
 
 - **Status:** a **proposed Member 4-owned format**. It is **not** a completed Member 3
-  integration; nothing sends it anywhere, and `adapters.to_runtime_verification_output` is still unimplemented.
+  integration; nothing sends it anywhere at runtime. `adapters.to_runtime_verification_output` (D4-7G3) wraps it as
+  `runtime-verification-input-1`, argument-compatible with Runtime Verification's `evaluate_runtime`, but not wired.
 - **The score is uncalibrated and is not an attack probability.** KPI 5 remains unmeasured.
 - **Member 3 must still agree** on score interpretation (and whether an uncalibrated score is
   acceptable), who owns any threshold, transport, and failure handling (fail-open or

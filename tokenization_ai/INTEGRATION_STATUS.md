@@ -1,13 +1,47 @@
 # LogiShield — Integration Status
 
-*Verified against the repository at commit `de07872` (branch `feature/logishield-tokenization-ai`)
-and, for Formal Verification/3, against the already-fetched remote refs `origin/feature/policy_verification`
+*Verified against the repository at commit `de07872` (branch `feature/member4-tokenization-ai`)
+and, for Formal Verification and Runtime Verification, against the already-fetched remote refs `origin/feature/policy_verification`
 (tip `7e9f54c`) and `origin/dev` (tip `a247ba0`). Other members' code was **read only**. This
 document describes what exists today; it does not define any contract on another member's behalf.*
 
 > **Reading guide.** Everything from "Summary" down is the original audit at `de07872` and is kept
-> unchanged as a historical record. The section below, dated 2026-10-19, describes Member 4's
-> current state at commit `cf1f200`.
+> unchanged as a historical record. The section dated 2026-10-21 describes the current state on the
+> integration branch; the section dated 2026-10-19 is kept as the record of Member 4 at `cf1f200`.
+
+## Current status (2026-10-21, D4-7G3, branch `integration/member4-dev-sync` on top of `f8282f5`)
+
+This branch merges `dev` (`e9e040a`) with Member 4 (`87365a2`). Other members' code and `shared_contracts`
+were read and called in tests only; none was modified.
+
+**Fixed in this phase**
+
+| Change | What it does | Evidence |
+|---|---|---|
+| `model.py` restored to Member 4's verified version | Removes `initialize_calibrated` / `create_calibrated`, which filled the weights from `RandomState(42)` and set `is_trained=True`: random weights are neither trained nor calibrated, and the flag bypassed the model's refusal to predict before `fit` | `tests/tokenization_ai/test_model_initialization_safety.py` |
+| `TokenizationAIService.create_default()` | Keeps the API that `tests/test_e2e_pipeline.py` calls, but now returns the standalone demo pipeline: vocabulary and model genuinely fitted (gradient descent) on the two synthetic demo fixtures. Its score shows only that the stages run; it is not calibrated and not a detection model | same file; `tests/test_e2e_pipeline.py` passes unchanged |
+| `request_decision_adapter.py` (new) | Converts Formal Verification's real `POST /api/v1/verify-request` body (`verify-request-response-v1`) into rule input: one rule with the enumerated `decision` and `reason_code`, `per_policy_outcomes="unavailable"`, `event_association="caller_asserted"`. `event_id` comes only from the API context (the contract has none); free text, formulas and subject ids are never copied; a decision inconsistent with the reported solver statuses is rejected | `tests/tokenization_ai/test_request_decision_adapter.py` (round trips through Formal Verification's real API for all decision kinds) |
+| `runtime_handoff.py` (new) and `adapters.to_runtime_verification_output` | Returns `runtime-verification-input-1`: the strict `AnomalySignal` plus exactly the `event_id` and `score` that Runtime Verification's existing `HybridVerificationService.evaluate_runtime` and circuit breaker take. No threshold, label or decision is added; the score stays an uncalibrated model output | `tests/tokenization_ai/test_runtime_handoff.py` (a fitted prediction passed into Runtime Verification's real code) |
+| Archived KPI 1-4 files | Restored to the archived bytes, LF pinned by `tokenization_ai/evaluation/.gitattributes`; all three archived pre-run manifests verify | D4-7G2 |
+
+**Link status (what is genuinely connected)**
+
+| Link | Status |
+|---|---|
+| Ingestion → LogiShield | Tested in-process with Ingestion's real app output (`test_ingestion_integration.py`). Not a networked or deployed connection |
+| Formal Verification → LogiShield | **Adapter implemented and tested against the real API; not wired.** Nothing calls it at runtime. Missing from the contract: an `event_id` (or a request correlation id) and a mapping from an HTTP request to the subject, roles, action and resource that Formal Verification checks. The decision is request-level; per-policy outcomes are not available. The fitted demo vocabulary does not know the decision tokens (they map to the unknown token), so they carry no learned weight |
+| LogiShield → Runtime Verification | **Handoff implemented and argument-compatible with Runtime Verification's real code; not wired.** Nothing in the running system calls it. Still to agree with Runtime Verification: the threshold for an uncalibrated score, transport, and failure handling |
+| Runtime path | **Not integrated.** The gateway does not route requests to LogiShield; `docker-compose.yml` has no LogiShield service; `engine/service.py` still scores with `StubModel`; `tests/test_e2e_pipeline.py` computes a LogiShield analysis but passes a hard-coded `score=0.95` to the circuit breaker |
+| KPI 5 | **Still unmeasured** |
+
+**Model used anywhere at runtime:** none. LogiShield's model runs only inside its own service (`python -m
+tokenization_ai`, port 8004, the demo model fitted on two synthetic fixtures) and in tests. No group runtime path uses
+a LogiShield prediction. The held-out evaluation (`heldout_eval/`) is implemented and tested on development fixtures
+only; no confirmatory result exists.
+
+**Outside Member 4's scope (needs the owners):** routing requests to LogiShield in the gateway; a LogiShield service in
+`docker-compose.yml`; replacing `StubModel` or feeding LogiShield's score into `evaluate_runtime`; the score threshold;
+an event correlation id in Formal Verification's response; replacing the hard-coded score in `tests/test_e2e_pipeline.py`.
 
 ## Current status (2026-10-19, Member 4 at `cf1f200`)
 

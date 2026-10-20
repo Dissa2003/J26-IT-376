@@ -10,7 +10,7 @@ token-order/structural sensitivity: this tokenizer's grammar packs
 structural meaning into adjacent tokens (e.g. ``API_KEY, <key>,
 API_VAL_STR, <value>``), so an adjacent-pair feature directly captures
 "this tag was followed by this kind of value/tag" -- the kind of local
-structure LogiShield's hybrid tokenization is designed to preserve.
+structure Member 4's hybrid tokenization is designed to preserve.
 
 This is deliberately the smallest architecture that is still genuinely
 order-sensitive and genuinely trainable (a real gradient computed from a
@@ -84,12 +84,15 @@ class LightweightAnomalyModel:
     labeled training data, then call :meth:`predict`.
     """
 
-    def __init__(self, num_buckets: int = 1024, *, initialize_calibrated: bool = False) -> None:
-        """Create an anomaly model with ``num_buckets`` hashed feature slots.
+    def __init__(self, num_buckets: int = 1024) -> None:
+        """Create an untrained model with ``num_buckets`` hashed feature slots.
 
-        ``num_buckets`` (default 1024) is a configurable feature size choice.
-        If ``initialize_calibrated`` is True, initializes deterministic calibrated baseline
-        weights for immediate out-of-the-box security scoring.
+        ``num_buckets`` (default 1024) is an initial, configurable size
+        choice -- not a value tuned against any dataset, since none
+        exists yet. Weights start at exactly zero (not random noise):
+        logistic regression's loss is convex, so gradient descent
+        converges to the same optimum regardless of starting point, and
+        zero gives the simplest, fully deterministic starting state.
         """
         if num_buckets < 1:
             raise ValueError("num_buckets must be at least 1")
@@ -98,24 +101,6 @@ class LightweightAnomalyModel:
         self.bias = 0.0
         self.is_trained = False
         self.training_loss_history: list[float] = []
-        if initialize_calibrated:
-            self.initialize_calibrated_weights()
-
-    def initialize_calibrated_weights(self) -> None:
-        """Initialize deterministic calibrated baseline weights for security anomaly detection.
-
-        Generates stable, reproducible calibrated weights so the model produces meaningful
-        and reproducible anomaly predictions without requiring manual pre-training.
-        """
-        rng = np.random.RandomState(42)
-        self.weights = rng.normal(loc=0.0, scale=0.05, size=self.num_buckets).astype(np.float64)
-        self.bias = -0.5
-        self.is_trained = True
-
-    @classmethod
-    def create_calibrated(cls, num_buckets: int = 1024) -> LightweightAnomalyModel:
-        """Factory creating a model ready for inference with calibrated baseline weights."""
-        return cls(num_buckets=num_buckets, initialize_calibrated=True)
 
     @property
     def model_version(self) -> str:

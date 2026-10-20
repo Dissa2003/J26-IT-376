@@ -129,9 +129,12 @@ def test_conversion_does_not_mutate_the_prediction():
     assert prediction.model_dump() == before
 
 
-def test_existing_member3_adapter_is_still_unimplemented():
-    with pytest.raises(NotImplementedError):
-        adapters.to_runtime_verification_output(_prediction())
+def test_runtime_verification_adapter_hands_over_the_unchanged_signal():
+    prediction = _prediction()
+    handoff = adapters.to_runtime_verification_output(prediction)
+    assert handoff.handoff_version == "runtime-verification-input-1"
+    assert handoff.signal == to_anomaly_signal(prediction)  # same strict signal, score semantics attached
+    assert handoff.evaluate_runtime_kwargs() == {"event_id": prediction.event_id, "score": prediction.score}
 
 
 def test_module_imports_no_other_member_services_and_does_no_io():

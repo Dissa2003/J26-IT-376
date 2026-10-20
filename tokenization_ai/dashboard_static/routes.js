@@ -103,10 +103,10 @@ export const ROUTES = [
     shows: ["Allow, block and challenge decisions", "Decision reasons and rule outcomes", "Explainable verdict details"],
     requires: [
       "Runtime Verification's runtime verification and an agreed input contract",
-      "A LogiShield → Runtime Verification output adapter (not implemented; it deliberately raises NotImplementedError)"
+      "LogiShield's score wired into the runtime path (the handoff runtime-verification-input-1 exists but is not called at runtime)"
     ],
     status: [
-      "No decision exists anywhere in this system yet.",
+      "This dashboard shows no decision; Runtime Verification's own decisions do not use LogiShield's score yet.",
       "LogiShield emits only an uncalibrated score; a score is not an Allow or Block verdict.",
       "KPI 5 (downstream usability) cannot be measured until Runtime Verification integration exists."
     ],
