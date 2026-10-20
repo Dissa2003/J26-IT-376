@@ -22,6 +22,7 @@
 | `1.2.0-draft` (D4-2) | **`budget-rule-1` implemented** (`token_budget.py`, section 12.8.1): the training-only shared `max_length` selection and a post-selection exposure report. Tested on hand-made arrays and development-seed requests only; no model run, no confirmatory data; no production, generator, adapter, audit or split change; nothing is frozen. |
 | `1.2.0-draft` (D4-3) | **Arm C encoder `armc-char3-v1` implemented** (`arm_c.py`, section 12.10.1): deterministic serialization of a masked and normalized request into hashed character 3-grams as a `ModelInput` for the unchanged `LightweightAnomalyModel`. Encoding only: no model is fitted or scored, no Arm C builder or runner exists, no confirmatory data; no production, adapter, budget, generator, audit or split change; nothing is frozen. |
 | `1.2.0-draft` (D4-4) | **Paired A/B/C arm builders implemented** (`arms.py`, `arms-1`, section 12.12.1): the three representations of the same requests, one train-only shared vocabulary, the shared `budget-rule-1` budget with fail-closed handling of unrepresentable records, a fresh-model factory and manifest provenance. Preparation only: no model is fitted, predicted with or scored, no metric, no runner, no confirmatory data; no production, adapter, encoder, budget, generator, policy, audit or split change; nothing is frozen. |
+| `1.2.0-draft` (D4-5) | **Detection metrics and paired group bootstrap implemented** (`detection_metrics.py`, `detection-metrics-1`, section 12.11.1): step-wise Average Precision, ROC-AUC, threshold metrics, validation-only F1 threshold selection and a paired normalized-template-group bootstrap of AP(B) - AP(A). Tested on hand-made arrays only: no model is fitted or scored, no real detection metric exists, no development or confirmatory scoring, no success margin; no arm, encoder, generator, policy, audit, split or production change; nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -353,7 +354,7 @@ and is not a primary or required result.
 5. Provenance holds caller-supplied opaque `record_id`s, hashed group ids, counts and hashes and no raw
    request text.
 
-## 7. Metrics (defined; the metrics runner is not implemented yet)
+## 7. Metrics (defined; metric and bootstrap functions implemented in D4-5, section 12.11.1; the runner is not implemented yet)
 
 - **Primary: PR-AUC** (threshold-free; the score is uncalibrated, and positives are a minority).
 - **Secondary:** ROC-AUC; precision, recall, F1, false-positive rate, false-negative rate and the confusion
@@ -409,11 +410,11 @@ protocol is frozen.
 | 6 | Review of `simpol-1` and its diagnostics | **Resolved:** `simpol-1` is unchanged; SIM-P06 and SIM-P12 are documented limitations (12.3); SIM-P04 and SIM-P07 are addressed in the generator (12.2), not in the catalog. |
 | 7 | Final scale and prevalence sensitivities | Scale **proposed** (12.7, subject to feasibility). Prevalence sensitivities are **open**. |
 | 8 | Arm C feature-budget policy, n-gram settings and equal hyperparameter-search effort | Encoder, n-gram settings and serialization **implemented** (12.10.1: character 3-grams, same model class, no truncation). The equal-effort search grid and the `num_buckets` values remain **open**. |
-| 9 | Hyperparameter grids, selection criterion, threshold rule, bootstrap settings (resamples, seed) | **Open**; to be fixed before the manifest (12.11, 12.12). |
+| 9 | Hyperparameter grids, selection criterion, threshold rule, bootstrap settings (resamples, seed) | Threshold rule (maximum validation F1) and bootstrap settings (2,000 resamples, seed 8201, 95% percentile interval, minimum-valid rule) **implemented as draft** in D4-5 (12.11.1). Hyperparameter grids and the model selection criterion remain **open**; everything is fixed only by the manifest (12.12). |
 | 10 | Whether `audit.py` gains path-root and method-by-path-category summaries | **Implemented** (D4-0, section 12.2.2) as a separate descriptive field; audit thresholds, errors and warnings unchanged. |
 | 11 | Scope of label-conditioned audits relative to the sealed test split | **Open** (12.6). |
 | 12 | Whether development-seed (6101) dry runs report any detection metric | **Open.** Until decided, none is reported (12.5). |
-| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` (12.9.1), `budget-rule-1` (12.8.1) the Arm C encoder (12.10.1) and the paired arm builders (12.12.1) exist so far; the runner, metrics, bootstrap and manifest tool do not. |
+| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` (12.9.1), `budget-rule-1` (12.8.1) the Arm C encoder (12.10.1), the paired arm builders (12.12.1) and the metric and bootstrap functions (12.11.1) exist so far; the runner and manifest tool do not. |
 | 14 | Any generator correction beyond G1 and G2 | **Not approved.** Needs a documented reason and approval before the generator is fixed for the confirmatory study (12.2). |
 
 ## 12. Design decisions recorded in D3c-1 (documentation only)
@@ -854,6 +855,43 @@ and `encoder_parameters()` (the fixed configuration, for the manifest). It build
   difference" and "B worse than A" are acceptable outcomes.
 - Score semantics are unchanged: the score is uncalibrated and is not an attack probability.
 
+#### 12.11.1 Detection metrics `detection-metrics-1` (implemented in D4-5)
+
+`tokenization_ai/heldout_eval/detection_metrics.py` computes metrics from **already-computed scores and labels**. It imports nothing outside
+the standard library, trains, fits and scores no model, reads no request, and has been exercised only on small hand-made arrays. No
+development-seed or confirmatory score exists, and the confirmatory seeds were not touched.
+
+- **Inputs.** Scores are finite real numbers (`bool`, NaN and infinities are rejected); labels are the integers 0 or 1. Invalid input raises
+  `DetectionMetricsError` (messages hold positions and counts only). A metric that is undefined for valid input is returned as `None`, never as 0.
+- **Primary: Average Precision (the PR-AUC estimator).** Scores sorted descending, tied scores grouped into one block, step-wise sum without
+  interpolation: `AP = (1/P) * sum_k pos_k * TP_k / n_k` over tied blocks (cumulative positives `TP_k` and records `n_k` after block `k`). The value is
+  independent of input order and of the order inside a tie. All scores equal gives the prevalence. **Undefined** (`None`) with no positive record.
+- **Secondary.** ROC-AUC (Mann-Whitney, ties worth one half, exact integer arithmetic; undefined unless both classes occur). TP, FP, TN, FN; precision
+  (undefined without predicted positives), recall (undefined without positives), F1 = 2TP / (2TP + FP + FN) (undefined only when that denominator is 0;
+  with positives present and nothing predicted it is 0), false-positive rate (undefined without negatives), false-negative rate (undefined without positives).
+- **Validation-only threshold (`select_threshold`).** Predict positive when `score >= threshold`. Candidates: every distinct validation score plus the
+  all-negative prediction (`threshold = None`, treated as the highest candidate). Maximum validation F1 (compared exactly as fractions); a tie goes to the
+  highest threshold. Both classes are required in validation. The function's only parameters are validation scores and labels; the test split is
+  used only afterwards, through `evaluate_at_threshold` with the already fixed threshold.
+- **Paired group bootstrap (`paired_group_bootstrap`).** Statistic `AP(B) - AP(A)`. Whole normalized-template groups are drawn with replacement
+  (`G` draws from `G` groups); a drawn group contributes all its records (mixed-label templates stay intact) and a group drawn `m` times contributes
+  each record `m` times. One draw serves both arms, and the arms are joined by record id (id sets of both score maps, labels and groups must match).
+  2,000 replicates; local `random.Random(8201)` (global random state is neither read nor changed); 95% percentile interval by linear interpolation
+  between order statistics, from the valid replicates.
+- **Undefined replicates.** A resample without a positive record has an undefined AP for both arms (labels are shared). Such replicates are counted
+  (`replicates_undefined`, `undefined_reasons`), never redrawn and never replaced. **Draft minimum-valid rule:** at least 95% of the replicates must be
+  valid (1,900 of 2,000), otherwise `status = "insufficient_valid_replicates"` and no interval is reported (the full-sample estimate still is). If the
+  full-sample AP is undefined the status is `"undefined_point_estimate"` and no replicate is run. The 95% share is a draft convention chosen to
+  match the interval level, not tuned on any result; because invalid replicates are dropped, the interval is conditional on the resample containing
+  a positive.
+- **No success margin.** Nothing here decides whether B improves on A. The decision rule and any margin are still fixed before the confirmatory
+  scored run (section 12.11).
+- **Scope of the interval.** It describes only the sampling variability of the synthetic generator under group resampling of one generated dataset
+  and one split. It ignores model-fitting, hyperparameter, threshold and dataset-seed variability, is rough with few groups, and supports no
+  real-world detection claim. Scores are uncalibrated ranking scores, and Arm B's simulated rules are not Member 2 verified rules.
+- **Manifest provenance.** Record `METRICS_ID`, the SHA-256 of `detection_metrics.py`, the replicate count, seed, confidence level and
+  `MIN_VALID_PERCENT`.
+
 ### 12.12 Evaluation provenance and the write-once pre-run manifest (plan)
 
 **This step creates no manifest.** The pre-run manifest is written **once**, only after all relevant runner, arm,
@@ -960,6 +998,7 @@ the confirmatory run, and what confirmatory evidence exists. It holds no perform
 | 8 | D3c-1 | Pre-run decision (recorded) | Seed plan (12.5), splitting and sealed test (12.6), scale (12.7), `max_length` rule (12.8), `request_to_context-v1` (12.9), Arm C definition (12.10), metric plan (12.11), manifest plan (12.12). |
 | 9 | D3c-2 | Design revision (implemented) | G1/G2 implementation note written before any generator code was changed; `synthgen-3` / `synthetic-catalog-3` implemented; default dataset seed set to the development seed 6101; checked on the development seed only, structure and construction checks, no model (12.2.1). Structural before/after figures were read from the development seed after the design constants were fixed; the constants were not adjusted. |
 | 9a | D4-0 | Design revision (diagnostics only) | `structural_coverage` added to the audit report and the audit protocol label corrected (12.2.2). Development seed 6101 only. |
-| 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; hyperparameter grids; decision rule and any margin; runner, budget-rule and manifest code. |
+| 9b | D4-5 | Design revision (implemented) | Metric and paired group-bootstrap functions, threshold rule and minimum-valid-replicate rule written (12.11.1) and tested on hand-made arrays. No model score, no data, no result. |
+| 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; hyperparameter grids; decision rule and any margin; runner and manifest code. |
 | 11 | Pending | Pre-run decision | Write-once pre-run manifest, before any training or scoring. |
 | 12 | Pending | Confirmatory evidence | Confirmatory dataset (seed 7101), validation-only selection, one scored test run. **No confirmatory evidence exists yet.** |
