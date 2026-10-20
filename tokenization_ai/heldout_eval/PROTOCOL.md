@@ -21,6 +21,7 @@
 | `1.2.0-draft` (D4-1) | **`request_to_context-v1` implemented** (`request_context.py`, section 12.9.1). Pure mapping of a synthetic request to the pipeline's input context; no production module, generator, catalog, audit, split or rule change; no model run; nothing is frozen. |
 | `1.2.0-draft` (D4-2) | **`budget-rule-1` implemented** (`token_budget.py`, section 12.8.1): the training-only shared `max_length` selection and a post-selection exposure report. Tested on hand-made arrays and development-seed requests only; no model run, no confirmatory data; no production, generator, adapter, audit or split change; nothing is frozen. |
 | `1.2.0-draft` (D4-3) | **Arm C encoder `armc-char3-v1` implemented** (`arm_c.py`, section 12.10.1): deterministic serialization of a masked and normalized request into hashed character 3-grams as a `ModelInput` for the unchanged `LightweightAnomalyModel`. Encoding only: no model is fitted or scored, no Arm C builder or runner exists, no confirmatory data; no production, adapter, budget, generator, audit or split change; nothing is frozen. |
+| `1.2.0-draft` (D4-4) | **Paired A/B/C arm builders implemented** (`arms.py`, `arms-1`, section 12.12.1): the three representations of the same requests, one train-only shared vocabulary, the shared `budget-rule-1` budget with fail-closed handling of unrepresentable records, a fresh-model factory and manifest provenance. Preparation only: no model is fitted, predicted with or scored, no metric, no runner, no confirmatory data; no production, adapter, encoder, budget, generator, policy, audit or split change; nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -412,7 +413,7 @@ protocol is frozen.
 | 10 | Whether `audit.py` gains path-root and method-by-path-category summaries | **Implemented** (D4-0, section 12.2.2) as a separate descriptive field; audit thresholds, errors and warnings unchanged. |
 | 11 | Scope of label-conditioned audits relative to the sealed test split | **Open** (12.6). |
 | 12 | Whether development-seed (6101) dry runs report any detection metric | **Open.** Until decided, none is reported (12.5). |
-| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` (12.9.1), `budget-rule-1` (12.8.1) and the Arm C encoder (12.10.1) exist so far. |
+| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` (12.9.1), `budget-rule-1` (12.8.1) the Arm C encoder (12.10.1) and the paired arm builders (12.12.1) exist so far; the runner, metrics, bootstrap and manifest tool do not. |
 | 14 | Any generator correction beyond G1 and G2 | **Not approved.** Needs a documented reason and approval before the generator is fixed for the confirmatory study (12.2). |
 
 ## 12. Design decisions recorded in D3c-1 (documentation only)
@@ -887,6 +888,51 @@ The manifest records at least:
 - the hyperparameter grids, selection criterion, threshold rule, Arm C settings (12.10), the decision rule and any
   margin (12.11);
 - the Python and numpy versions.
+
+#### 12.12.1 Arm builders `arms-1` (implemented in D4-4)
+
+`tokenization_ai/heldout_eval/arms.py` prepares, for the same requests, the inputs of the three arms. It fits, predicts with and scores no
+detection model, reads no label (`record.meta` is never touched; the future runner aligns labels to `record_ids`) and has not been run on any
+confirmatory data.
+
+- **Stage flow (real stages only).** For each record: `request_to_context-v1`; `InputFusion`; `PrivacyMasker.mask_with_provenance`;
+  `Normalizer.normalize_with_provenance`; `HybridTokenizer.tokenize`. **Arm A** fuses an *empty* rule list. **Arm B** fuses the `rule_info` of the
+  unchanged `simpol-1` simulator; the `SimulatedRuleSet` wrapper is kept beside the sequence and re-checked (`provenance="simulated"`,
+  `verification_status="not_verified_simulated"`, catalog version `simpol-1`, catalog SHA-256), and a mismatch stops the build. **Arm C** passes the
+  actual `NormalizationResult` of the rule-free Arm A front end to `armc-char3-v1`; no result object is built by hand and the encoder's privacy
+  boundary is never bypassed. Arm C never receives rules and has no vocabulary. A record's three representations always describe the same
+  request.
+- **Split identity and pairing.** A split (`train`, `validation` or `test`) is named by the caller, never inferred; a split is a non-empty list of
+  `EvalRecord` with unique ids and is processed sorted by record id, so input order cannot change a value. `ArmInputs` aligns the three arms by
+  `record_ids` and refuses (`PairingError`) missing, extra, duplicate or reordered records and Arm A or B inputs not at the shared `max_length`;
+  `assert_disjoint` refuses a record id in two splits. Any construction failure raises (`ArmBuildError`) for the whole split; no record is skipped,
+  so class balance and sample counts cannot change silently. Errors and diagnostics hold record ids, stage names and counts only, never request content.
+- **Train-only shared vocabulary.** One `Vocabulary`, fitted once, on the **training** split only, on the training **Arm B** sequences. Arm B contains
+  every Arm A token (Arm A differs only by lacking rule tokens), so a single fit counts each request once and serves both arms; fitting on A and B
+  together would count every shared literal twice and make `min_frequency` ineffective. Validation and test are encoded with the frozen
+  vocabulary and never refit. Reserved ids and the order of literal ids are deterministic (by count, then token). A literal absent from the frozen
+  vocabulary encodes to the unknown id; `unknown_token_report` gives per-arm counts. With `min_frequency=2` the training split itself contains
+  unknown tokens, whereas with `min_frequency=1` it contains none (so the unknown id would never be trained). **`min_frequency=2` is the proposed
+  experimental setting and is not frozen** (`MIN_FREQUENCY_PROPOSED`); the vocabulary record (size, SHA-256 of the id-ordered token list,
+  parameters, training record count) is for the manifest.
+- **Shared budget and exclusions.** The caller selects one `BudgetDecision` with `budget-rule-1` from `training_arm_b_lengths`; the builder never
+  chooses a length itself. The same `max_length` is applied to Arm A and Arm B with the real `Tensorizer`. Records that need payload truncation are
+  allowed and counted per arm (`ArmInputs.summary`). A record whose framing plus rules cannot fit the frozen budget makes `build_arm_inputs` fail
+  closed with `PairedExclusionRequired`; its `ExclusionProposal` lists record ids, arms and a reason only. `propose_exclusions` returns the same
+  proposal without raising. Nothing is excluded, truncated or re-budgeted automatically: removing such records from all arms, and every
+  truncation rule, must be decided and frozen in the protocol before the final evaluation.
+- **Model preparation.** `new_untrained_model(num_buckets)` returns a fresh, untrained `LightweightAnomalyModel`; every hyperparameter setting needs
+  its own instance (`fit` warm-starts from existing weights). No search or runner exists.
+- **Provenance (`build_provenance`).** JSON-safe: arm identifiers, `request_to_context-v1`, `armc-char3-v1` parameters, `synthgen-3`,
+  `synthetic-catalog-3`, the `simpol-1` version, SHA-256 and explicit not-verified status, the budget decision, the vocabulary record, paired
+  record counts per split and the SHA-256 (LF-normalized) of the stage and arm sources it relies on (`fusion`, `masking`, `normalization`,
+  `tokenizer`, `vocabulary`, `tensorizer`, `models`, `model`, `request_context`, `arm_c`, `token_budget`, `policy_sim`, `arms`). Arm B rules are
+  never described as verified.
+- **Limitations (no performance result exists).** Arm B adds deterministic, request-derived simulated representations, not independently verified
+  information. Arm C observes query and value characters that Arms A and B lose through atomic tokens and the unknown token. Feature mass and
+  collisions differ by arm, and a shared model class and `num_buckets` do not give equal information. The vocabulary, the budget, the exclusion and
+  truncation rules and `min_frequency` are not frozen until the manifest exists. On the development seed the builders were exercised only for
+  preparation (preprocessing counts), never for scoring.
 
 ### 12.13 What simulated rules and these results cannot show
 
