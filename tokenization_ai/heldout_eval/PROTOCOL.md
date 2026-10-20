@@ -30,6 +30,7 @@
 | `1.2.0-draft` (D4-6D2A) | **Write-once pre-run manifest `pre-run-manifest-1` implemented** (`manifest.py`, section 12.12.2): canonical JSON schema, exclusive-creation writer with fsync and byte read-back, and an independent verifier (external digest, live Git state, re-hashed sources, protocol and dataset bindings, numerical and statistical re-derivation, environment). Confirmatory manifests require a frozen, externally approved protocol, so none can be written while the protocol is a draft. No model is fitted or scored, no real manifest exists, the selection record and test gate are still unimplemented, and nothing is frozen. |
 | `1.2.0-draft` (D4-6D2B) | **Validation-selection record `validation-selection-record-1` implemented** (`selection_record.py`, section 12.12.3): canonical write-once record bound to the exact pre-run manifest digest, with an independent verifier that rebuilds the record from trusted validation evidence (27 candidates per arm, rounding and tie-break recomputed, selected AP, raw-logit F1 threshold and model fingerprint recomputed from the supplied fitted models). It never authorizes test scoring. No real record exists, no model is trained, the attempt marker and test gate are unimplemented, and nothing is frozen. |
 | `1.2.0-draft` (D4-6D2C) | **One-time test attempt gate `test-attempt-gate-1` and marker `test-attempt-marker-1` implemented** (`attempt_gate.py`, section 12.12.4): the real manifest and selection-record verifiers must pass before an atomic `O_EXCL` marker is created in a trusted directory outside the repository; only afterwards are the authentic test labels recovered from the source records and validated; any failure after the marker leaves it intact and writes a redacted failure report. No real marker exists, nothing is scored, the runner's gates are still blocked and unconnected, the draft protocol cannot open the gate, and nothing is frozen. |
+| `1.2.0-draft` (D4-7A) | **Model artifact persistence `model-artifact-1` implemented** (`model_artifacts.py`, section 12.12.5): a single canonical-JSON, write-once file per candidate that stores a fitted `LightweightAnomalyModel` bit-exactly (float64 weights as base64 chunks, exact bias, fingerprint), bound to the candidate, its train-only learning rate, the model source hash and a manifest digest, with a strict loader that takes all expectations from the caller and a 81-candidate set loader. No research model exists, nothing is trained or authorized, `selection_record.py` is unchanged (so non-selected candidate APs are still claims), and nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -422,7 +423,7 @@ protocol is frozen.
 | 10 | Whether `audit.py` gains path-root and method-by-path-category summaries | **Implemented** (D4-0, section 12.2.2) as a separate descriptive field; audit thresholds, errors and warnings unchanged. |
 | 11 | Scope of label-conditioned audits relative to the sealed test split | **Open** (12.6). |
 | 12 | Whether development-seed (6101) dry runs report any detection metric | **Decided in D4-6C3 (12.11.4):** no detection-quality result is reported or used for any choice from seed 6101; permitted uses are listed there. |
-| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` (12.9.1), `budget-rule-1` (12.8.1) the Arm C encoder (12.10.1), the paired arm builders (12.12.1) and the metric and bootstrap functions (12.11.1) exist so far; the runner foundation (12.11.5), the numerical helpers (12.11.3) and the manifest writer and verifier (12.12.2) exist too; no real manifest has been written; the validation-selection record writer and verifier (12.12.3) and the one-time test attempt gate with its marker and label-recovery primitives (12.12.4) exist, none connected to the runner and none exercised on real data; model fitting and test scoring do not. |
+| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` (12.9.1), `budget-rule-1` (12.8.1) the Arm C encoder (12.10.1), the paired arm builders (12.12.1) and the metric and bootstrap functions (12.11.1) exist so far; the runner foundation (12.11.5), the numerical helpers (12.11.3) and the manifest writer and verifier (12.12.2) exist too; no real manifest has been written; the validation-selection record writer and verifier (12.12.3) and the one-time test attempt gate with its marker and label-recovery primitives (12.12.4) exist, none connected to the runner and none exercised on real data; the model-artifact persistence (12.12.5) exists but no research artifact does; model fitting and test scoring do not. |
 | 14 | Any generator correction beyond G1 and G2 | **Not approved.** Needs a documented reason and approval before the generator is fixed for the confirmatory study (12.2). |
 
 ## 12. Design decisions recorded in D3c-1 (documentation only)
@@ -1448,6 +1449,47 @@ misuse, not a malicious process); the marker's trusted directory is the caller's
 **Remaining blockers before confirmatory evaluation.** The protocol freeze and a real manifest; generation of the confirmatory dataset; the training-authorization wiring and the training and validation
 stage; a real selection record; the manual-review procedure; the test-scoring stage that consumes the gate; and the final report.
 
+#### 12.12.5 Model artifact persistence `model-artifact-1` (implemented in D4-7A)
+
+`tokenization_ai/heldout_eval/model_artifacts.py` saves and reloads fitted `LightweightAnomalyModel` candidates reproducibly. It is infrastructure only: it trains nothing, scores nothing, calls neither
+`fit` nor `predict`, authorizes nothing, and **no research model artifact exists** (no model has been trained for the study; seeds 7101-7103 unused). The runner's training and test gates are unchanged and
+still blocked. Tests: `tests/tokenization_ai/test_model_artifacts.py` (hand-built fitted fixtures with assigned weights, temporary directories outside the repository).
+
+**Format.** One bounded file (at most 1 MiB; about 11-50 KB in practice) per candidate: canonical JSON (sorted keys, compact separators, ASCII, `allow_nan=False`, one trailing newline). The float64 weight vector
+is stored as base64 of its little-endian bytes, split into fixed 4,000-character chunks (the canonical-JSON writer bounds string length), with its SHA-256; the bias as `float.hex`. This is lossless: tests round-trip
+subnormals, signed zeros, the largest finite doubles and `0.1 + 0.2` bit for bit. Loading executes no code: only JSON parsing, `base64` decoding and `numpy.frombuffer` on length-checked data (no pickle-style loaders, no
+`eval`, no dynamic import). Fields: `artifact_version`, `kind`, `arm`; `candidate` (candidate id, `num_buckets`, `epochs`, `relative_step_c`, the train-only `learning_rate` and its hex form); `input_representation`
+(`arms-1`, arm, input kind); `model_source_sha256` (LF-normalized `model.py`); `manifest_sha256`; `training` (allow-listed: train-id hash, vocabulary hash, token budget, `lambda-power-1` eigenvalue and `L`); `authorization`;
+`model` (bucket count, dtype, weight chunks, weight hash, bias, fitted flag, the `selection_record.model_artifact_fingerprint`); `limitations`. It holds no request content, no label of any split, no score, prediction,
+loss history or metric. The learning rate must equal `c / L` exactly and `L = lambda_max / 4`, and the candidate must be one of the approved 81 (3 arms x `num_buckets` {1024, 2048, 4096} x `epochs` {50, 150, 400}
+x `c` {0.1, 0.3, 0.8}). **The artifact never claims that an authorized experiment trained it** (`authorization.asserted` is `false`).
+
+**Writer (`write_model_artifact`).** Requires a fitted, finite, correctly shaped float64 model, an approved candidate, a consistent learning rate and training provenance, and a trusted output directory **outside the
+repository** (the repository root is passed explicitly). The file name is derived only from the manifest digest and the candidate id (`model-artifact-<sha256>.json`), never from artifact content. Exclusive creation,
+flush and `fsync`, byte-for-byte read-back, read-only; an existing file is never overwritten; a failed or mismatched write is left in place and raises. It returns the SHA-256 of the exact bytes written.
+
+**Loader (`load_model_artifact`, `load_candidate_set`).** Everything that matters comes from the caller, never from the artifact: the **expected file SHA-256 from outside**, the expected arm, candidate id, manifest digest
+and learning rate (taken from a *verified* manifest, e.g. via `learning_rates_from_manifest`), and optionally the manifest's model hash and an expected fingerprint. It reads the path derived from those trusted values,
+checks the digest, strict canonical parsing and the schema, the identity fields, the live `model.py` hash, the weight length and hash, finiteness, and rebuilds the existing `LightweightAnomalyModel(num_buckets)` by assigning its
+own `weights`, `bias` and `is_trained` (the model's representation of a fitted state; `model.py` is unchanged). The reconstructed fingerprint must equal the recorded and any expected one. A model rebuilt this way gives
+bit-identical weights, raw logits (including saturated ones) and `predict()` outputs, and each loaded model is an independent object. `load_candidate_set` requires digests and learning rates for exactly the 81 approved candidates and
+rejects missing, extra, substituted or tampered artifacts. The compatibility rests on the production model's public attributes and constructor contract; the loader refuses to reconstruct if that contract changes, and the
+`model.py` hash is bound into every artifact.
+
+**Trust boundaries.** The manifest digest inside an artifact is a *binding*, not proof that the manifest was verified: the caller must verify the manifest first (`manifest.verify_manifest_bytes`) and take the expected values
+from it. An artifact cannot prove that it was produced by an authorized, train-only run; that is established by the manifest, the (future) authorized runner and the selection record. A forger who also controls the expected
+digests can produce any artifact; the external digest authenticates only against a trusted source. The module is not in the manifest's default source list (that list predates it), so changing it is detected only if the
+manifest source list is extended, which is a recommended later change.
+
+**All-candidate validation evidence (design; not implemented).** A future training stage would store each of the 81 fitted candidates with `write_model_artifact` and record the 81 digests (for example in the selection
+record's inputs or a sibling write-once index). A verifier would load all 81 with `load_candidate_set` using digests and learning rates from the verified manifest, compute each candidate's raw logits on the trusted validation
+inputs (`numerics.raw_logits`), recompute every validation AP with `detection_metrics.average_precision`, and compare each with the claimed value before re-running the approved selection rule (about 81 passes over the validation
+set). **Unresolved integration requirement:** the current `selection_record.py` recomputes only the *selected* candidate per arm; the validation APs of the other 26 candidates per arm remain claims of the training stage
+(12.12.3). Closing this needs a change to `selection_record.py` (its `ValidationEvidence` would carry the loaded candidate models and its rebuild would recompute every candidate's AP). That file was not modified here.
+
+**Remaining before training authorization.** The protocol freeze and a real manifest; the training-authorization wiring from a verified manifest to the runner; the training and validation stage that writes the 81 artifacts and the
+selection record; the extended all-candidate verification above; extending the manifest's source list to this module, `selection_record.py` and `attempt_gate.py`; the manual-review procedure; test scoring and the final report.
+
 ## 13. Chronological record
 
 This record separates what was found in exploratory data, what was revised in the design, what was decided before
@@ -1473,6 +1515,7 @@ the confirmatory run, and what confirmatory evidence exists. It holds no perform
 | 9g | D4-6D2A | Design revision (implemented) | Manifest writer and verifier written (12.12.2) and tested with development-seed objects and throw-away repositories; confirmatory manifests are gated on a frozen protocol. No real manifest, no fit, no score. |
 | 9h | D4-6D2B | Design revision (implemented) | Validation-selection record writer and verifier written (12.12.3) and tested with mock fitted artifacts, development-seed structure and a throw-away repository. No real record, no fit, no score, no test gate. |
 | 9i | D4-6D2C | Design revision (implemented) | One-time attempt gate, atomic marker, post-marker label recovery and failure reports written (12.12.4) and tested with the real verifiers on disposable fixtures. No real marker, no scoring, runner gates unchanged. |
+| 9j | D4-7A | Design revision (implemented) | Model artifact writer and loader written (12.12.5) and tested on hand-built fitted fixtures; the all-candidate validation-verification requirement for `selection_record.py` is recorded as unresolved. No research artifact, no fit, no score. |
 | 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; runner and manifest code (estimator and logit extraction: D4-6C2, 12.11.3). |
 | 11 | Pending | Pre-run decision | Write-once pre-run manifest, before any training or scoring. |
 | 12 | Pending | Confirmatory evidence | Confirmatory dataset (seed 7101), validation-only selection, one scored test run. **No confirmatory evidence exists yet.** |
