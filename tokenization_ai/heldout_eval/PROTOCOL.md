@@ -20,6 +20,7 @@
 | `1.2.0-draft` (D4-0) | **Descriptive structural-coverage diagnostics added to `audit.py`; audit protocol label corrected.** `structural_coverage` is a new, separate field of the audit report (section 12.2.2). Existing audit checks, thresholds, errors, warnings, `construction_checks_passed`, fingerprints and split logic are unchanged. The report's `protocol` label now reads `heldout-eval-1.2.0-draft` (it read `1.1.0-draft`); `splits.PROTOCOL_VERSION` is deliberately untouched. No generator, catalog, `simpol-1` or split change; nothing is frozen. |
 | `1.2.0-draft` (D4-1) | **`request_to_context-v1` implemented** (`request_context.py`, section 12.9.1). Pure mapping of a synthetic request to the pipeline's input context; no production module, generator, catalog, audit, split or rule change; no model run; nothing is frozen. |
 | `1.2.0-draft` (D4-2) | **`budget-rule-1` implemented** (`token_budget.py`, section 12.8.1): the training-only shared `max_length` selection and a post-selection exposure report. Tested on hand-made arrays and development-seed requests only; no model run, no confirmatory data; no production, generator, adapter, audit or split change; nothing is frozen. |
+| `1.2.0-draft` (D4-3) | **Arm C encoder `armc-char3-v1` implemented** (`arm_c.py`, section 12.10.1): deterministic serialization of a masked and normalized request into hashed character 3-grams as a `ModelInput` for the unchanged `LightweightAnomalyModel`. Encoding only: no model is fitted or scored, no Arm C builder or runner exists, no confirmatory data; no production, adapter, budget, generator, audit or split change; nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -406,12 +407,12 @@ protocol is frozen.
 | 5 | `max_length` identical across arms from training-split statistics only | **Rule decided and implemented** (12.8, 12.8.1); the value is computed later from the confirmatory training split. Header handling is identical across arms by sharing `request_to_context-v1` (12.9). |
 | 6 | Review of `simpol-1` and its diagnostics | **Resolved:** `simpol-1` is unchanged; SIM-P06 and SIM-P12 are documented limitations (12.3); SIM-P04 and SIM-P07 are addressed in the generator (12.2), not in the catalog. |
 | 7 | Final scale and prevalence sensitivities | Scale **proposed** (12.7, subject to feasibility). Prevalence sensitivities are **open**. |
-| 8 | Arm C feature-budget policy, n-gram settings and equal hyperparameter-search effort | **Open** (12.10). |
+| 8 | Arm C feature-budget policy, n-gram settings and equal hyperparameter-search effort | Encoder, n-gram settings and serialization **implemented** (12.10.1: character 3-grams, same model class, no truncation). The equal-effort search grid and the `num_buckets` values remain **open**. |
 | 9 | Hyperparameter grids, selection criterion, threshold rule, bootstrap settings (resamples, seed) | **Open**; to be fixed before the manifest (12.11, 12.12). |
 | 10 | Whether `audit.py` gains path-root and method-by-path-category summaries | **Implemented** (D4-0, section 12.2.2) as a separate descriptive field; audit thresholds, errors and warnings unchanged. |
 | 11 | Scope of label-conditioned audits relative to the sealed test split | **Open** (12.6). |
 | 12 | Whether development-seed (6101) dry runs report any detection metric | **Open.** Until decided, none is reported (12.5). |
-| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` (12.9.1) and `budget-rule-1` (12.8.1) exist so far. |
+| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` (12.9.1), `budget-rule-1` (12.8.1) and the Arm C encoder (12.10.1) exist so far. |
 | 14 | Any generator correction beyond G1 and G2 | **Not approved.** Needs a documented reason and approval before the generator is fixed for the confirmatory study (12.2). |
 
 ## 12. Design decisions recorded in D3c-1 (documentation only)
@@ -795,6 +796,47 @@ selection criterion, the same use of training and validation data only).
   between C and A or B cannot be attributed to structure-awareness alone.
 - The n-gram range, the hashing function, the text flattening and normalization steps and the feature-budget policy are
   **open** (section 11, item 8). They are written down before the manifest and never tuned on the test split.
+
+#### 12.10.1 Arm C encoder `armc-char3-v1` (implemented in D4-3)
+
+`tokenization_ai/heldout_eval/arm_c.py` provides `encode_request(NormalizationResult) -> ModelInput`, `serialize_masked_request`, `char_ngram_ids`
+and `encoder_parameters()` (the fixed configuration, for the manifest). It builds, fits and scores no model and imports none.
+
+- **Privacy-stage contract.** The only accepted input is a `NormalizationResult`, the output of the existing `PrivacyMasker.mask_with_provenance`
+  followed by `Normalizer.normalize_with_provenance`. An `EvalRecord`, a raw `UnifiedApiContext`, a `FusedInput` or any label or metadata is
+  refused. The existing stages give no tamper-proof stage proof (the result is a plain frozen dataclass, and no flag is trusted), so the boundary is
+  **content-based**: the encoder re-runs the existing masker and normalizer and refuses the record if either would still change it, so a raw
+  credential, token, e-mail or card number is refused. A forged provenance set does not help. Records carrying rules are refused (Arm C is
+  request-only). *Limit:* this shows the existing masker has nothing left to mask; it cannot show the stages were executed, and it does not
+  protect values the masker does not classify as sensitive. Masking is not reimplemented. The later Arm C builder must pass the real stage outputs.
+- **Serialization.** `<METHOD> <path-with-query>` line; one `<name>: <value>` line per header sorted by header name (code-point order); an empty
+  separator line; then `json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)`. The path keeps its query string unsplit and
+  undecoded (as in `request_to_context-v1`). CR and LF inside the method, path, header names and header values are written as the two characters
+  `\r` and `\n`, so content cannot forge a line or the separator. The result is case-folded with **ASCII-only** lowercasing (A-Z to a-z),
+  independent of Python's Unicode tables; non-ASCII characters in the path and headers are left unchanged and non-ASCII payload characters are
+  JSON-escaped. No percent-decoding. No rule tokens, labels, family names, record ids, timestamps or source ids enter the text; the event id is
+  only `ModelInput.event_id`.
+- **Character 3-grams and hashing.** All overlapping windows of 3 code points in order (`len(text) - 2` of them; none for text shorter than 3). Each is
+  UTF-8 encoded and hashed with `hashlib.blake2b(digest_size=8)` (no key, salt or personalization); the digest is read as a big-endian integer and
+  reduced to its low 31 bits (`& 0x7FFFFFFF`), so ids are non-negative integers below 2**31. Python's `hash()` is never used. There is no
+  vocabulary, unknown token, padding or truncation; `attention_mask` is all ones, so the id count equals `len(text) - 2`.
+- **`ModelInput` and the unchanged model.** The existing validation accepts the result. The model counts one hashed unigram per id (here, one
+  character 3-gram) and one hashed bigram per adjacent pair of ids (two overlapping 3-grams, together a 4-character span) in one shared
+  `num_buckets` space, so feature mass is `2n - 1`. The same model class and `num_buckets` setting can serve Arms A, B and C; each hyperparameter
+  setting must use a fresh instance because `fit` warm-starts from existing weights. Encoding creates and fits nothing.
+- **Differences from Arms A and B (not equivalence).** Arm C reads the characters of query strings and of values that Arms A and B treat as atomic
+  tokens (mapped to the unknown token when unseen); it uses no structure tags and no vocabulary; it has no `max_length`; and it never includes rules.
+  Arm C produces many more feature positions than A and B, so feature mass differs substantially; an equal `num_buckets` does not mean equal
+  information or equal collision rates. Arm C is a conventional preprocessing baseline, not an isolated test of structure-awareness, and a
+  difference between arms cannot be attributed to structure alone. Lowercasing and the absence of decoding are conventions of this study.
+- **Development-seed preprocessing diagnostics** (seed 6101, 250 templates, 1,466 requests; label-free; no model fitted; confirmatory and reserve
+  seeds not used). Serialized length: mean 225.7 characters, median 208, p95 415, maximum 613. Trigrams per request: mean 223.7, maximum 611. Feature
+  mass: mean 446.5, against about 96 for Arm A and about 170 for Arm B (from their mean token counts of 48.5 and 85.5), i.e. roughly 4.6 and 2.6
+  times more. Encoding is deterministic; ids lie in [40962, 2146963750]; the mask is all ones. All 1,341 requests with an authorization header show
+  the masked placeholder; no credential pattern and no event id appears in any serialized text. The first 400 requests touch all 1,024 buckets at
+  `num_buckets` 1024 and 3,654 of 4,096 at 4096, so heavy collisions are expected at small bucket counts. These are preprocessing observations, not detection results.
+- **Manifest provenance.** Record `encoder_parameters()` (encoder id `armc-char3-v1`), the SHA-256 of `arm_c.py`, and the hashes of the existing
+  `masking.py`, `normalization.py`, `models.py` and `model.py` sources that Arm C relies on.
 
 ### 12.11 Metric and comparison plan
 
