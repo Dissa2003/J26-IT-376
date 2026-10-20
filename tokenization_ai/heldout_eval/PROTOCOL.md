@@ -18,6 +18,7 @@
 | `1.2.0-draft` (D3c-1) | **Scientific design decisions recorded; documentation only.** Approves generator `synthgen-3` with two planned corrections (G1, G2), keeps `simpol-1` unchanged, marks the seed-5101 pilot as exploratory/burned, fixes the seed plan, the full-study scale, the equal-`max_length` rule, the request-to-context mapping `request_to_context-v1`, the Arm C definition, the primary-metric comparison plan and the pre-run manifest plan. See section 12 and the chronological record in section 13. **No code, generator, split, catalog or dataset changed in this step, and nothing is frozen.** |
 | `1.2.0-draft` (D3c-2) | **Generator `synthgen-3` / catalog `synthetic-catalog-3` implemented (G1 and G2 only).** Normal `/files/...` paths (`crud_read`, `hn_dotted_paths`) and comparable DELETE structures in both classes (`crud_write`; `traversal_like`, `sqli_like`, `cmdi_like`, `markup_like`). No label rule, weight, pool, split code, `simpol-1`, `policy_sim.py`, `policy_diagnostics.py` or audit threshold changed. The default dataset seed is now the development seed 6101. Design note, development-seed results and remaining limitations are in section 12.2.1. The confirmatory dataset is not generated and nothing is frozen. |
 | `1.2.0-draft` (D4-0) | **Descriptive structural-coverage diagnostics added to `audit.py`; audit protocol label corrected.** `structural_coverage` is a new, separate field of the audit report (section 12.2.2). Existing audit checks, thresholds, errors, warnings, `construction_checks_passed`, fingerprints and split logic are unchanged. The report's `protocol` label now reads `heldout-eval-1.2.0-draft` (it read `1.1.0-draft`); `splits.PROTOCOL_VERSION` is deliberately untouched. No generator, catalog, `simpol-1` or split change; nothing is frozen. |
+| `1.2.0-draft` (D4-1) | **`request_to_context-v1` implemented** (`request_context.py`, section 12.9.1). Pure mapping of a synthetic request to the pipeline's input context; no production module, generator, catalog, audit, split or rule change; no model run; nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -409,7 +410,7 @@ protocol is frozen.
 | 10 | Whether `audit.py` gains path-root and method-by-path-category summaries | **Implemented** (D4-0, section 12.2.2) as a separate descriptive field; audit thresholds, errors and warnings unchanged. |
 | 11 | Scope of label-conditioned audits relative to the sealed test split | **Open** (12.6). |
 | 12 | Whether development-seed (6101) dry runs report any detection metric | **Open.** Until decided, none is reported (12.5). |
-| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). |
+| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` exists so far (12.9.1). |
 | 14 | Any generator correction beyond G1 and G2 | **Not approved.** Needs a documented reason and approval before the generator is fixed for the confirmatory study (12.2). |
 
 ## 12. Design decisions recorded in D3c-1 (documentation only)
@@ -692,8 +693,42 @@ Arms A and B, while a character-n-gram arm (Arm C) can see its substrings. Conse
   visibility of the request. They are **not** an isolated test of structure-aware tokenization.
 - Recall by scenario family (section 7) is reported so that families whose signal sits in a query string or an
   unseen value can be read with this limitation in mind.
+- The mapping is implemented as `request_to_context-v1` (section 12.9.1).
 - Splitting the query out of the path would be a different mapping. It would need a new mapping version
   (`request_to_context-v2`) and a new protocol version; it is not done in this study.
+
+#### 12.9.1 `request_to_context-v1` (implemented in D4-1)
+
+`tokenization_ai/heldout_eval/request_context.py` provides `request_to_context(record) -> UnifiedApiContext` and the id
+`MAPPING_ID = "request_to_context-v1"`. It is a pure, deterministic function of the request content. It reads only
+`record.record_id` and `record.features`; it never reads the label, scenario family, template id, split, source id, timestamp or any
+prediction, and it does not mutate the record. It attaches **no rules**: the arm builders attach an empty rule list for Arm A and the
+**simulated** `simpol-1` rules (not Member 2 verified) for Arm B, so the same mapped context serves both arms.
+
+| Context field | `request_to_context-v1` |
+|---|---|
+| `event_id` | the opaque `record_id` (a context identifier only; the tokenizer never emits it) |
+| `method` | as given (`Normalizer` upper-cases it later) |
+| `path` | the complete string **including `?query`**, unsplit and not percent-decoded |
+| `headers` | every request header copied as given, including `content-type` and `authorization`; duplicate names (after lower-casing) are rejected, not merged |
+| `content_type` | the `content-type` header value (name matched case-insensitively), else `None`; the tokenizer does not read this field |
+| `payload` | decided by the **body content**, never by the declared type or a label: empty body gives `{}`; a body that parses as a JSON object gives that dict; a form-like body (contains `=`, no space once stripped) gives `parse_qsl(keep_blank_values=True)` as a string dict (a repeated name keeps its last value); anything else (plain text, XML, a JSON non-object) gives `{"text": body}` |
+| `client_ip`, `threat_score`, `timestamp` | not set |
+
+- **Production-faithful:** the field names and types of `UnifiedApiContext`; the whole path with its query as one string (as
+  `adapters._build_context` receives `metadata["path"]`); the header dict; and the stage order that follows (fusion, privacy masking,
+  normalization, structure-aware tokenization, as in `service._front`). Masking and normalization are not reimplemented or pre-empted in the
+  adapter: credentials stay raw in the context and are masked by the existing `PrivacyMasker`.
+- **Evaluation conventions (not production facts):** production only guarantees `payload: dict`, so the two non-JSON body rules (form-like
+  and `{"text": body}`), the content-based choice between them, and the rejection of duplicate header names are conventions of this study.
+  They are the same body rules as the diagnostic mapping `policy_diagnostics.to_context`; a test asserts the two mappings are identical for
+  every generated request on the development seed, and that the result equals the production adapter's output for a JSON request.
+- **Limitations (kept, not fixed):** a query string stays inside the last path segment as one atomic literal and is not decoded, so query
+  text is almost invisible to Arms A and B (12.9); a body is classified by a heuristic on its content, so an unusual body can fall under a
+  different rule than a real upstream parser would choose; a declared-type mismatch is visible only as a header literal beside a payload shape.
+- **Provenance for the pre-run manifest:** record `MAPPING_ID` and `source_sha256()` of `request_context.py` (SHA-256 of the source with
+  line endings normalized to LF, stable across checkouts), together with the hashes of the production sources it feeds (`models.py`,
+  `fusion.py`, `masking.py`, `normalization.py`, `tokenizer.py`).
 
 ### 12.10 Arm C: conventional hashed character-n-gram baseline
 
