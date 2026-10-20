@@ -5,6 +5,39 @@ and, for Formal Verification/3, against the already-fetched remote refs `origin/
 (tip `7e9f54c`) and `origin/dev` (tip `a247ba0`). Other members' code was **read only**. This
 document describes what exists today; it does not define any contract on another member's behalf.*
 
+> **Reading guide.** Everything from "Summary" down is the original audit at `de07872` and is kept
+> unchanged as a historical record. The section below, dated 2026-10-19, describes Member 4's
+> current state at commit `cf1f200`.
+
+## Current status (2026-10-19, Member 4 at `cf1f200`)
+
+Two standalone Member 4 modules were added after the audit. **Neither is wired into the running
+service, API or dashboard**, and neither completes an integration.
+
+| Module | What it is | What it is not |
+|---|---|---|
+| `anomaly_signal.py` (`AnomalySignal`, commit `964813b`) | A strict, immutable output format carrying `event_id`, `score`, `model_version` and fixed metadata (`uncalibrated_model_output`, `is_probability=false`, `calibrated=false`) | Not an agreed Member 3 contract. No label, threshold, decision or `threat_score`. Nothing sends it anywhere. `adapters.to_member3_output` (renamed `to_runtime_verification_output` on `dev`) is still `NotImplementedError` |
+| `policy_report_adapter.py` (commit `cf1f200`) | A strict conversion of **caller-supplied** Member 2-style policy report mappings to `VerifiedRuleInfo`. `event_id` comes only from the supplied context; the caller asserts which policies apply; only policy-level eligible reports are accepted | Not Member 2 integration. It does not import or call Member 2, does not decide applicability, and policy eligibility is not runtime request verification. Test reports are synthetic and may drift from Member 2's real output |
+
+Current link status:
+
+| Link | Status |
+|---|---|
+| Member 1 → Member 4 | Unchanged: tested in-process only |
+| Member 2 → Member 4 | **Not integrated.** An isolated adapter exists, but no real Member 2 output is consumed, no event linkage or applicability rule is agreed, and real-policy prediction quality is unverified (the fitted vocabulary and model know only mock rule tokens) |
+| Member 4 → Member 3 | **Not integrated.** An isolated output format exists, but score interpretation, threshold ownership, transport and failure handling are not agreed with Member 3 |
+| KPI 5 | **Still unmeasured.** Schema compatibility alone would not measure or prove downstream usability |
+
+Research limits that still apply:
+- Scores are uncalibrated and are not attack probabilities.
+- There is no held-out detection-quality evaluation and no request-only versus rule-fused baseline yet.
+- The historical KPI 1-4 evidence stays tied to its original evaluation protocol and is not rewritten.
+- Both new modules are outside the archived KPI source-hash inventory; any future evaluation that
+  uses them needs updated source provenance under a new protocol version.
+
+Test results per commit are recorded in `README.md` section 8 (current: 871 Member 4 and 897
+repository tests passing at `cf1f200`).
+
 ## Summary
 
 | Link | Status | One-line truth |

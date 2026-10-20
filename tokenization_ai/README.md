@@ -100,6 +100,62 @@ threshold**, and the request-only vs rule-fused **baseline comparison**.
 | API response `logishield-analysis-v2` | `POST /v1/analyze` | privacy-safe projection, see §6 |
 | Trace / runtime metrics | `tracing.py`, `metrics.py` | counts and timings only |
 
+### Anomaly signal (proposed output format)
+
+`anomaly_signal.py` adds `AnomalySignal`, a strict, immutable wrapper around `AnomalyPrediction`
+(`to_anomaly_signal`, `to_anomaly_signal_dict`). Fields: `schema_version` (`"anomaly-signal-1"`),
+`event_id`, `score` (finite, 0–1), `model_version`, and the fixed metadata
+`score_semantics = "uncalibrated_model_output"`, `is_probability = false`, `calibrated = false`.
+Unknown fields are rejected. There is no label, threshold, decision, `threat_score` or
+rule-aligned signal.
+
+```json
+{"schema_version": "anomaly-signal-1", "event_id": "synthetic-example-1", "score": 0.25,
+ "model_version": "synthetic-example-model", "score_semantics": "uncalibrated_model_output",
+ "is_probability": false, "calibrated": false}
+```
+
+*(Synthetic illustration, not output of any running system.)*
+
+- **Status:** a **proposed Member 4-owned format**. It is **not** a completed Member 3
+  integration; nothing sends it anywhere, and `adapters.to_runtime_verification_output` is still unimplemented.
+- **The score is uncalibrated and is not an attack probability.** KPI 5 remains unmeasured.
+- **Member 3 must still agree** on score interpretation (and whether an uncalibrated score is
+  acceptable), who owns any threshold, transport, and failure handling (fail-open or
+  fail-closed). Field-name mapping onto Member 3's request is deliberately not done here.
+- **Evidence:** this module is not in the KPI source-hash inventory, so the archived KPI 1–4
+  reports do not cover it. Any future evaluation that uses it needs updated source provenance
+  under a new protocol version; the historical evidence is not rewritten.
+
+### Policy report compatibility adapter (isolated, not integrated)
+
+`policy_report_adapter.py::policy_reports_to_verified_rule_info(context, reports,
+applicable_policy_ids=...)` converts **caller-supplied** Member 2-style report mappings (JSON form)
+into the existing `VerifiedRuleInfo`. It is an isolated compatibility adapter: it does not import
+or call Member 2, and nothing in the pipeline, API or dashboard uses it.
+
+- **`event_id` comes only from the supplied `UnifiedApiContext`.** A report that carries its own
+  `event_id` is rejected.
+- **Applicability is asserted by the caller.** `applicable_policy_ids` must equal the reports'
+  `policy_id`s exactly (explicit, unique, non-empty). Member 4 never decides which policies apply
+  to an HTTP request.
+- **Only policy-level eligibility is accepted:** `is_valid` true, `rule_status == "eligible"`,
+  top-level and solver status `UNSAT` for an `entailment` query with `is_entailment` true (UNSAT
+  is the expected result because Member 2 checks the *negated* query), and no conflicts. This is
+  **not** runtime request verification: Member 2 checks entailment on a fixed demonstration
+  individual.
+- **Allowlist only:** `subject`, `action`, `resource`, `effect`, `interpretation`. Raw policy text,
+  formulas, traces, constraints and conditions are never copied; a policy with conditions is
+  rejected rather than silently turned into an unconditional rule.
+- **Strict and content-safe:** malformed, ambiguous or ineligible input raises
+  `PolicyReportError` / `PolicyReportNotEligibleError` naming a report index and field, never a
+  supplied value. There is no fallback to mock rules. Report order is preserved, and rules that
+  do not fit the tensor raise (the existing tensorizer behaviour) instead of being truncated.
+- **Unverified:** prediction quality with real policies (the fitted vocabulary and model only know
+  mock tokens), automatic policy applicability, Member 2 integration, and KPI 5. Test fixtures are
+  synthetic and may drift from Member 2's real output. The module is outside the archived KPI
+  source-hash inventory; any evaluation using it needs updated provenance under a new protocol version.
+
 ## 4. Privacy masking, normalization and token roles
 
 - **Masking is a heuristic, name- and shape-based blocklist.** It recognizes sensitive key
@@ -248,12 +304,22 @@ What do 0.34 ms (current code; 0.32 ms before the D3 masking fix) include and ex
 **Tests** (from the repository root):
 
 ```powershell
-.venv\Scripts\python.exe -m pytest tests/tokenization_ai -q     # 560 passed at ea50a49
-.venv\Scripts\python.exe -m pytest -q                           # 586 passed at ea50a49 (full repository)
+.venv\Scripts\python.exe -m pytest tests/tokenization_ai -q     # 871 passed at cf1f200 (current)
+.venv\Scripts\python.exe -m pytest -q                           # 897 passed at cf1f200 (full repository)
 ```
 
-(Counts are those observed at `ea50a49`; one pre-existing Starlette/httpx deprecation warning
-appears.) Unit and framework tests establish behaviour, not research KPI attainment.
+Counts observed per commit (each is a record of that commit's run; older rows are kept as
+history, not corrected):
+
+| Commit | Member 4 suite | Full repository | What changed |
+|---|---|---|---|
+| `ea50a49` | 560 passed | 586 passed | Counts at the post-D3 KPI 4 re-evaluation (the commit the KPI 4 figures are tied to) |
+| `a76ba11` | 673 passed | 699 passed | Verified baseline after the dashboard work |
+| `964813b` | 710 passed | 736 passed | Added `anomaly_signal.py` (+37 tests) |
+| `cf1f200` | **871 passed** | **897 passed** | Added `policy_report_adapter.py` (+161 tests); **current** |
+
+Each run reported one pre-existing Starlette/httpx deprecation warning (third-party). Unit and
+framework tests establish behaviour, not research KPI attainment or detection quality.
 
 **Reproducing the evaluation** (writes reports to the directory you give; never overwrite
 original evidence — use an empty directory):
@@ -352,7 +418,15 @@ original evidence — use an empty directory):
    was a separate run, so the ≈ +6.7% difference is indicative, not a controlled estimate of
    the masking cost.
 9. **Score semantics.** The score is uncalibrated and is not a probability of attack.
-10. **Integration.** No Formal Verification or Runtime Verification integration exists; KPI 5 is unmeasured.
+10. **Integration.** No Formal Verification (Member 2) or Runtime Verification (Member 3)
+    integration exists at runtime; KPI 5 is unmeasured. The two standalone modules added after
+    the KPI evidence (`anomaly_signal.py`, `policy_report_adapter.py`) do not change this:
+    schema compatibility is not integration.
+11. **No held-out detection-quality result yet.** The held-out evaluation infrastructure
+    (`heldout_eval/`, request-only versus simulated-rule versus character n-gram arms) is
+    implemented and tested on development fixtures only; the confirmatory experiment has not
+    been run, so no request-only versus rule-fused comparison result exists. Scores are
+    uncalibrated and are not attack probabilities.
 
 ## 10. Troubleshooting
 
@@ -382,6 +456,14 @@ original evidence — use an empty directory):
 | `tracing.py`, `metrics.py` | Per-stage tracing and runtime metrics |
 | `app.py`, `__main__.py`, `static/` | HTTP API and browser demo |
 | `demo.py` | Console demo and the fixtures that fit the bundled model |
+| `anomaly_signal.py` | Standalone `AnomalySignal` output schema (proposed format). **Not wired into any running service**: the API, dashboard and `service.py` do not use it |
+| `policy_report_adapter.py` | Standalone adapter from caller-supplied Member 2-style policy reports to `VerifiedRuleInfo`. **Not wired into any running service** and not Member 2 integration |
+
+`anomaly_signal.py` and `policy_report_adapter.py` are exercised only by their own tests
+(`tests/tokenization_ai/test_anomaly_signal.py`, `test_policy_report_adapter.py`). Both sit outside
+the archived KPI source-hash inventory, so the historical KPI 1-4 evidence, which stays tied to
+its original evaluation protocol, does not cover them; a future evaluation using either module needs
+updated source provenance under a new protocol version.
 | `dataset_adapters.py` | SR-BH 2020 row adapter (not run on real data) |
 | `evaluation/` | Protocols, frozen fixtures, KPI 1–4 runners |
 | `INTEGRATION_STATUS.md` | Cross-member integration state |

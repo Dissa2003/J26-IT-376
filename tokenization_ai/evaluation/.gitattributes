@@ -1,0 +1,4 @@
+# Archived KPI 1-4 evidence: the frozen pre-run manifests record SHA-256 hashes of these files with LF line endings,
+# and the evaluation code hashes raw bytes. Pin LF on every checkout (including Windows with core.autocrlf=true) so the
+# archived hashes verify unchanged everywhere. Do not edit the frozen protocols, fixtures or latency.py.
+* text=auto eol=lf
