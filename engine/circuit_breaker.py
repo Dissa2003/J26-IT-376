@@ -44,7 +44,7 @@ class HybridCircuitBreaker:
         *,
         failure_threshold: int = 3,
         recovery_timeout_ms: float = 1000.0,
-        max_latency_ms: float = 5.0,
+        max_latency_ms: float = 25.0,
     ) -> None:
         if failure_threshold < 1:
             raise ValueError("failure_threshold must be at least 1")

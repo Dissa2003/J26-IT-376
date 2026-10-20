@@ -7,6 +7,8 @@ from shared_contracts.config import get_settings
 from shared_contracts.interfaces import Notifier
 from shared_contracts.models import Alert, Prediction, RawEvent
 
+from fastapi.middleware.cors import CORSMiddleware
+
 from .middleware import install_middleware, require_api_key
 from .notifiers import LogNotifier
 
@@ -17,6 +19,13 @@ def create_app(notifier: Notifier | None = None, ingestion_url: str | None = Non
     ingestion_url = (ingestion_url or s.ingestion_url).rstrip("/")
     alerts: list[Alert] = []
     app = FastAPI(title="api_gateway")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     install_middleware(app)
 
     @app.get("/health")
@@ -25,6 +34,24 @@ def create_app(notifier: Notifier | None = None, ingestion_url: str | None = Non
 
     @app.post("/v1/events", dependencies=[Depends(require_api_key)], status_code=202)
     def submit_event(event: RawEvent) -> Prediction:
+        if not isinstance(event.payload, dict):
+            raise HTTPException(400, "Event payload must be a JSON object")
+        for key, value in event.payload.items():
+            if isinstance(value, str) and key in {
+                "amount",
+                "price",
+                "count",
+                "rate_limit",
+                "request_rate",
+                "threat_score",
+            }:
+                try:
+                    float(value)
+                except ValueError as exc:
+                    raise HTTPException(
+                        400, f"Invalid numeric format for field '{key}': {value}"
+                    ) from exc
+
         try:
             r = httpx.post(f"{ingestion_url}/v1/ingest", content=event.model_dump_json(),
                            headers={"content-type": "application/json"}, timeout=10)

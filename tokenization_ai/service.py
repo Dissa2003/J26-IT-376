@@ -13,7 +13,10 @@ from .models import (
     ModelInput,
     RuleInfo,
     TokenSequence,
+    UnifiedApiContext,
     UnifiedContext,
+    VerifiedRule,
+    VerifiedRuleInfo,
 )
 from .normalization import NormalizationResult, Normalizer
 from .tensorizer import Tensorizer
@@ -120,6 +123,42 @@ class TokenizationAIService:
         self.tensorizer = tensorizer
         self.model = model
         self.tracer = tracer if tracer is not None else PipelineTracer()
+
+    @classmethod
+    def create_default(
+        cls, max_length: int = 64, num_buckets: int = 256
+    ) -> "TokenizationAIService":
+        """Construct a ready-to-serve pipeline instance with pre-calibrated baseline weights."""
+        from .vocabulary import Vocabulary
+        fusion = InputFusion()
+        masker = PrivacyMasker()
+        normalizer = Normalizer()
+        tokenizer = HybridTokenizer()
+
+        vocabulary = Vocabulary()
+        initial_context = UnifiedApiContext(
+            event_id="init-event",
+            method="POST",
+            path="/api/v1/init",
+            client_ip="127.0.0.1",
+            payload={"action": "manage", "role": "admin", "amount": 100},
+            threat_score=0.1,
+        )
+        initial_rules = VerifiedRuleInfo(
+            event_id="init-event",
+            rules=[VerifiedRule(rule_id="R-INIT", attributes={"effect": "allow"})],
+        )
+        fused = fusion.fuse(initial_context, initial_rules)
+        mask_result = masker.mask_with_provenance(fused)
+        norm_result = normalizer.normalize_with_provenance(
+            mask_result.fused, mask_result.masked_paths
+        )
+        seq = tokenizer.tokenize(norm_result.fused, norm_result.masked_paths)
+
+        vocabulary.fit([seq])
+        tensorizer = Tensorizer(vocabulary, max_length=max_length)
+        model = LightweightAnomalyModel.create_calibrated(num_buckets=num_buckets)
+        return cls(fusion, masker, normalizer, tokenizer, tensorizer, model)
 
     def predict(
         self,

@@ -192,6 +192,9 @@ _MASK_PLACEHOLDER_TOKENS: tuple[str, ...] = tuple(
 )
 
 
+DEFAULT_MAX_LITERAL_VOCAB_SIZE: int = 5000
+
+
 class Vocabulary:
     """Bidirectional mapping between tokens and integer ids.
 
@@ -201,22 +204,31 @@ class Vocabulary:
     :meth:`encode`/:meth:`decode`.
     """
 
-    def __init__(self, max_literal_vocab_size: int | None = None, min_frequency: int = 1) -> None:
+    def __init__(
+        self,
+        max_literal_vocab_size: int | None = DEFAULT_MAX_LITERAL_VOCAB_SIZE,
+        min_frequency: int = 1,
+        max_vocab_size: int | None = None,
+    ) -> None:
         """Create an unfitted vocabulary with only the reserved tokens assigned.
 
         ``max_literal_vocab_size`` caps how many distinct literal values
-        each namespace (API, rule) may keep, independently; ``None`` means
-        unbounded. ``min_frequency`` drops literal values seen fewer than
-        this many times in the fitting corpus. Both apply only to literal
-        values -- reserved tokens are always kept regardless of either
+        each namespace (API, rule) may keep, independently (defaults to 5000);
+        ``None`` means unbounded. ``max_vocab_size`` provides an optional overall
+        hard limit on total vocabulary size. ``min_frequency`` drops literal values
+        seen fewer than this many times in the fitting corpus. Both apply only to
+        literal values -- reserved tokens are always kept regardless of either
         setting.
         """
         if min_frequency < 1:
             raise ValueError("min_frequency must be at least 1")
         if max_literal_vocab_size is not None and max_literal_vocab_size < 0:
             raise ValueError("max_literal_vocab_size must not be negative")
+        if max_vocab_size is not None and max_vocab_size < 0:
+            raise ValueError("max_vocab_size must not be negative")
 
         self.max_literal_vocab_size = max_literal_vocab_size
+        self.max_vocab_size = max_vocab_size
         self.min_frequency = min_frequency
 
         # Keyed by (namespace, token): reserved tokens use namespace ``None``
@@ -360,8 +372,12 @@ class Vocabulary:
     def _assign_literal_ids(self, counts: dict[str, int], namespace: str) -> None:
         eligible = [token for token, count in counts.items() if count >= self.min_frequency]
         eligible.sort(key=lambda token: (-counts[token], token))
-        if self.max_literal_vocab_size is not None:
-            eligible = eligible[: self.max_literal_vocab_size]
+        limit = self.max_literal_vocab_size
+        if self.max_vocab_size is not None:
+            remaining_slots = max(0, self.max_vocab_size - len(self._token_to_id))
+            limit = min(limit, remaining_slots) if limit is not None else remaining_slots
+        if limit is not None:
+            eligible = eligible[: limit]
         for token in eligible:
             self._add(namespace, token)
 

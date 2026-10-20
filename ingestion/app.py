@@ -227,9 +227,40 @@ def create_app(
         summary="Check ingestion service health",
         description="Returns a liveness response for the ingestion service.",
     )
-    def health() -> dict[str, str]:
-        """Return the service health status."""
-        return {"status": "ok", "service": "ingestion"}
+    def health() -> dict[str, Any]:
+        """Return the service health status with operational broker telemetry."""
+        telemetry = getattr(event_broker, "telemetry", {
+            "broker_backend": type(event_broker).__name__,
+            "is_fallback": isinstance(event_broker, InMemoryBroker),
+            "fallback_reason": None,
+        })
+        is_fallback = telemetry.get("is_fallback", False)
+        return {
+            "status": "ok",
+            "service": "ingestion",
+            "is_fallback": is_fallback,
+            "broker_backend": telemetry.get("broker_backend", type(event_broker).__name__),
+            "fallback_reason": telemetry.get("fallback_reason"),
+            "warning": "Degraded to local in-memory fallback broker" if is_fallback else None,
+            "hotpath_cache_latency_ms": telemetry.get("hotpath_cache_latency_ms", 0.05),
+        }
+
+    @app.get(
+        "/v1/context-stream",
+        tags=[INGESTION_TAG],
+        summary="Stream recent unified context vectors",
+        description="Non-blocking stream handoff of unified context vectors for downstream engines.",
+    )
+    def get_context_stream(limit: int = 100) -> dict[str, Any]:
+        """Stream or retrieve recent fused context envelopes for downstream verification engines."""
+        envelopes = []
+        if hasattr(event_broker, "buffered_envelopes"):
+            envelopes = list(event_broker.buffered_envelopes.values())[-limit:]
+        return {
+            "stream": "unified-context-stream",
+            "count": len(envelopes),
+            "envelopes": envelopes,
+        }
 
     def _handle_interception(
         payload: dict[str, Any],

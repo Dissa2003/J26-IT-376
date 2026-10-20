@@ -122,4 +122,9 @@ class HybridVerificationService(PredictionService):
             effect = str(value.get("effect", "")).lower()
             if matches and effect.endswith("deny"):
                 constraints.append("False")
+            elif rule_action and subject and subject not in {"everyone", "*"}:
+                if effect.endswith("deny"):
+                    constraints.append(
+                        f"z3.Not(z3.And(role == z3.StringVal('{subject}'), action == z3.StringVal('{rule_action}')))"
+                    )
         return constraints

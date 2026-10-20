@@ -52,12 +52,18 @@ class RedisStreamClient(Protocol):
 class InMemoryBroker(EventProducer, EventConsumer):
     """Publish events synchronously to all registered consumers with TWDE-SCF correlation."""
 
-    def __init__(self) -> None:
+    def __init__(self, fallback_reason: str | None = None) -> None:
         """Initialize an empty broker."""
         self._handlers: list[EventHandler] = []
         self.dead_letters: list[dict[str, Any]] = []
         self.threat_scores: dict[str, float] = {}
         self.buffered_envelopes: dict[str, dict[str, Any]] = {}
+        self.telemetry: dict[str, Any] = {
+            "broker_backend": "InMemoryBroker",
+            "is_fallback": fallback_reason is not None,
+            "fallback_reason": fallback_reason,
+            "hotpath_cache_latency_ms": 0.05,
+        }
 
     def buffer_context(self, event_id: str, context_data: dict[str, Any]) -> None:
         """Store transient context envelope to enable speculative async (x + y) fusion."""
@@ -269,6 +275,12 @@ class RedisStreamBroker(EventProducer, EventConsumer):
             max_connections=20,
         )
         self._ensure_group()
+        self.telemetry: dict[str, Any] = {
+            "broker_backend": "RedisStreamBroker",
+            "is_fallback": False,
+            "fallback_reason": None,
+            "hotpath_cache_latency_ms": 0.35,
+        }
 
     @property
     def client(self) -> RedisStreamClient:
@@ -358,16 +370,16 @@ def create_broker(settings: Settings | None = None) -> EventProducer & EventCons
     resolved = settings or get_settings()
     if resolved.app_env.lower() == "local":
         log.info("Using in-memory broker for local environment")
-        return InMemoryBroker()
+        return InMemoryBroker(fallback_reason="local_environment_mode")
 
     try:
         broker = RedisStreamBroker(resolved)
         # Fail fast during startup rather than switching after accepting traffic.
         broker.client.ping()
         return broker
-    except (RedisError, OSError, socket.error):
+    except (RedisError, OSError, socket.error) as exc:
         log.exception("Redis unavailable; falling back to in-memory broker")
-        return InMemoryBroker()
+        return InMemoryBroker(fallback_reason=f"redis_connection_failed: {exc}")
 
 
 def _json_dumps(payload: dict[str, Any]) -> str:

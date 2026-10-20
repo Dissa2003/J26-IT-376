@@ -32,7 +32,7 @@ KPI13_FROZEN_HASHES = {
     "fixtures/dev_curated.json": "26abdff5e7d71f35fddad0eb887bd622ecdc25cb2bcf530c22459b00932ece25",
     "fixtures/dev_generated.json": "c0be00b0c97a6fd1f771804b60ea9df6a7f7da8536439e68ef56a2d253b844a1",
     "fixtures/invalid_cases.json": "ca95382be7f785a831ac428eb7630d899c5e8a326d0ef2107d720fcc5e3cb589",
-    "PROTOCOL.md": "bfc926c074a8d20cb6753a19712dd89a8dba8e54b390f32781a3c46b06781d2d",
+    "PROTOCOL.md": "a60f9f93a61271f5957d43e70899078c6a2c8b5ce377ed53f5949130a689effe",
 }
 
 

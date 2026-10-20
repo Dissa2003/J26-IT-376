@@ -699,3 +699,112 @@ def test_zero_copy_ring_slot_buffer_pointer_slicing_and_wipe() -> None:
     assert buffer.stats()["active_slots"] == 0
 
 
+def test_enterprise_checkout_payload_pii_masking_and_vector() -> None:
+    """Validate comprehensive masking of financial checkout payload without leaking PII or payment details."""
+    client = TestClient(create_app(processing=FakeProcessing()))
+    interception_input = {
+        "metadata": {
+            "method": "POST",
+            "path": "/api/v2/financial/orders/checkout",
+            "content_type": "application/json",
+            "client_ip": "192.168.1.105",
+            "client_role": "enterprise_customer",
+            "authorization": "Bearer sample_token",
+            "headers": {
+                "user-agent": "Mozilla/5.0",
+                "x-forwarded-for": "10.0.0.45, 192.168.1.105",
+                "x-correlation-id": "corr-tx-9988-7766-5544",
+            },
+        },
+        "payload": {
+            "transaction_context": {
+                "order_id": "ord_998877665544",
+                "currency": "USD",
+                "subtotal_amount": 1450.75,
+                "tax_amount": 116.06,
+                "discount_rate": 0.15,
+                "item_count": 8.0,
+            },
+            "customer_profile": {
+                "account_id": "acc_88442211",
+                "full_name": "Alexander Pierce",
+                "user_email": "alexander.pierce@enterprise-domain.org",
+                "backup_email": "alex.backup@gmail.com",
+                "phone_number": "+1-555-019-2834",
+                "account_tier": "VIP_PREMIUM",
+                "kyc_verified": True,
+            },
+            "payment_gateway": {
+                "merchant_provider": "Stripe_Merchant",
+                "credit_card": "4532-8899-1122-7766",
+                "cvv": "889",
+                "card_expiry": "12/28",
+                "billing_address": {
+                    "street_address": "123 Wall Street",
+                    "city": "New York",
+                    "state": "NY",
+                    "postal_code": "10005",
+                    "country": "USA",
+                },
+            },
+            "telemetry_metrics": {
+                "client_cpu_load": 98.45,
+                "memory_heap_used_mb": 4096.8,
+                "disk_io_wait_ms": 2.15,
+                "network_throughput_kbps": 85400.0,
+                "active_db_connections": 142.0,
+                "request_frequency_per_sec": 3850.0,
+                "error_count_last_5m": 0.0,
+            },
+            "security_context": {
+                "api_key": "sk_live_99887766554433221100_secret_token",
+                "failed_login_attempts": 4.0,
+                "session_duration_sec": 1240.5,
+                "is_vpn_detected": False,
+            },
+        },
+        "threat_score": 0.94,
+    }
+
+    resp = client.post("/v1/intercept", json=interception_input)
+    assert resp.status_code == 200
+    data = resp.json()
+
+    masked = data["masked_payload"]
+    # Verify no PII or sensitive payment credentials leak in the response
+    assert masked["customer_profile"]["full_name"] == REDACTED
+    assert masked["customer_profile"]["user_email"] == REDACTED
+    assert masked["customer_profile"]["backup_email"] == REDACTED
+    assert masked["customer_profile"]["phone_number"] == REDACTED
+    assert masked["payment_gateway"]["credit_card"] == REDACTED
+    assert masked["payment_gateway"]["cvv"] == REDACTED
+    assert masked["payment_gateway"]["card_expiry"] == REDACTED
+    assert masked["payment_gateway"]["billing_address"]["street_address"] == REDACTED
+    assert masked["security_context"]["api_key"] == REDACTED
+
+    # Verify non-sensitive business data is preserved
+    assert masked["customer_profile"]["account_id"] == "acc_88442211"
+    assert masked["payment_gateway"]["merchant_provider"] == "Stripe_Merchant"
+    assert masked["payment_gateway"]["billing_address"]["city"] == "New York"
+
+    # Verify exact unified context vector
+    expected_vector = [
+        0.94,
+        1450.75,
+        116.06,
+        0.15,
+        8.0,
+        98.45,
+        4096.8,
+        2.15,
+        85400.0,
+        142.0,
+        3850.0,
+        0.0,
+        4.0,
+        1240.5,
+    ]
+    assert data["unified_context_vector"] == expected_vector
+
+
+
