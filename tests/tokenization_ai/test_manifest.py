@@ -620,3 +620,134 @@ def test_environment_snapshot_is_json_safe_and_complete():
     json.dumps(env, allow_nan=False)
     assert env["python"]["version"] and env["numpy"]["version"] and set(env["threads"]) == set(mf.THREAD_ENV_VARS)
     assert mf.environment_differences(env, env) == []
+
+
+# -- source coverage (D4-7B) --------------------------------------------------------------------------------------------------------------------------
+
+
+LF, CRLF = bytes([10]), bytes([13, 10])
+NEW_MODULES = ("tokenization_ai/heldout_eval/selection_record.py", "tokenization_ai/heldout_eval/attempt_gate.py", "tokenization_ai/heldout_eval/model_artifacts.py")
+
+
+def make_default_repo(root: Path, header: str = DRAFT_HEADER) -> Path:
+    """A throw-away repository holding a tiny file at every path of the code-defined default lists."""
+    root.mkdir()
+    for rel in (*mf.DEFAULT_SOURCE_FILES, *mf.DEFAULT_CONFIG_FILES):
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if rel in ("tokenization_ai/heldout_eval/numerics.py", "tokenization_ai/model.py"):
+            path.write_bytes((REPO_ROOT / rel).read_bytes().replace(CRLF, LF))  # the manifest cross-checks these two hashes with the live code
+        else:
+            path.write_text(f"# placeholder for {rel}{LF.decode()}", encoding="utf-8", newline=LF.decode())
+    protocol = root / mf.DEFAULT_PROTOCOL_PATH
+    protocol.parent.mkdir(parents=True, exist_ok=True)
+    protocol.write_text(header, encoding="utf-8", newline="\n")
+    git(root, "init", "-q", "-b", "main")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "init")
+    return root
+
+
+@pytest.fixture()
+def dctx(tmp_path, objs):
+    ctx = Ctx(make_default_repo(tmp_path / "repo"), tmp_path, objs)
+    ctx.kw = {}  # the code-defined default lists, no overrides
+    return ctx
+
+
+def test_the_default_source_list_protects_the_three_new_modules():
+    assert len(mf.DEFAULT_SOURCE_FILES) == 25 and len(set(mf.DEFAULT_SOURCE_FILES)) == 25
+    for rel in NEW_MODULES:
+        assert rel in mf.DEFAULT_SOURCE_FILES and rel in mf.REQUIRED_SOURCE_FILES
+    assert mf.REQUIRED_SOURCE_FILES == mf.DEFAULT_SOURCE_FILES and mf.missing_required_sources(mf.DEFAULT_SOURCE_FILES) == ()
+    assert set(mf.missing_required_sources(["tokenization_ai/model.py"])) == set(mf.REQUIRED_SOURCE_FILES) - {"tokenization_ai/model.py"}
+    assert mf.hash_files(REPO_ROOT, NEW_MODULES).keys() == set(NEW_MODULES)
+
+
+def test_every_held_out_evaluation_source_and_core_dependency_is_protected():
+    """No executable evaluation module, and no core pipeline module that the evaluation imports, may be missing from the source list."""
+    pkg = REPO_ROOT / "tokenization_ai"
+    listed = set(mf.DEFAULT_SOURCE_FILES)
+    on_disk = {f"tokenization_ai/heldout_eval/{p.name}" for p in (pkg / "heldout_eval").glob("*.py")}
+    assert on_disk <= listed, sorted(on_disk - listed)
+    imported_core = set()
+    for path in (pkg / "heldout_eval").glob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ImportFrom) and node.level == 2 and node.module:
+                imported_core.add(f"tokenization_ai/{node.module.split('.')[0]}.py")
+            elif isinstance(node, ast.ImportFrom) and node.level == 2 and not node.module:
+                imported_core |= {f"tokenization_ai/{a.name}.py" for a in node.names}
+            elif isinstance(node, ast.ImportFrom) and node.level == 1:
+                names = [node.module.split(".")[0]] if node.module else [a.name for a in node.names]
+                for name in names:
+                    if (pkg / "heldout_eval" / f"{name}.py").exists():
+                        imported_core.add(f"tokenization_ai/heldout_eval/{name}.py")
+    imported_core = {rel for rel in imported_core if (REPO_ROOT / rel).exists()}
+    assert imported_core <= listed, sorted(imported_core - listed)
+
+
+def test_hashes_are_normalized_content_hashes_not_raw_byte_hashes(tmp_path):
+    lf, crlf, lone_cr = tmp_path / "lf.txt", tmp_path / "crlf.txt", tmp_path / "cr.txt"
+    lf.write_bytes(b"a\nb\n")
+    crlf.write_bytes(b"a\r\nb\r\n")
+    lone_cr.write_bytes(b"a\rb\r")
+    assert mf.file_sha256(lf) == mf.file_sha256(crlf) == sha256_hex(b"a\nb\n")
+    assert sha256_hex(crlf.read_bytes()) != mf.file_sha256(crlf)  # a raw-byte hash would differ
+    assert mf.file_sha256(lone_cr) == sha256_hex(b"a\rb\r")  # a lone CR is not normalized
+
+
+def test_a_manifest_built_with_the_default_list_records_and_verifies_every_required_source(dctx):
+    manifest = dctx.build()
+    assert set(manifest["sources"]) == set(mf.REQUIRED_SOURCE_FILES) and all(rel in manifest["sources"] for rel in NEW_MODULES)
+    result = dctx.verify_dict(manifest)
+    assert result.ok and result.source_list_is_default is True and result.missing_required_sources == ()
+
+
+@pytest.mark.parametrize("rel", NEW_MODULES)
+def test_omitting_a_required_source_from_the_manifest_fails_verification(dctx, rel):
+    forged = mutate(dctx.build(), lambda m: m["sources"].pop(rel))
+    with pytest.raises(ManifestVerificationError):
+        dctx.verify_dict(forged)  # the verifier derives the required list from code, not from the manifest
+
+
+@pytest.mark.parametrize("rel", NEW_MODULES)
+def test_a_substituted_source_hash_fails_verification(dctx, rel):
+    forged = mutate(dctx.build(), lambda m: m["sources"].update({rel: "f" * 64}))
+    with pytest.raises(ManifestVerificationError):
+        dctx.verify_dict(forged)
+
+
+@pytest.mark.parametrize("rel", NEW_MODULES)
+def test_a_changed_required_source_is_detected_dirty_and_after_commit(dctx, rel):
+    manifest = dctx.build()
+    (dctx.repo / rel).write_text("# changed\n", encoding="utf-8", newline="\n")
+    with pytest.raises(ManifestVerificationError):
+        dctx.verify_dict(manifest)  # dirty tree
+    git(dctx.repo, "add", "-A")
+    git(dctx.repo, "commit", "-q", "-m", "change")
+    new_commit = git(dctx.repo, "rev-parse", "HEAD")
+    with pytest.raises(ManifestVerificationError) as caught:
+        dctx.verify_dict(manifest, dctx.expected(commit=new_commit))
+    assert "sources differ" in str(caught.value) or "git.commit" in str(caught.value)
+
+
+@pytest.mark.parametrize("rel", NEW_MODULES)
+def test_a_missing_required_source_file_is_rejected_at_build_and_at_verification(dctx, rel):
+    manifest = dctx.build()
+    git(dctx.repo, "rm", "-q", rel)
+    git(dctx.repo, "commit", "-q", "-m", "remove")
+    with pytest.raises(ManifestVerificationError):
+        dctx.verify_dict(manifest, dctx.expected(commit=git(dctx.repo, "rev-parse", "HEAD")))
+    with pytest.raises(ManifestVerificationError):
+        dctx.build()
+
+
+def test_a_custom_source_list_is_reported_as_incomplete(ctx):
+    result = ctx.verify_dict(ctx.build())  # the fixture repo uses a two-file list passed by the trusted caller
+    assert result.ok and result.source_list_is_default is False
+    assert set(NEW_MODULES) <= set(result.missing_required_sources) and len(result.missing_required_sources) == len(mf.REQUIRED_SOURCE_FILES)
+
+
+def test_the_real_repository_hashes_all_required_sources():
+    hashes = mf.hash_files(REPO_ROOT, mf.REQUIRED_SOURCE_FILES)
+    assert set(hashes) == set(mf.REQUIRED_SOURCE_FILES) and all(len(v) == 64 for v in hashes.values())

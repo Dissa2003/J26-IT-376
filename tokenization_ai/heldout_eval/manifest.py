@@ -11,8 +11,10 @@ A digest stored inside the manifest proves nothing, so verification never believ
 * the **expected SHA-256 of the exact file bytes** is supplied from outside (``verify_manifest(expected_sha256=...)``);
 * Git branch, commit and cleanliness are re-read from the repository (``git`` is run, nothing copied from the manifest), and the caller states the
   branch and commit it expects (:class:`ExpectedRun`);
-* every source and configuration file is re-hashed from its exact content (LF-normalized), and the file *lists* are code constants or trusted caller
-  parameters, never taken from the manifest;
+* every source and configuration file is re-hashed from its exact content, and the file *lists* are code constants (``DEFAULT_SOURCE_FILES``, equal to
+  ``REQUIRED_SOURCE_FILES``) or trusted caller parameters, never taken from the manifest. The hashes are **normalized-content SHA-256 hashes**: CRLF is replaced
+  by LF before hashing (a lone CR is untouched), so they are stable across checkouts but are not raw-byte hashes. The verifier reports whether the list it used
+  covers every required source (``VerificationResult.missing_required_sources``);
 * versions, grids, learning-rate arithmetic, the statistical protocol, the selection rules and the limitations are re-derived from the code and compared
   by equality; the environment is compared with the running one;
 * dataset seed, fingerprints and split hash are compared with the caller's trusted values.
@@ -72,8 +74,10 @@ DEFAULT_SOURCE_FILES: tuple[str, ...] = (
     "tokenization_ai/heldout_eval/audit.py", "tokenization_ai/heldout_eval/policy_sim.py", "tokenization_ai/heldout_eval/policy_diagnostics.py",
     "tokenization_ai/heldout_eval/request_context.py", "tokenization_ai/heldout_eval/arm_c.py", "tokenization_ai/heldout_eval/token_budget.py",
     "tokenization_ai/heldout_eval/arms.py", "tokenization_ai/heldout_eval/detection_metrics.py", "tokenization_ai/heldout_eval/numerics.py",
-    "tokenization_ai/heldout_eval/runner.py", "tokenization_ai/heldout_eval/manifest.py",
+    "tokenization_ai/heldout_eval/runner.py", "tokenization_ai/heldout_eval/manifest.py", "tokenization_ai/heldout_eval/selection_record.py",
+    "tokenization_ai/heldout_eval/attempt_gate.py", "tokenization_ai/heldout_eval/model_artifacts.py",
 )
+REQUIRED_SOURCE_FILES: tuple[str, ...] = DEFAULT_SOURCE_FILES  # the executable sources a confirmatory run must protect, defined here in trusted code
 DEFAULT_CONFIG_FILES: tuple[str, ...] = ("requirements.txt", "tokenization_ai/requirements-ml.txt")
 THREAD_ENV_VARS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS")
 MAX_MANIFEST_BYTES = 16 * 1024 * 1024
@@ -257,8 +261,13 @@ def collect_git_state(repo_root: str | os.PathLike[str]) -> dict[str, Any]:
 
 
 def file_sha256(path: Path) -> str:
-    """SHA-256 of the exact file content with CRLF normalized to LF (stable across checkouts)."""
+    """Normalized-content SHA-256: the file content with CRLF replaced by LF (a lone CR is untouched); stable across checkouts, not a raw-byte hash."""
     return sha256_hex(path.read_bytes().replace(b"\r\n", b"\n"))
+
+
+def missing_required_sources(source_files: Sequence[str]) -> tuple[str, ...]:
+    """Required executable sources (``REQUIRED_SOURCE_FILES``) that a given source list omits. Empty for the default list."""
+    return tuple(sorted(set(REQUIRED_SOURCE_FILES) - set(source_files)))
 
 
 def hash_files(repo_root: str | os.PathLike[str], relative_paths: Sequence[str]) -> dict[str, str]:
@@ -693,6 +702,8 @@ class VerificationResult:
     protocol_status: str
     environment_differences: tuple[str, ...]
     checks: tuple[str, ...]
+    source_list_is_default: bool = True  # False when the trusted caller supplied its own list instead of the code-defined default
+    missing_required_sources: tuple[str, ...] = ()  # required sources the list used for this verification did not cover (empty for the default list)
 
 
 _CHECKS = ("expected_digest", "canonical_serialization", "schema_and_consistency", "git_clean_branch_commit", "source_and_config_hashes",
@@ -715,7 +726,9 @@ def verify_manifest_bytes(data: bytes, *, expected_sha256: str, repo_root: str |
                                   config_files=tuple(config_files), protocol_path=protocol_path,
                                   allow_environment_mismatch=allow_environment_mismatch)
     return VerificationResult(ok=True, manifest_sha256=expected_sha256, purpose=manifest["purpose"], protocol_status=manifest["protocol"]["status"],
-                              environment_differences=tuple(outcome["environment_differences"]), checks=_CHECKS)
+                              environment_differences=tuple(outcome["environment_differences"]), checks=_CHECKS,
+                              source_list_is_default=tuple(source_files) == DEFAULT_SOURCE_FILES,
+                              missing_required_sources=missing_required_sources(source_files))
 
 
 def verify_manifest(path: str | os.PathLike[str], *, expected_sha256: str, **kwargs: Any) -> VerificationResult:

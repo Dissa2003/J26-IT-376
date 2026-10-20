@@ -1,32 +1,38 @@
-"""``validation-selection-record-1``: the write-once validation-selection record and its independent verifier (draft protocol heldout-eval-1.2.0-draft,
-sections 12.11.4 and 12.12.3).
+"""``validation-selection-record-2``: the write-once validation-selection record and its independent verifier (draft protocol heldout-eval-1.2.0-draft,
+sections 12.11.4, 12.12.3 and 12.12.6).
 
 Infrastructure only. The record is written AFTER (future) authorized training and validation and BEFORE the one-time test gate. This module fits nothing,
-scores nothing, reads **no test label, score or prediction**, and never authorizes test scoring (``VerificationResult.authorizes_test_scoring`` is always
+scores nothing, reads **no test label, score or prediction**, and never authorizes test scoring (``SelectionVerification.authorizes_test_scoring`` is always
 ``False``; the runner's gates are untouched).
 
 What a record binds
 -------------------
 The exact pre-run manifest (by an **externally established SHA-256**, and the manifest must pass the real :func:`manifest.verify_manifest_bytes`); per arm the
-selected candidate, all 27 approved candidates with full-precision and 10-decimal-rounded validation AP and a tie-break trace; the validation-only F1
-threshold on the **raw-logit scale** with its confusion counts and score-tie diagnostics; the fitted model's artifact fingerprint; the frozen train-only
-vocabulary and token budget; the model-source hash; and an explicit test-not-scored status. No request body, test label or test score is stored.
+selected candidate, **all 27 approved candidates** with their claimed full-precision validation AP, the independently **recomputed** AP, the 10-decimal-rounded AP,
+the SHA-256 of the candidate's model artifact and its weight hash, and a tie-break trace; the validation-only F1 threshold on the **raw-logit scale** with its
+confusion counts and score-tie diagnostics; the selected model's fingerprint; the frozen train-only vocabulary and token budget; the model-source hash; and an
+explicit test-not-scored status. No request body, test label or test score is stored.
 
 How verification works (trust model)
 ------------------------------------
 A record never vouches for itself. Verification **rebuilds the whole record** from independent inputs and requires equality:
 
 * the pre-run manifest bytes, their expected digest and the manifest verifier's own independent checks (clean Git tree, commit, source hashes, ...);
-* a :class:`ValidationEvidence` supplied by the caller from outside the record: the validation ``ArmInputs`` encoded with the frozen vocabulary and budget,
-  the validation labels by record id, the frozen vocabulary, the split result, and the **actual fitted model of each arm**;
-* the approved selection rules, applied again by ``runner.select_candidate`` to the recorded candidate table;
-* the selected candidate's validation AP, the F1 threshold, its confusion counts and the tie diagnostics, **recomputed** from the supplied model's raw logits on the
-  validation inputs with ``detection_metrics``; the model artifact fingerprint is recomputed from the model's weights and bias.
+* a :class:`ValidationEvidence` supplied by the caller from outside the record: the validation ``ArmInputs`` encoded with the frozen vocabulary and budget, the
+  validation labels by record id, the frozen vocabulary, the split result, the directory holding the model artifacts and **an independently trusted SHA-256 for
+  each of the 81 candidate artifacts** (digests copied from the record are never trusted; the record's copy is only compared);
+* every one of the 81 artifacts loaded and verified through ``model_artifacts.load_candidate_set`` (digest, identity, learning rate from the manifest, model-source
+  hash, manifest binding, fingerprint), then checked against the manifest's train-only provenance (training id hash, vocabulary, budget, eigenvalue estimate);
+* **every candidate's validation AP recomputed** from its own model's raw logits (``numerics.raw_logits``) and ``detection_metrics.average_precision`` on the
+  validation inputs and labels, and compared with the recorded claim; any discrepancy beyond 1e-12 absolute / 1e-9 relative is rejected;
+* the approved selection rule (10-decimal rounding and the fixed tie-break order) applied by ``runner.select_candidate`` to the recomputed values and to the claimed
+  values; both winners must equal the recorded one;
+* the selected model's F1 threshold, confusion counts and tie diagnostics, recomputed from its raw logits and the validation labels only.
 
-Trust boundaries (documented, not hidden): the validation APs of the 26 non-selected candidates are checked for consistency with the selection rules but
-cannot be recomputed without their models; they are claims of the training stage. A record whose evidence is not supplied is rejected (there is no mode that
-skips the recomputation). This module is not listed in the manifest's default source list (the manifest predates it); the record therefore carries this
-file's SHA-256 and the verifier compares it with the live file.
+Chain: verified manifest -> externally trusted artifact digests -> verified artifacts -> recomputed AP of all 81 candidates -> recomputed winners -> validation-only
+thresholds -> verified record. Limits: this verifies the *reported numbers against the persisted candidate models*. It does not prove that those models were trained
+only on training data, nor that training was authorized; that needs the future runner integration. A record of the superseded version 1 (selected candidate only) is
+refused. This module is in the manifest's default source list, and the record also carries this file's hash, which the verifier compares with the live file.
 """
 
 from __future__ import annotations
@@ -52,21 +58,23 @@ from .detection_metrics import ThresholdSelection, average_precision, confusion_
 from .runner import ValidationCandidateResult
 from .splits import SplitResult
 
-RECORD_VERSION = "validation-selection-record-1"
+RECORD_VERSION = "validation-selection-record-2"
+SUPERSEDED_VERSIONS = ("validation-selection-record-1",)
 THRESHOLD_SCALE = "raw_logit"
 AP_TOLERANCE_REL = 1e-9
 AP_TOLERANCE_ABS = 1e-12
 COMPATIBILITY_SAMPLE = 50
+_HEX64 = re.compile(r"[0-9a-f]{64}")
 _UTC = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
 _TEST_STATUS = {"test_scored": False, "test_labels_accessed": False, "test_scores_accessed": False, "test_data_in_record": False}
 _TEST_KEYS_ALLOWED = frozenset({"test_status", "test_scored", "test_labels_accessed", "test_scores_accessed", "test_data_in_record",
                                 "authorizes_test_scoring"})
-_TOP_KEYS = {"record_version", "created_utc", "manifest", "validation", "arms", "rules", "statistics", "test_status", "code", "vocabulary", "budget",
-             "limitations"}
-_ARM_KEYS = {"selected", "candidates", "tie_break_trace", "threshold", "tie_diagnostics", "model"}
+_TOP_KEYS = {"record_version", "created_utc", "manifest", "validation", "artifacts", "arms", "rules", "statistics", "test_status", "code", "vocabulary",
+             "budget", "limitations"}
+_ARM_KEYS = {"selected", "candidates", "candidate_verification", "tie_break_trace", "threshold", "tie_diagnostics", "model"}
 _CHOSEN_INPUT = {ARM_A: "arm_a", ARM_B: "arm_b", ARM_C: "arm_c"}
 LIMITATIONS: tuple[str, ...] = (
-    "the validation APs of non-selected candidates are claims of the training stage; only the selected candidate is recomputed",
+    "all 81 validation APs are recomputed from the persisted candidate models, which verifies the reported numbers, not that the models were trained on training data only",
     "thresholds are raw-logit-scale ranking cut-offs, not probability thresholds",
     "synthetic held-out evaluation only; no real-world detection claim",
     "this record does not authorize test scoring",
@@ -100,7 +108,8 @@ class ValidationEvidence:
     labels_by_id: Mapping[str, int]  # validation labels only
     frozen: Any  # runner/arms FrozenVocabulary (its .record["sha256"] is compared)
     split_result: SplitResult
-    models: Mapping[str, LightweightAnomalyModel]  # the fitted model selected for each arm
+    artifact_dir: Any  # directory holding the 81 model-artifact-1 files (path derived from the manifest digest and candidate ids)
+    artifact_digests: Mapping[str, str]  # candidate id -> expected artifact SHA-256, established independently of the record (exactly 81 entries)
 
 
 def model_artifact_fingerprint(model: LightweightAnomalyModel) -> dict[str, Any]:
@@ -154,7 +163,7 @@ def threshold_block(selection: ThresholdSelection, logits: Sequence[float], labe
     }
 
 
-def _validate_evidence(manifest: Mapping[str, Any], evidence: ValidationEvidence) -> tuple[str, list[int]]:
+def _validate_evidence(manifest: Mapping[str, Any], manifest_sha256: str, evidence: ValidationEvidence) -> tuple[str, list[int], dict[str, Any]]:
     if not isinstance(evidence, ValidationEvidence):
         raise SelectionRecordVerificationError("trusted ValidationEvidence is required; there is no mode without it")
     if not isinstance(evidence.arm_inputs, ArmInputs) or evidence.arm_inputs.split != "validation":
@@ -176,9 +185,41 @@ def _validate_evidence(manifest: Mapping[str, Any], evidence: ValidationEvidence
         labels = list(runner.aligned_labels(ids, evidence.labels_by_id))
     except runner.RunnerError:
         raise SelectionRecordVerificationError("the validation labels do not align with the validation records") from None
-    if not isinstance(evidence.models, Mapping) or set(evidence.models) != set(ARMS):
-        raise SelectionRecordVerificationError("exactly one fitted model per arm is required")
-    return runner.ids_fingerprint(ids), labels
+    return runner.ids_fingerprint(ids), labels, _load_candidates(manifest, manifest_sha256, evidence)
+
+
+def _load_candidates(manifest: Mapping[str, Any], manifest_sha256: str, evidence: ValidationEvidence) -> dict[str, Any]:
+    """Load and verify all 81 candidate artifacts through ``model_artifacts`` using only independently supplied digests and manifest values."""
+    from . import model_artifacts as ma  # imported lazily: model_artifacts imports this module
+
+    digests = evidence.artifact_digests
+    try:
+        names = ma.expected_artifact_names(manifest_sha256)
+    except ma.ArtifactError:
+        raise SelectionRecordVerificationError("the manifest digest is not usable for artifact lookup") from None
+    if not isinstance(digests, Mapping) or set(digests) != set(names):
+        raise SelectionRecordVerificationError(f"an independently trusted artifact SHA-256 is required for exactly the {len(names)} approved candidates")
+    if not all(isinstance(v, str) and _HEX64.fullmatch(v) for v in digests.values()) or len(set(digests.values())) != len(digests):
+        raise SelectionRecordVerificationError("the artifact digests must be distinct SHA-256 hex strings")
+    if not os.path.isdir(evidence.artifact_dir if isinstance(evidence.artifact_dir, (str, os.PathLike)) else ""):
+        raise SelectionRecordVerificationError("the artifact directory does not exist")
+    try:
+        loaded = ma.load_candidate_set(evidence.artifact_dir, expected_manifest_sha256=manifest_sha256, expected_digests=dict(digests),
+                                       expected_learning_rates=ma.learning_rates_from_manifest(manifest),
+                                       expected_model_sha256=manifest["numerics"]["provenance"]["model_sha256"])
+    except mf.ManifestError as exc:
+        raise SelectionRecordVerificationError(f"the candidate model artifacts did not verify ({type(exc).__name__})") from None
+    arms = manifest["arms"]
+    estimates = {(e["arm"], e["num_buckets"]): e for e in manifest["numerics"]["estimates"]}
+    for cid, art in loaded.items():
+        t, cand = art.metadata["training"], art.metadata["candidate"]
+        est = estimates[(art.arm, cand["num_buckets"])]
+        is_c = art.arm == ARM_C
+        if (t["train_ids_sha256"] != arms["alignment"]["train_ids_sha256"] or t["lambda_max"] != est["lambda_max"] or t["L"] != est["L"]
+                or t["vocabulary_sha256"] != (None if is_c else arms["vocabulary"]["sha256"])
+                or t["max_length"] != (None if is_c else arms["budget"]["selected_max_length"])):
+            raise SelectionRecordVerificationError("a candidate artifact's training provenance differs from the manifest")
+    return loaded
 
 
 def _manifest_candidates(manifest: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
@@ -186,38 +227,57 @@ def _manifest_candidates(manifest: Mapping[str, Any]) -> dict[str, Mapping[str, 
 
 
 def _arm_block(arm: str, results: Sequence[ValidationCandidateResult], manifest: Mapping[str, Any], evidence: ValidationEvidence,
-               ids_fp: str, labels: list[int]) -> dict[str, Any]:
+               ids_fp: str, labels: list[int], loaded: Mapping[str, Any]) -> dict[str, Any]:
     try:
         decision = runner.select_candidate(list(results), arm=arm, validation_ids_sha256=ids_fp)
     except runner.RunnerError as exc:
         raise SelectionRecordVerificationError(f"arm {arm}: candidate selection input rejected ({exc})") from None
     by_id = _manifest_candidates(manifest)
-    rows = []
+    inputs = list(getattr(evidence.arm_inputs, _CHOSEN_INPUT[arm]))
+    chosen = decision.selected
+    rows, recomputed, selected_logits = [], {}, None
     for r in sorted(results, key=lambda x: x.candidate_id):
         spec = by_id.get(r.candidate_id)
         if (spec is None or spec["arm"] != arm or spec["num_buckets"] != r.num_buckets or spec["epochs"] != r.epochs
                 or spec["relative_step_c"] != r.relative_step_c):
             raise SelectionRecordVerificationError(f"arm {arm}: a candidate does not correspond to the pre-run manifest")
+        art = loaded.get(r.candidate_id)
+        if art is None or art.arm != arm or art.model.num_buckets != r.num_buckets:
+            raise SelectionRecordVerificationError(f"arm {arm}: a candidate has no matching verified model artifact")
+        try:
+            logits = numerics.raw_logits(art.model, inputs)
+        except (numerics.NumericsError, ValueError):
+            raise SelectionRecordVerificationError(f"arm {arm}: a candidate model cannot be read out on the validation inputs") from None
+        ap = average_precision(logits, labels)
+        if ap is None or not math.isclose(ap, float(r.validation_ap), rel_tol=AP_TOLERANCE_REL, abs_tol=AP_TOLERANCE_ABS):
+            raise SelectionRecordVerificationError(f"arm {arm}: the recorded validation AP of candidate {r.candidate_id} does not match its persisted model")
+        recomputed[r.candidate_id] = ap
+        if r.candidate_id == chosen.candidate_id:
+            selected_logits = logits
         rows.append({"candidate_id": r.candidate_id, "num_buckets": r.num_buckets, "epochs": r.epochs, "relative_step_c": r.relative_step_c,
                      "learning_rate": spec["learning_rate"], "learning_rate_hex": spec["learning_rate_hex"],
-                     "validation_ap": float(r.validation_ap), "rounded_ap": round(float(r.validation_ap), runner.AP_ROUND_DECIMALS)})
-    trace = _tie_trace(list(results))
-    chosen = decision.selected
-    model = evidence.models[arm]
-    inputs = list(getattr(evidence.arm_inputs, _CHOSEN_INPUT[arm]))
+                     "validation_ap": float(r.validation_ap), "recomputed_validation_ap": ap,
+                     "rounded_ap": round(float(r.validation_ap), runner.AP_ROUND_DECIMALS),
+                     "artifact_sha256": evidence.artifact_digests[r.candidate_id], "weights_sha256": art.fingerprint["weights_sha256"]})
+    recomputed_results = [ValidationCandidateResult(r.candidate_id, r.arm, r.num_buckets, r.epochs, r.relative_step_c, recomputed[r.candidate_id],
+                                                    r.split, r.validation_ids_sha256, r.validation_records) for r in results]
     try:
-        logits = numerics.raw_logits(model, inputs)
+        independent = runner.select_candidate(recomputed_results, arm=arm, validation_ids_sha256=ids_fp)
+    except runner.RunnerError:
+        raise SelectionRecordVerificationError(f"arm {arm}: the recomputed validation APs cannot be used for selection") from None
+    if independent.selected.candidate_id != chosen.candidate_id:
+        raise SelectionRecordVerificationError(f"arm {arm}: the claimed winner differs from the independently recomputed winner")
+    trace = _tie_trace(recomputed_results)
+    if [s_["survivors"] for s_ in trace] != [s_["survivors"] for s_ in _tie_trace(list(results))]:
+        raise SelectionRecordVerificationError(f"arm {arm}: the claimed tie structure differs from the recomputed one")
+    model = loaded[chosen.candidate_id].model
+    try:
         step = max(1, len(inputs) // COMPATIBILITY_SAMPLE)  # an evenly spaced, deterministic sample is enough to check the readout against predict()
         compat = numerics.verify_logit_compatibility(model, inputs[::step][:COMPATIBILITY_SAMPLE])
     except (numerics.NumericsError, ValueError):
-        raise SelectionRecordVerificationError(f"arm {arm}: the fitted model cannot be read out on the validation inputs") from None
-    if model.num_buckets != chosen.num_buckets:
-        raise SelectionRecordVerificationError(f"arm {arm}: the supplied model does not have the selected candidate's num_buckets")
-    ap = average_precision(logits, labels)
-    if ap is None or not math.isclose(ap, float(chosen.validation_ap), rel_tol=AP_TOLERANCE_REL, abs_tol=AP_TOLERANCE_ABS):
-        raise SelectionRecordVerificationError(f"arm {arm}: the selected candidate's validation AP does not match its model's validation scores")
+        raise SelectionRecordVerificationError(f"arm {arm}: the selected model's readout cannot be verified against predict()") from None
     try:
-        selection = select_threshold(logits, labels)
+        selection = select_threshold(selected_logits, labels)
     except dm.DetectionMetricsError:
         raise SelectionRecordVerificationError(f"arm {arm}: validation-only threshold selection is not possible") from None
     estimate = next(e for e in manifest["numerics"]["estimates"] if e["arm"] == arm and e["num_buckets"] == chosen.num_buckets)
@@ -226,10 +286,15 @@ def _arm_block(arm: str, results: Sequence[ValidationCandidateResult], manifest:
         "selected": {
             "candidate_id": chosen.candidate_id, "num_buckets": chosen.num_buckets, "epochs": chosen.epochs, "relative_step_c": chosen.relative_step_c,
             "learning_rate": spec["learning_rate"], "learning_rate_hex": spec["learning_rate_hex"], "validation_ap": float(chosen.validation_ap),
-            "rounded_ap": decision.rounded_ap, "lambda_method": estimate["method"], "lambda_max": estimate["lambda_max"], "L": estimate["L"],
-            "lambda_train_ids_sha256": estimate["record_ids_sha256"], "tied_at_rounded_ap": decision.tied_at_rounded_ap,
+            "recomputed_validation_ap": recomputed[chosen.candidate_id], "rounded_ap": independent.rounded_ap, "lambda_method": estimate["method"],
+            "lambda_max": estimate["lambda_max"], "L": estimate["L"], "lambda_train_ids_sha256": estimate["record_ids_sha256"],
+            "tied_at_rounded_ap": independent.tied_at_rounded_ap, "artifact_sha256": evidence.artifact_digests[chosen.candidate_id],
         },
-        "candidates": rows, "tie_break_trace": trace, "threshold": threshold_block(selection, logits, labels), "tie_diagnostics": _tie_diagnostics(logits),
+        "candidates": rows,
+        "candidate_verification": {"candidates_verified": len(rows), "all_validation_aps_recomputed": True, "artifact_format": "model-artifact-1",
+                                   "ap_tolerance_relative": AP_TOLERANCE_REL, "ap_tolerance_absolute": AP_TOLERANCE_ABS,
+                                   "winner_checked_on": "claimed_and_recomputed_values"},
+        "tie_break_trace": trace, "threshold": threshold_block(selection, selected_logits, labels), "tie_diagnostics": _tie_diagnostics(selected_logits),
         "model": {**model_artifact_fingerprint(model), "model_sha256": manifest["numerics"]["provenance"]["model_sha256"],
                   "logit_method": numerics.LOGIT_METHOD_ID, "input_representation": {
                       "arms_version": manifest["arms"]["arms_version"], "arm": arm, "max_length": evidence.arm_inputs.max_length if arm != ARM_C else None,
@@ -244,7 +309,7 @@ def _arm_block(arm: str, results: Sequence[ValidationCandidateResult], manifest:
 
 def _assemble(manifest: Mapping[str, Any], manifest_sha256: str, results_by_arm: Mapping[str, Sequence[ValidationCandidateResult]],
               evidence: ValidationEvidence, created_utc: str) -> dict[str, Any]:
-    ids_fp, labels = _validate_evidence(manifest, evidence)
+    ids_fp, labels, loaded = _validate_evidence(manifest, manifest_sha256, evidence)
     if not isinstance(results_by_arm, Mapping) or set(results_by_arm) != set(ARMS):
         raise SelectionRecordVerificationError("candidate results are required for exactly the three arms")
     data, protocol, git = manifest["data"], manifest["protocol"], manifest["git"]
@@ -256,7 +321,9 @@ def _assemble(manifest: Mapping[str, Any], manifest_sha256: str, results_by_arm:
                      "generator_fingerprint": data["generator"]["fingerprint"], "split_seed": data["split"]["seed"],
                      "split_manifest_sha256": data["split"]["manifest_sha256"]},
         "validation": {"split": "validation", "records": len(labels), "ids_sha256": ids_fp},
-        "arms": {arm: _arm_block(arm, results_by_arm[arm], manifest, evidence, ids_fp, labels) for arm in ARMS},
+        "artifacts": {"format": "model-artifact-1", "candidates": len(loaded), "manifest_sha256": manifest_sha256,
+                      "digest_source": "supplied by the verifier's caller from outside the record; the record's copy is compared, never trusted"},
+        "arms": {arm: _arm_block(arm, results_by_arm[arm], manifest, evidence, ids_fp, labels, loaded) for arm in ARMS},
         "rules": manifest["selection"], "statistics": manifest["statistics"], "test_status": dict(_TEST_STATUS),
         "code": {"selection_record_sha256": source_sha256(), "model_sha256": manifest["numerics"]["provenance"]["model_sha256"]},
         "vocabulary": {"sha256": manifest["arms"]["vocabulary"]["sha256"], "min_frequency": manifest["arms"]["vocabulary"]["min_frequency"],
@@ -306,6 +373,8 @@ def _scan(value: Any, path: str, problems: list[str]) -> None:
 
 def validate_record_structure(record: Any) -> None:
     problems: list[str] = []
+    if isinstance(record, dict) and record.get("record_version") in SUPERSEDED_VERSIONS:
+        raise SelectionRecordSchemaError("this record version is superseded and unsupported: it verified only the selected candidate; refusing it")
     if not isinstance(record, dict) or set(record) != _TOP_KEYS:
         raise SelectionRecordSchemaError("the record does not have exactly the required top-level fields")
     if record["record_version"] != RECORD_VERSION:
@@ -333,6 +402,8 @@ def validate_record_structure(record: Any) -> None:
                 problems.append(f"arms.{arm}.threshold.value: must be a finite logit or null")
             if not isinstance(block["candidates"], list) or len(block["candidates"]) != 27:
                 problems.append(f"arms.{arm}.candidates: exactly the 27 approved candidates are required")
+            elif not all(isinstance(r, dict) and _HEX64.fullmatch(str(r.get("artifact_sha256", ""))) for r in block["candidates"]):
+                problems.append(f"arms.{arm}.candidates: every candidate needs an artifact SHA-256")
     _scan(record, "$", problems)
     if problems:
         raise SelectionRecordSchemaError("; ".join(problems[:25]))

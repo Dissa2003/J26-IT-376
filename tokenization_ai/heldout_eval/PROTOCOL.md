@@ -31,6 +31,7 @@
 | `1.2.0-draft` (D4-6D2B) | **Validation-selection record `validation-selection-record-1` implemented** (`selection_record.py`, section 12.12.3): canonical write-once record bound to the exact pre-run manifest digest, with an independent verifier that rebuilds the record from trusted validation evidence (27 candidates per arm, rounding and tie-break recomputed, selected AP, raw-logit F1 threshold and model fingerprint recomputed from the supplied fitted models). It never authorizes test scoring. No real record exists, no model is trained, the attempt marker and test gate are unimplemented, and nothing is frozen. |
 | `1.2.0-draft` (D4-6D2C) | **One-time test attempt gate `test-attempt-gate-1` and marker `test-attempt-marker-1` implemented** (`attempt_gate.py`, section 12.12.4): the real manifest and selection-record verifiers must pass before an atomic `O_EXCL` marker is created in a trusted directory outside the repository; only afterwards are the authentic test labels recovered from the source records and validated; any failure after the marker leaves it intact and writes a redacted failure report. No real marker exists, nothing is scored, the runner's gates are still blocked and unconnected, the draft protocol cannot open the gate, and nothing is frozen. |
 | `1.2.0-draft` (D4-7A) | **Model artifact persistence `model-artifact-1` implemented** (`model_artifacts.py`, section 12.12.5): a single canonical-JSON, write-once file per candidate that stores a fitted `LightweightAnomalyModel` bit-exactly (float64 weights as base64 chunks, exact bias, fingerprint), bound to the candidate, its train-only learning rate, the model source hash and a manifest digest, with a strict loader that takes all expectations from the caller and a 81-candidate set loader. No research model exists, nothing is trained or authorized, `selection_record.py` is unchanged (so non-selected candidate APs are still claims), and nothing is frozen. |
+| `1.2.0-draft` (D4-7B) | **All-candidate validation verification and manifest source coverage** (`selection_record.py`, `manifest.py`, section 12.12.6): the validation-selection record is now `validation-selection-record-2` and its verifier recomputes the validation AP of **all 81** candidates from independently trusted, `model-artifact-1`-verified model artifacts (the old selected-only version 1 is refused); the manifest's default source list grows from 22 to 25 files (adding `selection_record.py`, `attempt_gate.py`, `model_artifacts.py`) with normalized-content hashing stated explicitly. Nothing is trained or scored, no real record exists, `test_attempt_gate.py` needs a fixture update for the new evidence, and nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -1295,7 +1296,7 @@ throw-away Git repositories in temporary directories). The runner's training and
 
 **Schema (`pre-run-manifest-1`, canonical JSON; exactly these top-level fields).** `manifest_version`; `purpose` (`confirmatory` or `infrastructure_test`)
 and `confirmatory`; `created_utc`; `protocol` (header version, `DRAFT` or `FROZEN`, SHA-256 of the file, `approved_for_confirmatory`); `git` (branch, full commit,
-`clean`, untracked files considered); `sources` and `config_files` (path to LF-normalized SHA-256; 22 Member 4 source files and the two requirements files by
+`clean`, untracked files considered); `sources` and `config_files` (path to LF-normalized SHA-256; 22 Member 4 source files (25 since D4-7B, section 12.12.6) and the two requirements files by
 default); `data` (generator version/config/fingerprint, catalog and template versions, dataset seed, split `dataset_fingerprint`, split seed, ratios and parameters,
 split manifest hash, train/validation/test counts, splitter exclusions, audit summary, isolation check, `simpol-1` version and hash, reserve-seed log);
 `arms` (`arms-1` and arm identifiers, `request_to_context-v1`, `armc-char3-v1` parameters, `simpol-1` not-verified provenance, runner id, train-only vocabulary
@@ -1339,7 +1340,7 @@ clean repository at the expected commit and the trusted values; it cannot prove 
 repository, the expected values and the file at once. Hashes cover file content, not the Python interpreter or installed dependency versions beyond numpy/BLAS and the
 requirements files. The manifest records the train-only numerical estimates but not fitted model artefacts (those belong to the selection record).
 
-#### 12.12.3 Validation-selection record `validation-selection-record-1` (implemented in D4-6D2B)
+#### 12.12.3 Validation-selection record `validation-selection-record-1` (implemented in D4-6D2B; **superseded by `validation-selection-record-2`, section 12.12.6**)
 
 `tokenization_ai/heldout_eval/selection_record.py` implements the second write-once record of 12.11.4 item 4 and its verifier. It is infrastructure only: it
 fits and scores nothing, reads **no test label, score or prediction**, stores no request body, has produced **no real record**, and **does not authorize test
@@ -1385,7 +1386,7 @@ the entire record and compares field by field (floats within 1e-9 relative / 1e-
 - test-derived content, wrong status flags, duplicate keys, non-canonical or partial bytes are rejected.
 There is no mode that skips the recomputation and no permissive verifier.
 
-**Trust boundaries (stated, not hidden).** (1) The validation APs of the 26 non-selected candidates cannot be recomputed without their models; they are checked for
+**Trust boundaries (stated, not hidden; items (1) and (3) were closed in D4-7B, section 12.12.6).** (1) The validation APs of the 26 non-selected candidates cannot be recomputed without their models; they are checked for
 consistency with the selection rules and the manifest, but remain claims of the training stage. Only the selected candidate per arm is independently recomputed.
 (2) A threshold can only be shown to come from validation data because the verifier recomputes it from validation inputs and labels that the caller supplies; the caller
 must derive them from the verified split. (3) `selection_record.py` is not in the manifest's default source list (the manifest predates it), so the record carries this
@@ -1478,17 +1479,62 @@ rejects missing, extra, substituted or tampered artifacts. The compatibility res
 
 **Trust boundaries.** The manifest digest inside an artifact is a *binding*, not proof that the manifest was verified: the caller must verify the manifest first (`manifest.verify_manifest_bytes`) and take the expected values
 from it. An artifact cannot prove that it was produced by an authorized, train-only run; that is established by the manifest, the (future) authorized runner and the selection record. A forger who also controls the expected
-digests can produce any artifact; the external digest authenticates only against a trusted source. The module is not in the manifest's default source list (that list predates it), so changing it is detected only if the
+digests can produce any artifact; the external digest authenticates only against a trusted source. *(Closed in D4-7B: the module is now in the manifest's default source list.)* The module is not in the manifest's default source list (that list predates it), so changing it is detected only if the
 manifest source list is extended, which is a recommended later change.
 
 **All-candidate validation evidence (design; not implemented).** A future training stage would store each of the 81 fitted candidates with `write_model_artifact` and record the 81 digests (for example in the selection
 record's inputs or a sibling write-once index). A verifier would load all 81 with `load_candidate_set` using digests and learning rates from the verified manifest, compute each candidate's raw logits on the trusted validation
 inputs (`numerics.raw_logits`), recompute every validation AP with `detection_metrics.average_precision`, and compare each with the claimed value before re-running the approved selection rule (about 81 passes over the validation
-set). **Unresolved integration requirement:** the current `selection_record.py` recomputes only the *selected* candidate per arm; the validation APs of the other 26 candidates per arm remain claims of the training stage
+set). **Integration requirement (closed in D4-7B, section 12.12.6):** `selection_record.py` formerly recomputed only the *selected* candidate per arm; the validation APs of the other 26 candidates per arm remain claims of the training stage
 (12.12.3). Closing this needs a change to `selection_record.py` (its `ValidationEvidence` would carry the loaded candidate models and its rebuild would recompute every candidate's AP). That file was not modified here.
 
 **Remaining before training authorization.** The protocol freeze and a real manifest; the training-authorization wiring from a verified manifest to the runner; the training and validation stage that writes the 81 artifacts and the
 selection record; the extended all-candidate verification above; extending the manifest's source list to this module, `selection_record.py` and `attempt_gate.py`; the manual-review procedure; test scoring and the final report.
+
+#### 12.12.6 All-candidate validation verification and manifest source coverage (implemented in D4-7B)
+
+D4-7B closes the two verification gaps recorded in 12.12.3 and 12.12.5. It trains and scores nothing, creates no real manifest, record, artifact or marker, and enables neither training nor test scoring (seeds 7101-7103
+unused). The validation-selection record and `selection_record.py` described in 12.12.3 are **superseded by this section**: the record version is now `validation-selection-record-2`.
+
+**A. All 81 candidate APs are recomputed.**
+- *Evidence.* `ValidationEvidence` no longer carries the selected model per arm (`models`). It carries the validation `ArmInputs`, the validation labels, the frozen vocabulary, the split result, the **directory of the
+  81 `model-artifact-1` files** (`artifact_dir`) and **an independently trusted SHA-256 for each of the 81 candidate artifacts** (`artifact_digests`, exactly the 81 approved candidate ids; digests must be distinct).
+- *Chain.* verified pre-run manifest -> independently trusted artifact digests -> every artifact loaded and verified by `model_artifacts.load_candidate_set` (digest, canonical format, arm and candidate identity, learning
+  rate taken from the verified manifest, model-source hash from the manifest, manifest binding, weight hash and fingerprint) -> each artifact's training provenance compared with the manifest (training id hash, vocabulary hash,
+  token budget, eigenvalue estimate and `L`) -> **the validation AP of every candidate recomputed** from its own model with `numerics.raw_logits` and `detection_metrics.average_precision` on the validation inputs and
+  labels -> comparison with the recorded claim (1e-12 absolute / 1e-9 relative; any larger discrepancy is rejected, naming the candidate) -> the approved selection rule (AP rounded to 10 decimals; fewer epochs, smaller
+  `num_buckets`, smaller `c`, candidate id) re-run by `runner.select_candidate` on the recomputed values and on the claimed values, both winners must equal the recorded winner and the tie structures must agree -> the F1
+  threshold, confusion counts and tie diagnostics recomputed from the selected model's raw logits and the validation labels only (`threshold = null` keeps its all-negative meaning) -> the readout checked against `predict()`
+  on a sample of the selected model's non-saturated inputs -> the record rebuilt from these inputs and compared field by field.
+- *Required external evidence.* The verifier needs, from outside the record: the record's own expected SHA-256; the manifest bytes and their expected SHA-256 (the manifest must pass the real manifest verifier, so branch,
+  commit, clean tree and trusted dataset values come with it); the 81 artifact digests; the artifact directory; the validation inputs, labels, frozen vocabulary and split result. Digests copied from the record are
+  compared with the trusted ones and are never used to locate or authenticate a file; there is no fallback that trusts the 26 non-selected claims, and `verified=True`-style flags do not exist.
+- *Writer and verifier agree.* `build_selection_record`, `write_selection_record` and `verify_selection_record(_bytes)` use the same rebuild, so a record that cannot be verified cannot be written.
+
+**B. Schema compatibility.** The record gained a top-level `artifacts` block, a per-arm `candidate_verification` block, and per-candidate `recomputed_validation_ap`, `artifact_sha256` and `weights_sha256` fields; the
+selected block gained `recomputed_validation_ap` and `artifact_sha256`. This is not backward compatible, so the version changed from `validation-selection-record-1` to **`validation-selection-record-2`**. A
+version-1 record is refused with an explicit "superseded" error (`SUPERSEDED_VERSIONS`), and any unknown version fails closed; nothing is reinterpreted. No real record of either version exists. Canonical serialization and write-once
+behavior are unchanged.
+
+**C. Manifest source coverage.** `manifest.DEFAULT_SOURCE_FILES` (equal to the new constant `REQUIRED_SOURCE_FILES`) now has **25** entries: the 22 earlier ones plus `selection_record.py`, `attempt_gate.py` and
+`model_artifacts.py`. The verifier derives the list from code (or from a trusted caller parameter), never from the manifest, so omitting, substituting or changing a required source, or a missing file, fails verification. A
+test checks that every Python file in `heldout_eval/` and every core pipeline module imported by it (`models`, `fusion`, `masking`, `normalization`, `tokenizer`, `vocabulary`, `tensorizer`, `model`) is listed: **no other
+executable held-out evaluation source is unprotected**; the archived KPI evaluation, the dashboard, the service and the API are outside this study's manifest by design. The hash policy is unchanged and now stated
+explicitly: **normalized-content SHA-256 hashes** (CRLF replaced by LF before hashing, a lone CR untouched), not raw-byte hashes. `VerificationResult` additionally reports `source_list_is_default` and
+`missing_required_sources`, so a caller that passes its own shorter list is visible; a future runner or gate should require the default list for a confirmatory run (the gate was not changed in this milestone).
+
+**D. Effect on earlier components.** `attempt_gate.py` is unchanged and still uses the real selection-record verifier; it accepts a `ValidationEvidence` of the new shape. Its test fixtures, which had built
+the obsolete selected-only evidence, were updated in D4-7B-R (`test_attempt_gate.py`): they now persist all 81 mock candidate artifacts (27 per arm) with `model_artifacts`, supply independently held digests and the
+artifact directory, and build and write the version-2 record through the real writer, so every gate test still runs the real manifest and selection-record verifiers. The original 59 gate tests keep their meaning
+(the wrong-model case now uses a tampered artifact and a validly persisted but different model); one test was added to pin the full 81-candidate evidence requirement at the gate boundary (60 gate tests). No
+assertion was weakened and no permissive verifier was introduced.
+
+**E. Scientific limitations.** Recomputing all 81 validation APs verifies the reported numbers against the persisted candidate models; it does **not** prove that those models were trained only on training data, that
+training was authorized, or that the train, validation and test splits were separated during training. That still needs the future runner integration (authorized training bound to a verified manifest). The artifacts
+are bound to a manifest digest, not to a signature. The held-out evaluation remains synthetic-only; Arm B uses simulated `simpol-1` rules, which must not be represented as Member 2 verified policies.
+
+**F. Remaining before training authorization and protocol freeze.** The protocol freeze and a real manifest; the training-authorization wiring from a verified manifest to the runner; the training and validation stage that
+produces the 81 artifacts and the record; a gate-side requirement for the default (complete) source list; the manual-review procedure; test scoring and the final report.
 
 ## 13. Chronological record
 
@@ -1516,6 +1562,7 @@ the confirmatory run, and what confirmatory evidence exists. It holds no perform
 | 9h | D4-6D2B | Design revision (implemented) | Validation-selection record writer and verifier written (12.12.3) and tested with mock fitted artifacts, development-seed structure and a throw-away repository. No real record, no fit, no score, no test gate. |
 | 9i | D4-6D2C | Design revision (implemented) | One-time attempt gate, atomic marker, post-marker label recovery and failure reports written (12.12.4) and tested with the real verifiers on disposable fixtures. No real marker, no scoring, runner gates unchanged. |
 | 9j | D4-7A | Design revision (implemented) | Model artifact writer and loader written (12.12.5) and tested on hand-built fitted fixtures; the all-candidate validation-verification requirement for `selection_record.py` is recorded as unresolved. No research artifact, no fit, no score. |
+| 9k | D4-7B | Design revision (implemented) | Selection record upgraded to version 2 with recomputation of all 81 candidate APs from verified model artifacts; manifest source list extended to 25 files; normalized-content hashing stated. No real record, no fit, no score; the attempt-gate test fixture needs an update (12.12.6). |
 | 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; runner and manifest code (estimator and logit extraction: D4-6C2, 12.11.3). |
 | 11 | Pending | Pre-run decision | Write-once pre-run manifest, before any training or scoring. |
 | 12 | Pending | Confirmatory evidence | Confirmatory dataset (seed 7101), validation-only selection, one scored test run. **No confirmatory evidence exists yet.** |

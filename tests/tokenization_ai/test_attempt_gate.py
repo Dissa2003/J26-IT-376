@@ -1,7 +1,8 @@
 """Tests for test-attempt-gate-1 and test-attempt-marker-1 (draft protocol heldout-eval-1.2.0-draft, sections 12.11.4 and 12.12.4).
 
 Nothing here scores a test set or fits a model, and no confirmatory data exists. The full-path tests run the REAL manifest and validation-selection
-verifiers on disposable fixtures: a throw-away Git repository whose protocol header says FROZEN, development-seed (6101) structure, mock fitted artifacts, and a
+verifiers on disposable fixtures: a throw-away Git repository whose protocol header says FROZEN, development-seed (6101) structure, **81 mock fitted candidate artifacts** (27 per arm, persisted with ``model_artifacts`` and verified against
+independently supplied digests, as validation-selection-record-2 requires), and a
 monkeypatched seed tuple that lets the development seed stand in for the confirmatory seed (so no confirmatory seed value appears here). The gate's production
 code has no flag or callback that could do the same. Direct construction of ``VerifiedAttempt`` with the module's private key is used only to test the marker
 and recovery primitives quickly; it is a test fixture, not a production path. ``numerics.raw_logits`` is cached for speed (every miss calls the real function).
@@ -17,6 +18,8 @@ import inspect
 import json
 import os
 import pickle
+import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -27,6 +30,7 @@ import numpy as np
 import pytest
 
 import tokenization_ai.heldout_eval.manifest as mf
+import tokenization_ai.heldout_eval.model_artifacts as ma
 import tokenization_ai.heldout_eval.numerics as numerics
 import tokenization_ai.heldout_eval.runner as rn
 import tokenization_ai.heldout_eval.selection_record as sr
@@ -98,8 +102,8 @@ def make_repo(root: Path, header: str) -> Path:
     return root
 
 
-def mock_model(arm: str, nb: int) -> LightweightAnomalyModel:
-    rng = np.random.default_rng({ARM_A: 11, ARM_B: 12, ARM_C: 13}[arm] + nb)
+def mock_model(arm: str, nb: int, k: int = 0) -> LightweightAnomalyModel:
+    rng = np.random.default_rng({ARM_A: 11, ARM_B: 12, ARM_C: 13}[arm] + nb + 1000 * k)
     model = LightweightAnomalyModel(num_buckets=nb)
     model.weights = rng.normal(0.0, 0.02, nb)
     model.bias = 0.05
@@ -134,17 +138,33 @@ def build_env(root: Path, header: str, purpose: str) -> Env:
     e.manifest_bytes, e.manifest_sha = Path(written.path).read_bytes(), written.sha256
     e.manifest = mf.parse_manifest_bytes(e.manifest_bytes)
     val = rn.encode_validation(cfg, part.validation)
-    models = {arm: mock_model(arm, WINNERS[arm][0]) for arm in ARMS}
-    e.evidence = sr.ValidationEvidence(arm_inputs=val, labels_by_id=part.validation.labels_by_id(), frozen=cfg.frozen, split_result=split, models=models)
+    candidates = [(arm, nb, ep, c) for arm in ARMS for (nb, ep, c) in GRID]  # exactly 27 per arm, 81 in total
+    rates = ma.learning_rates_from_manifest(e.manifest)
+    e.artifact_dir = root / "artifacts"
+    e.artifact_dir.mkdir()
+    digests, models = {}, {}
+    for k, (arm, nb, ep, c) in enumerate(candidates):
+        cid = rn.canonical_candidate_id(arm, nb, ep, c)
+        models[cid] = mock_model(arm, nb, k)
+        est = next(x for x in e.manifest["numerics"]["estimates"] if x["arm"] == arm and x["num_buckets"] == nb)
+        training = {"train_ids_sha256": e.manifest["arms"]["alignment"]["train_ids_sha256"],
+                    "vocabulary_sha256": None if arm == ARM_C else e.manifest["arms"]["vocabulary"]["sha256"],
+                    "max_length": None if arm == ARM_C else e.manifest["arms"]["budget"]["selected_max_length"],
+                    "lambda_method": est["method"], "lambda_max": est["lambda_max"], "L": est["L"]}
+        digests[cid] = ma.write_model_artifact(e.artifact_dir, models[cid], repo_root=e.repo, arm=arm, num_buckets=nb, epochs=ep, relative_step_c=c,
+                                               learning_rate=rates[cid], manifest_sha256=e.manifest_sha, training=training).sha256
+    assert len(models) == 81 and len(digests) == 81
+    e.models, e.digests = models, digests
+    e.evidence = sr.ValidationEvidence(arm_inputs=val, labels_by_id=part.validation.labels_by_id(), frozen=cfg.frozen, split_result=split,
+                                       artifact_dir=e.artifact_dir, artifact_digests=digests)
     ids_fp = rn.ids_fingerprint(list(val.record_ids))
     labels = list(rn.aligned_labels(val.record_ids, e.evidence.labels_by_id))
     results = {}
     for arm in ARMS:
         inputs = list(getattr(val, {ARM_A: "arm_a", ARM_B: "arm_b", ARM_C: "arm_c"}[arm]))
-        ap = average_precision(numerics.raw_logits(models[arm], inputs), labels)
         results[arm] = [rn.ValidationCandidateResult(rn.canonical_candidate_id(arm, nb, ep, c), arm, nb, ep, c,
-                                                     ap if (nb, ep, c) == WINNERS[arm] else ap * (0.3 + 0.001 * k), "validation", ids_fp, len(labels))
-                        for k, (nb, ep, c) in enumerate(GRID)]
+                                                     average_precision(numerics.raw_logits(models[rn.canonical_candidate_id(arm, nb, ep, c)], inputs), labels),
+                                                     "validation", ids_fp, len(labels)) for (nb, ep, c) in GRID]
     record = sr.build_selection_record(manifest_bytes=e.manifest_bytes, expected_manifest_sha256=e.manifest_sha, results_by_arm=results,
                                        evidence=e.evidence, created_utc=CREATED)
     rec_written = sr.write_selection_record(e.out / "record.json", record, manifest_bytes=e.manifest_bytes, expected_manifest_sha256=e.manifest_sha,
@@ -349,12 +369,53 @@ def test_the_real_draft_protocol_means_no_real_run_can_open_the_gate(env, root):
     assert_blocked(env, root, repo_root=REPO_ROOT)  # the real repository's protocol, commit and sources do not match any confirmatory manifest
 
 
+def writable_copy_of_artifacts(env, root) -> Path:
+    copy_dir = root.parent / "artifacts_copy"
+    shutil.copytree(env.artifact_dir, copy_dir)
+    for p in copy_dir.iterdir():
+        os.chmod(p, stat.S_IWRITE | stat.S_IREAD)
+    return copy_dir
+
+
 def test_wrong_validation_evidence_is_rejected_by_the_real_selection_verifier(env, root):
-    wrong = mock_model(ARM_A, 1024)
+    # (1) a tampered candidate artifact: a flipped byte no longer matches its independently supplied digest
+    tampered = writable_copy_of_artifacts(env, root)
+    victim = sorted(tampered.iterdir())[0]
+    data = bytearray(victim.read_bytes())
+    data[50] ^= 1
+    victim.write_bytes(bytes(data))
+    assert_blocked(env, root, evidence=dataclasses.replace(env.evidence, artifact_dir=tampered))
+    # (2) the original meaning: a *wrong model* for a candidate. Here a validly persisted artifact with different weights, whose digest the caller trusts:
+    # it no longer reproduces the recorded validation AP of that candidate.
+    swapped = root.parent / "artifacts_swapped"
+    shutil.copytree(env.artifact_dir, swapped)
+    cid = rn.canonical_candidate_id(ARM_A, 1024, 150, 0.3)
+    old_file = swapped / ma.artifact_filename(env.manifest_sha, cid)
+    os.chmod(old_file, stat.S_IWRITE | stat.S_IREAD)
+    old_file.unlink()
+    wrong = mock_model(ARM_A, 1024, k=999)
     wrong.weights[0] += 1.0
-    assert_blocked(env, root, evidence=dataclasses.replace(env.evidence, models={**env.evidence.models, ARM_A: wrong}))
+    est = next(x for x in env.manifest["numerics"]["estimates"] if x["arm"] == ARM_A and x["num_buckets"] == 1024)
+    rewritten = ma.write_model_artifact(swapped, wrong, repo_root=env.repo, arm=ARM_A, num_buckets=1024, epochs=150, relative_step_c=0.3,
+                                        learning_rate=ma.learning_rates_from_manifest(env.manifest)[cid], manifest_sha256=env.manifest_sha,
+                                        training={"train_ids_sha256": env.manifest["arms"]["alignment"]["train_ids_sha256"],
+                                                  "vocabulary_sha256": env.manifest["arms"]["vocabulary"]["sha256"],
+                                                  "max_length": env.manifest["arms"]["budget"]["selected_max_length"],
+                                                  "lambda_method": est["method"], "lambda_max": est["lambda_max"], "L": est["L"]})
+    assert_blocked(env, root, evidence=dataclasses.replace(env.evidence, artifact_dir=swapped, artifact_digests={**env.digests, cid: rewritten.sha256}))
     flipped = {k: 1 - v for k, v in env.evidence.labels_by_id.items()}
     assert_blocked(env, root, evidence=dataclasses.replace(env.evidence, labels_by_id=flipped))
+
+
+def test_the_gate_requires_the_full_81_candidate_artifact_evidence(env, root):
+    cid = rn.canonical_candidate_id(ARM_C, 4096, 400, 0.1)
+    assert len(env.models) == 81 and len(env.digests) == 81 and sum(1 for k in env.digests if k.startswith(ARM_A)) == 27
+    assert sum(1 for k in env.digests if k.startswith(ARM_B)) == 27 and sum(1 for k in env.digests if k.startswith(ARM_C)) == 27
+    assert_blocked(env, root, evidence=dataclasses.replace(env.evidence, artifact_digests={k: v for k, v in env.digests.items() if k != cid}))
+    assert_blocked(env, root, evidence=dataclasses.replace(env.evidence, artifact_digests={**env.digests, cid: "0" * 64}))
+    assert_blocked(env, root, evidence=dataclasses.replace(env.evidence, artifact_dir=root.parent / "no_such_directory"))
+    with pytest.raises(TypeError):
+        dataclasses.replace(env.evidence, models={})  # the obsolete selected-only evidence no longer exists
 
 
 def test_a_sealed_set_that_does_not_match_the_manifest_is_rejected(env, root):
