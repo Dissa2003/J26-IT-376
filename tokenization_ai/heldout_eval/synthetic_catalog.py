@@ -1,4 +1,4 @@
-"""Scenario catalog for the synthetic API request generator (draft protocol heldout-eval-1.1.0-draft).
+"""Scenario catalog for the synthetic API request generator (draft protocol heldout-eval-1.2.0-draft).
 
 Pure data and small text helpers: no I/O, no network, no randomness of its own (every helper takes a
 ``random.Random``), and no imports from the production pipeline.
@@ -34,7 +34,11 @@ import random
 from dataclasses import dataclass
 from typing import Literal
 
-CATALOG_VERSION = "synthetic-catalog-2"
+CATALOG_VERSION = "synthetic-catalog-3"
+# synthetic-catalog-3 (with generator synthgen-3) adds two corrections, G1 and G2 (PROTOCOL.md section 12.2.1):
+#   G1: normal requests under a /files/... path (crud_read, hn_dotted_paths), so `files` no longer marks a class.
+#   G2: DELETE on ordinary resource paths in both classes (crud_write and traversal_like / sqli_like / cmdi_like /
+#       markup_like), with the same query structures. Weights, pools and every label rule are unchanged.
 
 LabelKind = Literal["normal", "suspicious", "mixed"]
 
@@ -198,9 +202,12 @@ class ScenarioFamily:
 
 FAMILIES: tuple[ScenarioFamily, ...] = (
     # -- normal -------------------------------------------------------------------------------
-    ScenarioFamily("crud_read", "normal", "Routine reads of a resource or nested item path, with paging and sorting.",
+    ScenarioFamily("crud_read", "normal",
+                   "Routine reads of a resource or nested item path (some under a /files path), with paging and sorting.",
                    "always 0", 8, ""),
-    ScenarioFamily("crud_write", "normal", "Routine create, update and delete calls with a flat JSON body of 2-7 fields.",
+    ScenarioFamily("crud_write", "normal",
+                   "Routine create, update and delete calls with a flat JSON body of 2-7 fields (a delete has no body "
+                   "and may carry an ordinary text query parameter).",
                    "always 0", 8, ""),
     ScenarioFamily("search_filter", "normal", "Search and filtering with ordinary text and filter values.",
                    "always 0", 7, ""),
@@ -215,7 +222,8 @@ FAMILIES: tuple[ScenarioFamily, ...] = (
                    "HARD NEGATIVE: ordinary text that merely contains SQL-ish, markup-ish or shell-ish words.",
                    "always 0", 7, "negative"),
     ScenarioFamily("hn_dotted_paths", "normal",
-                   "HARD NEGATIVE: ordinary file paths with dots and nested folders (names like report.final.pdf).",
+                   "HARD NEGATIVE: ordinary file paths with dots and nested folders (names like report.final.pdf), "
+                   "under a documents or a files path.",
                    "always 0", 6, "negative"),
     ScenarioFamily("hn_long_payload", "normal",
                    "HARD NEGATIVE: legitimately large JSON bodies with many fields and long text.",
@@ -231,13 +239,18 @@ FAMILIES: tuple[ScenarioFamily, ...] = (
                    "always 0", 4, "negative"),
     # -- suspicious ----------------------------------------------------------------------------
     ScenarioFamily("sqli_like", "suspicious",
-                   "SQL-injection-like text in a query, body or login-style text slot (ordinary and large bodies).",
+                   "SQL-injection-like text in a query, body or login-style text slot (ordinary and large bodies; "
+                   "a query slot may also sit on a DELETE call).",
                    "always 1; some variants are obfuscated (hard positives)", 5, "positive"),
-    ScenarioFamily("traversal_like", "suspicious", "Path-traversal-like request paths of varying depth.",
+    ScenarioFamily("traversal_like", "suspicious",
+                   "Path-traversal-like request paths of varying depth (on a files path, or on an ordinary resource "
+                   "path with a DELETE call).",
                    "always 1; some variants use encoded separators (hard positives)", 3, "positive"),
-    ScenarioFamily("cmdi_like", "suspicious", "Command-injection-like suffixes on ordinary text.",
+    ScenarioFamily("cmdi_like", "suspicious",
+                   "Command-injection-like suffixes on ordinary text (a query slot may also sit on a DELETE call).",
                    "always 1; some variants use subshell forms (hard positives)", 4, "positive"),
-    ScenarioFamily("markup_like", "suspicious", "Markup-style script or event-handler text in a text slot.",
+    ScenarioFamily("markup_like", "suspicious",
+                   "Markup-style script or event-handler text in a text slot (a query slot may also sit on a DELETE call).",
                    "always 1; some variants are encoded or case-varied (hard positives)", 4, "positive"),
     ScenarioFamily("mass_assignment", "suspicious",
                    "Privileged-looking fields in a JSON body sent by a NON-admin role to a non-admin endpoint.",

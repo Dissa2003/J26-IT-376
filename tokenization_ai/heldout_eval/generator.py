@@ -1,4 +1,4 @@
-"""Deterministic synthetic API request generator (draft protocol heldout-eval-1.1.0-draft).
+"""Deterministic synthetic API request generator (draft protocol heldout-eval-1.2.0-draft).
 
 Generates FABRICATED requests from the scenario families in ``synthetic_catalog.py``. No network
 traffic, no real users, credentials or private data, and no external datasets are involved. Nothing
@@ -46,8 +46,17 @@ from typing import Any
 from . import synthetic_catalog as cat
 from .splits import EvalRecord, exact_fingerprint, group_id_for, make_record
 
-GENERATOR_VERSION = "synthgen-2"
-DEFAULT_DATASET_SEED = 5101  # arbitrary, fixed in advance
+GENERATOR_VERSION = "synthgen-3"
+# Development / debugging seed (PROTOCOL.md section 12.5). The earlier default 5101 belongs to the burned synthgen-2
+# pilot; the confirmatory seed 7101 and reserve seeds 7102 / 7103 are never a default and are never generated here.
+DEFAULT_DATASET_SEED = 6101  # arbitrary, fixed in advance
+
+# synthgen-3 corrections (PROTOCOL.md section 12.2.1). Design constants, fixed before any synthgen-3 data existed and
+# not tuned on labels, audits or models.
+_FILES_ROOT_READ_P = 0.12       # G1: crud_read paths that sit under /files
+_DELETE_QUERY_P = 0.5           # G2: normal DELETE calls (crud_write) that carry an ordinary text query parameter
+_TRAVERSAL_DELETE_P = 0.3       # G2: traversal_like templates that are a DELETE on an ordinary resource path
+_TEXT_DELETE_P = 0.2            # G2: query-slot templates of the text families that are a DELETE call
 _TIMESTAMP_BASE = 1_700_000_000.0
 _SOURCE_POOL = 40
 _MAX_DEEP = 9
@@ -313,11 +322,19 @@ def _build_spec(family: str, rng: random.Random, hard_fraction: float, pickers: 
     ch = rng.choice
     pk = pickers.for_family(family)
     if family == "crud_read":
-        return TemplateSpec(family, "GET", _nested_read_path(rng, pk),
+        segs = _nested_read_path(rng, pk)
+        if rng.random() < _FILES_ROOT_READ_P:  # G1: a routine read under a /files path
+            segs = ("files",) + segs
+        return TemplateSpec(family, "GET", segs,
                             query=_query_params(rng, rng.random() < 0.7, rng.random() < 0.5))
     if family == "crud_write":
         method = ch(("POST", "PUT", "PATCH", "DELETE"))
         has_body = method != "DELETE"
+        if method == "DELETE" and rng.random() < _DELETE_QUERY_P:
+            # G2 (N2): a delete with an ordinary text query parameter, built exactly like the text families' queries
+            slot = ch(cat.QUERY_TEXT)
+            return TemplateSpec(family, method, _resource_path(rng, pk, True, False),
+                                query=_text_query(rng, slot), text_slot=("query", slot))
         return TemplateSpec(family, method, _resource_path(rng, pk, method != "POST", False),
                             body=_flat_body(rng, rng.randint(2, 7)) if has_body else (),
                             body_format="json" if has_body else "none")
@@ -359,7 +376,8 @@ def _build_spec(family: str, rng: random.Random, hard_fraction: float, pickers: 
     if family == "hn_dotted_paths":
         name = f"{rng.choice(cat.WORDS)}.final.{ch(('pdf', 'txt', 'csv', 'png'))}"
         folders = tuple(rng.choice(cat.WORDS) for _ in range(rng.randint(0, 3)))
-        return TemplateSpec(family, "GET", ("documents", pk.res(), None, *folders, name),
+        root = ch(("documents", "files"))  # G1: ordinary dotted files also live under /files
+        return TemplateSpec(family, "GET", (root, pk.res(), None, *folders, name),
                             query=_query_params(rng, rng.random() < 0.4, False), spec_hard=True)
     if family == "hn_long_payload":
         return TemplateSpec(family, "POST", _resource_path(rng, pk, False, False), body=_long_body(rng),
@@ -385,6 +403,10 @@ def _build_spec(family: str, rng: random.Random, hard_fraction: float, pickers: 
             return _login_spec(family, rng, slot=True)
         if roll < 0.4:
             slot = ch(cat.QUERY_TEXT)
+            if rng.random() < _TEXT_DELETE_P:
+                # G2 (S2): the same query slot on a DELETE of an item, with the path shape of the normal delete (N2)
+                return TemplateSpec(family, "DELETE", _resource_path(rng, pk, True, False),
+                                    query=_text_query(rng, slot), text_slot=("query", slot))
             return TemplateSpec(family, "GET", (pk.res(), _search_sub(rng, pk)),
                                 query=_text_query(rng, slot), text_slot=("query", slot))
         large = rng.random() < 0.3
@@ -393,6 +415,10 @@ def _build_spec(family: str, rng: random.Random, hard_fraction: float, pickers: 
                             body_format="json", text_slot=("body", body[0][0]))
     if family == "traversal_like":
         hard = rng.random() < hard_fraction
+        if rng.random() < _TRAVERSAL_DELETE_P:
+            # G2 (S1): a DELETE on an ordinary resource path whose tail is a traversal-like construction. No query, so
+            # the delete cells (no query / text query) hold both classes.
+            return TemplateSpec(family, "DELETE", (pk.res(),) + cat.traversal_segments(rng, hard), spec_hard=hard)
         segs = ("files", pk.res()) + cat.traversal_segments(rng, hard)
         return TemplateSpec(family, "GET", segs, query=_query_params(rng, rng.random() < 0.3, False), spec_hard=hard)
     if family == "mass_assignment":

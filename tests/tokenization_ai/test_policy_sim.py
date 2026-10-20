@@ -502,16 +502,21 @@ def test_diagnostics_are_json_safe_deterministic_and_hold_no_raw_content_or_perf
 
 def test_pilot_diagnostics_regression_pins(pilot):
     report = diag.rule_diagnostics(pilot)
-    assert report["records"] == 1501 and report["catalog"]["sha256"] == PINNED_CATALOG_SHA256
-    assert report["rules_per_request"]["histogram"] == {"1": 177, "2": 1324} or report["rules_per_request"]["histogram"] == {1: 177, 2: 1324}
+    # Pins for the synthgen-3 development pilot (seed 6101, the default). The earlier synthgen-2 / seed-5101 pilot
+    # (1,501 records; SIM-P04, SIM-P06, SIM-P07 aligned with one class) is exploratory and burned; see PROTOCOL.md 3.1.
+    assert report["records"] == 1466 and report["catalog"]["sha256"] == PINNED_CATALOG_SHA256
+    assert report["rules_per_request"]["histogram"] == {"1": 224, "2": 1242} or report["rules_per_request"]["histogram"] == {1: 224, 2: 1242}
     assert report["empty_rule_share"] == 0.0 and report["records_with_duplicate_policy_ids"] == 0
     assert report["policies_with_zero_coverage"] == ["SIM-P12"]
     flags = " ".join(report["attention_flags"])
-    assert "SIM-P07" in flags and "SIM-P12" in flags  # surfaced, not tuned away
+    # Surfaced, not tuned away: the documented structural limitation (P06) and the inert policy (P12) remain flagged,
+    # and the catalog was not edited. P04 and P07 are no longer one-class-only after the generator corrections.
+    assert "SIM-P06" in flags and "SIM-P12" in flags
+    assert "SIM-P04" not in flags and "SIM-P07" not in flags
     budget = report["token_budget"]
     assert budget["rule_tokens_per_rule"] == 20
     assert budget["tokens_arm_b"]["mean"] > budget["tokens_arm_a"]["mean"]
-    assert budget["by_max_length"]["128"]["B_simulated_rules"]["longer_than_max_length"] == 18
+    assert budget["by_max_length"]["128"]["B_simulated_rules"]["longer_than_max_length"] == 5
     assert budget["by_max_length"]["128"]["A_request_only"]["longer_than_max_length"] == 0
     assert budget["by_max_length"]["256"]["B_simulated_rules"]["longer_than_max_length"] == 0
     assert budget["by_max_length"]["128"]["records_rejected_in_either_arm"]["count"] == 0

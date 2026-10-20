@@ -361,7 +361,8 @@ def test_template_supported_exclusivity_ignores_values_that_belong_to_a_single_t
         rigged = with_record_replaced(rigged, i, headers=headers)
     stats = shortcut_statistics(rigged, min_support=3)
     entry = stats["features"]["user_agent"]
-    assert entry["class_exclusive_record_share"] >= len(idxs) / len(ds.records) - 1e-9  # legacy measure sees it
+    # legacy measure sees it (shares are rounded to 4 decimals in the report, hence the 5e-5 tolerance)
+    assert entry["class_exclusive_record_share"] >= len(idxs) / len(ds.records) - 5e-5
     assert entry["class_exclusive_template_share"] == 0.0  # but it is one template, not a cross-template shortcut
     assert stats["min_template_support"] == 3
 

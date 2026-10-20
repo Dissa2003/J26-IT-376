@@ -1,8 +1,8 @@
 # Held-out evaluation protocol (Member 4)
 
 **Protocol version:** `heldout-eval-1.2.0-draft`  **Status: DRAFT, not frozen.**
-**Template version:** `tmpl-1`  **Generator (implemented):** `synthgen-2`  **Catalog (implemented):** `synthetic-catalog-2`
-**Generator (approved, not implemented):** `synthgen-3` (section 12.2)
+**Template version:** `tmpl-1`  **Generator (implemented):** `synthgen-3`  **Catalog (implemented):** `synthetic-catalog-3`
+(G1 and G2, sections 12.2 and 12.2.1; the earlier `synthgen-2` / `synthetic-catalog-2` pilot is exploratory and burned, section 12.4)
 **Code (this folder):** `splits.py`, `synthetic_catalog.py`, `generator.py`, `audit.py`, `policy_sim.py`, `policy_diagnostics.py`  **Simulated rule catalog:** `simpol-1`
 **Tests:** `tests/tokenization_ai/test_heldout_splits.py`, `test_synthetic_catalog.py`,
 `test_synthetic_generator.py`, `test_heldout_audit.py`, `test_policy_sim.py`
@@ -16,6 +16,7 @@
 | `1.1.0-draft` (D3a-R refinement, same draft version) | **Dataset quality refinement after reviewing the first pilot's six descriptive warnings** (generator `synthgen-1` -> `synthgen-2`, catalog `-1` -> `-2`). See section 2.6 for what was changed and why, section 2.7 for the intentional associations that remain, and section 4.1 for the pilot record. The audit gained a template-supported exclusivity measure and an independent content-type semantics check. Splitting code is unchanged. |
 | `1.1.0-draft` (D3b, same draft version) | **Simulated policy rule catalog `simpol-1`** (`policy_sim.py`) and its descriptive diagnostics (`policy_diagnostics.py`) for Arm B. Rules are deterministic functions of observable request properties, carry explicit simulated provenance and no verification status, and are not connected to any API. See section 3.1. |
 | `1.2.0-draft` (D3c-1) | **Scientific design decisions recorded; documentation only.** Approves generator `synthgen-3` with two planned corrections (G1, G2), keeps `simpol-1` unchanged, marks the seed-5101 pilot as exploratory/burned, fixes the seed plan, the full-study scale, the equal-`max_length` rule, the request-to-context mapping `request_to_context-v1`, the Arm C definition, the primary-metric comparison plan and the pre-run manifest plan. See section 12 and the chronological record in section 13. **No code, generator, split, catalog or dataset changed in this step, and nothing is frozen.** |
+| `1.2.0-draft` (D3c-2) | **Generator `synthgen-3` / catalog `synthetic-catalog-3` implemented (G1 and G2 only).** Normal `/files/...` paths (`crud_read`, `hn_dotted_paths`) and comparable DELETE structures in both classes (`crud_write`; `traversal_like`, `sqli_like`, `cmdi_like`, `markup_like`). No label rule, weight, pool, split code, `simpol-1`, `policy_sim.py`, `policy_diagnostics.py` or audit threshold changed. The default dataset seed is now the development seed 6101. Design note, development-seed results and remaining limitations are in section 12.2.1. The confirmatory dataset is not generated and nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -25,7 +26,8 @@ prediction API or the dashboard.
 > **Scope of this step:** the protocol text, the leakage-safe splitting code, the synthetic scenario
 > catalog, the deterministic generator (`synthgen-2`), the non-model audit and the simulated rule catalog
 > exist. There is **no model training, metrics runner or A/B/C runner yet, and no accuracy, PR-AUC or other
-> detection-performance figure exists.** `synthgen-3`, the Arm C code, the runner, the budget-rule code and the
+> detection-performance figure exists.** `synthgen-3` (G1 and G2) is implemented and has been exercised only on
+> the development seed 6101 (section 12.2.1); the Arm C code, the runner, the budget-rule code and the
 > manifest tooling are **not implemented**. The draft becomes a frozen protocol only after the generator revision,
 > runner and arm code, hashes, the final decision rule and the pre-run manifest exist and are approved
 > (sections 11 and 12.12); until then every statement here is a plan, not a frozen commitment.
@@ -394,7 +396,7 @@ protocol is frozen.
 
 | # | Item | Status |
 |---|---|---|
-| 1 | Review of the pilot statistics and audit warnings; revise the generator under a new version | **Decided in principle** (section 12.2: `synthgen-3`, corrections G1 and G2). Design note and implementation pending. |
+| 1 | Review of the pilot statistics and audit warnings; revise the generator under a new version | **Implemented** (D3c-2): `synthgen-3` with corrections G1 and G2, design note and development-seed results in 12.2.1. The confirmatory dataset is not generated. |
 | 2 | Decision rule and margin for A versus B; shortcut-flag handling | **Open.** Comparison plan recorded (12.11); the rule and any margin are fixed before the confirmatory scored run. |
 | 3 | Arm C | **Included** (12.10). Model-class compatibility and the feature-budget policy are **open** until checked before coding. A flat-versus-structure-aware tokenization ablation is **not included** and remains open. |
 | 4 | Leave-family-out split | **Open**, not decided. |
@@ -421,7 +423,7 @@ The protocol is `heldout-eval-1.2.0-draft`. The version history above is retaine
 
 ### 12.2 Generator `synthgen-3`: two planned corrections
 
-`synthgen-3` is approved for implementation in a later step, with exactly these initial planned corrections. Their
+`synthgen-3` was approved with exactly these initial corrections and implemented in D3c-2 (section 12.2.1). Their
 aim is to remove two *generator artifacts* seen in the exploratory pilot diagnostics (section 3.1). They reduce those
 associations; they are not claimed to remove them.
 
@@ -452,6 +454,99 @@ Rules for these corrections:
   generator is fixed for the confirmatory study. After the confirmatory dataset (seed 7101) has been generated, the
   generator does not change for that study; a change creates a new generator version, a new protocol version and a
   new dataset (see 12.5 for the only permitted recovery path).
+
+#### 12.2.1 G1/G2 implementation note (D3c-2, recorded before any generator code was changed)
+
+*Design constants below were fixed before any `synthgen-3` data was generated. They are not tuned on labels, audit
+output or any model result. Expected counts are design-level arithmetic from the unchanged family weights (total 106),
+at 2,000 requested templates, before template collapse; they are approximate.*
+
+**Families that change** (only these; every other family, weight, pool and label rule is unchanged):
+`hn_dotted_paths` and `crud_read` (G1); `crud_write`, `traversal_like`, `sqli_like`, `cmdi_like` and `markup_like` (G2).
+
+**G1 - normal files paths (label 0 by the existing "always 0" rules).**
+- `hn_dotted_paths` (hard negative) draws its first segment from `{documents, files}` with equal probability: an
+  ordinary dotted file in nested folders, e.g. `/files/<resource>/<id>/<folder>/<name>.final.<ext>`, GET.
+- `crud_read` prefixes its existing nested read path with `files` with probability 0.12: a routine read of a nested
+  item under a files path, GET.
+- Permitted: method GET, path category `files_area`, authorization header present (the existing default for these
+  families), optional paging/filter query as these families already have.
+- Expected at 2,000 templates: about 75 normal files-path templates (about 57 + 18) versus about 40 suspicious
+  files-path templates, i.e. about 35% suspicious, close to the roughly one-third template prevalence.
+
+**G2 - comparable DELETE on ordinary resource paths (path category `resource_area`).** Four DELETE structures, two
+per class, share the same method, path category, authorization and role-header handling, no body and no content type:
+
+| Structure | Class | Family | Path | Query |
+|---|---|---|---|---|
+| N1 (existing) | normal | `crud_write` | `/<resource>/<id>` | none |
+| N2 (new) | normal | `crud_write` (DELETE, probability 0.5) | `/<resource>/<id>` | one ordinary text parameter plus the optional paging/filter parameters (`_text_query`), the same builder the suspicious text families use |
+| S1 (new) | suspicious | `traversal_like` (probability 0.3) | `/<resource>/` + traversal segments | none |
+| S2 (new) | suspicious | `sqli_like`, `cmdi_like`, `markup_like` (query-slot branch, DELETE with probability 0.2) | `/<resource>/<id>` | the same `_text_query` builder with a suspicious value in the text parameter |
+
+- Comparability: every DELETE cell (no query / text query) holds both classes by design. A DELETE has no body and no
+  content type in either class. Query presence, authorization-header presence and body shape therefore do not mark a
+  class for DELETE requests. S2 and N2 differ only in the value of the text parameter, as the existing GET text
+  scenarios do.
+- Traversal on a resource root uses only DELETE and carries no query, so it adds no new paging-only DELETE cell.
+  The remaining 0.7 of traversal templates keep the existing `files` root with GET and their existing paging query.
+- Expected at 2,000 templates: about 38 normal DELETE templates (about 19 N1 + 19 N2) versus about 37 suspicious
+  (about 17 S1 + 20 S2).
+
+**Labels keep their existing security meaning.** No family's label rule changes. S1 is suspicious because its path
+contains a traversal-like construction; S2 because its text parameter holds an injection-, command- or markup-like
+value. The HTTP method is never the reason for a label. N1 and N2 are normal under `crud_write`'s existing rule.
+
+**Versions and fingerprints.** `GENERATOR_VERSION` becomes `synthgen-3` and `CATALOG_VERSION` becomes
+`synthetic-catalog-3`. Record ids are derived from the generator version, so every record id changes, and the
+generator fingerprint and the pinned regression values in the tests change. The default dataset seed becomes the
+development seed 6101 (12.5), so the default configuration no longer reproduces the burned seed-5101 data. `tmpl-1`,
+`splits.py`, `policy_sim.py`, `policy_diagnostics.py` and `simpol-1` (SHA-256 unchanged) are not modified. No
+additional correction is made; the audit methodology is not changed in this step.
+
+**Implementation result (D3c-2; development seed 6101 only; descriptive; no model, no metric).** The confirmatory seed
+7101 and the reserve seeds 7102 and 7103 were not generated or inspected. Counts below use a template once per class
+it holds; the unchanged `synthgen-2` code was run on the same seed 6101 for the "before" columns.
+
+| Structure (templates, normal / suspicious) | `synthgen-2`, 250 | `synthgen-3`, 250 | `synthgen-2`, 2,000 | `synthgen-3`, 2,000 |
+|---|---|---|---|---|
+| First segment `files` | 0 / 7 | 7 / 6 | 0 / 73 | 76 / 39 |
+| DELETE, resource path, no query | 6 / 0 | 0 / 3 | 19 / 0 | 12 / 19 |
+| DELETE, resource path, text query | 0 / 0 | 3 / 1 | 0 / 0 | 19 / 11 |
+| SIM-P04 (DELETE on resource path) | 6 / 0 | 3 / 4 | 19 / 0 | 31 / 30 |
+| SIM-P07 (files path, authorization present) | 0 / 7 | 7 / 6 | 0 / 73 | 76 / 39 |
+| SIM-P06 (GET on status path) | 3 / 0 | 3 / 0 | 26 / 0 | 26 / 0 |
+| SIM-P12 (anonymous, protected path) | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+
+At 2,000 templates the only (method, path-category) cell with at least 3 templates in one class and none in the other
+is GET on status paths (the documented SIM-P06 limitation); in `synthgen-2` the cells for DELETE on resource paths and GET
+on files paths were also one-class-only.
+
+Development pilot (250 templates, seed 6101, split seed 4401): 1,466 records, 369 suspicious (25.2%); templates
+168 normal / 49 suspicious / 33 mixed, 32.8% containing a suspicious record; 455 hard-negative and 75 hard-positive
+records; 13 collapsed specs, no shortfall, no exact duplicates; generator fingerprint
+`908627770c1c07cabc3832a7e3720e80c0c60b6fa97607cd18b71b035388ec00`; train / validation / test 1,024 / 225 / 217
+records and 158 / 47 / 45 templates. Planned-scale development run (2,000 templates): 12,068 records, 3,253 suspicious
+(27.0%); templates 1,348 / 444 / 208; train / validation / test 8,450 / 1,811 / 1,807 records and 1,269 / 366 / 365
+templates. The non-model audit reports 0 errors and 0 warnings at both scales with the audit thresholds unchanged.
+Pilot token lengths (all records, descriptive only, not used to choose `max_length`; 12.8): Arm A mean 48.5, maximum 92;
+Arm B mean 85.5, maximum 132; at `max_length` 128, 5 Arm B requests are longer and none of Arm A.
+
+Remaining limitations, reported and not adjusted:
+- The design constants were not changed after the development data was read. At 2,000 templates the normal
+  no-query DELETE cell (12 templates) is smaller than the arithmetic estimate in this note (about 19), because
+  `/<resource>/<id>` has only 25 distinct normalized templates and collapses; the suspicious side of that cell has
+  19. Both classes are present, but not in equal numbers. At 250 templates the cell has no normal template (0 / 3), a
+  one-class cell at small support. Small cells such as DELETE on a `documents` path with a text query (0 / 3 at 2,000)
+  also remain. Whether to rebalance would be a further correction needing separate approval (section 11, item 14).
+- `..` and encoded separators remain the documented traversal anomaly, including on DELETE. Injection-like values
+  remain the documented anomaly in the text parameter.
+- GET on status paths stays one-class by construction (SIM-P06); SIM-P12 stays inert; `simpol-1` is unchanged.
+- `audit.py` has no path-category or method-by-category summary (section 11, item 10). The zero-warning audit result does
+  not show that the generator is free of leakage or shortcuts, and the cell counts above are a separate descriptive
+  check, not part of the audit. The audit report's `protocol` label still reads `heldout-eval-1.1.0-draft`; it was
+  not changed in this step.
+- The tokenizer limitation in 12.9 is unchanged: query-borne text remains inside one atomic path token for Arms A and B.
 
 ### 12.3 Simulated rule catalog `simpol-1`: unchanged
 
@@ -663,9 +758,9 @@ the confirmatory run, and what confirmatory evidence exists. It holds no perform
 | 4 | D3b | Pre-run decision | Simulated catalog `simpol-1` written; no condition refers to a label (section 3.1). |
 | 5 | D3b | Exploratory finding | Diagnostics on the `synthgen-2` pilot (seed 5101): SIM-P04, SIM-P06 and SIM-P07 aligned with one class; SIM-P12 had zero coverage; Arm B was truncated at `max_length` 128 and Arm A was not (section 3.1). No model was run. |
 | 6 | D3c | Design finding (code review, no data labels) | Review of the generator and tokenizer: a query string stays inside one atomic path token (12.9). |
-| 7 | D3c-1 | Design revision (recorded, not yet implemented) | `synthgen-3` with G1 and G2 (12.2); `simpol-1` kept (12.3); pilot marked exploratory and burned (12.4). |
+| 7 | D3c-1 | Design revision (recorded) | `synthgen-3` with G1 and G2 approved (12.2); `simpol-1` kept (12.3); pilot marked exploratory and burned (12.4). |
 | 8 | D3c-1 | Pre-run decision (recorded) | Seed plan (12.5), splitting and sealed test (12.6), scale (12.7), `max_length` rule (12.8), `request_to_context-v1` (12.9), Arm C definition (12.10), metric plan (12.11), manifest plan (12.12). |
-| 9 | Pending | Design revision | `synthgen-3` design note, then implementation. |
+| 9 | D3c-2 | Design revision (implemented) | G1/G2 implementation note written before any generator code was changed; `synthgen-3` / `synthetic-catalog-3` implemented; default dataset seed set to the development seed 6101; checked on the development seed only, structure and construction checks, no model (12.2.1). Structural before/after figures were read from the development seed after the design constants were fixed; the constants were not adjusted. |
 | 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; hyperparameter grids; decision rule and any margin; runner, budget-rule and manifest code. |
 | 11 | Pending | Pre-run decision | Write-once pre-run manifest, before any training or scoring. |
 | 12 | Pending | Confirmatory evidence | Confirmatory dataset (seed 7101), validation-only selection, one scored test run. **No confirmatory evidence exists yet.** |
