@@ -28,6 +28,7 @@
 | `1.2.0-draft` (D4-6C3) | **Documentation only: remaining scientific evaluation decisions recorded** (section 12.11.4): the primary A-versus-B evidence rule (paired 95% interval strictly above zero, margin zero), the bootstrap validity convention, the strict fail-closed pairing, truncation and exclusion policy, the one-time test gate with its crash policy, and the development-seed policy. No code, runner, manifest, selection record or data was created or changed; the runner, manifest, hashes and final verification are still pending; nothing is frozen. |
 | `1.2.0-draft` (D4-6D1) | **Runner foundation `runner-foundation-1` implemented** (`runner.py`, section 12.11.5): dataset and split validation, by-id label alignment, train-only vocabulary, budget and numerical configuration, the label-free representability preflight (fail-closed), pure validation-only candidate selection, a label-free `SealedTestSet`, and explicitly unavailable training and test-access gates. No model is fitted or scored, no manifest, selection record or attempt marker exists, no confirmatory data; no existing component changed; the test gate is **not** complete; nothing is frozen. |
 | `1.2.0-draft` (D4-6D2A) | **Write-once pre-run manifest `pre-run-manifest-1` implemented** (`manifest.py`, section 12.12.2): canonical JSON schema, exclusive-creation writer with fsync and byte read-back, and an independent verifier (external digest, live Git state, re-hashed sources, protocol and dataset bindings, numerical and statistical re-derivation, environment). Confirmatory manifests require a frozen, externally approved protocol, so none can be written while the protocol is a draft. No model is fitted or scored, no real manifest exists, the selection record and test gate are still unimplemented, and nothing is frozen. |
+| `1.2.0-draft` (D4-6D2B) | **Validation-selection record `validation-selection-record-1` implemented** (`selection_record.py`, section 12.12.3): canonical write-once record bound to the exact pre-run manifest digest, with an independent verifier that rebuilds the record from trusted validation evidence (27 candidates per arm, rounding and tie-break recomputed, selected AP, raw-logit F1 threshold and model fingerprint recomputed from the supplied fitted models). It never authorizes test scoring. No real record exists, no model is trained, the attempt marker and test gate are unimplemented, and nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -420,7 +421,7 @@ protocol is frozen.
 | 10 | Whether `audit.py` gains path-root and method-by-path-category summaries | **Implemented** (D4-0, section 12.2.2) as a separate descriptive field; audit thresholds, errors and warnings unchanged. |
 | 11 | Scope of label-conditioned audits relative to the sealed test split | **Open** (12.6). |
 | 12 | Whether development-seed (6101) dry runs report any detection metric | **Decided in D4-6C3 (12.11.4):** no detection-quality result is reported or used for any choice from seed 6101; permitted uses are listed there. |
-| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` (12.9.1), `budget-rule-1` (12.8.1) the Arm C encoder (12.10.1), the paired arm builders (12.12.1) and the metric and bootstrap functions (12.11.1) exist so far; the runner foundation (12.11.5), the numerical helpers (12.11.3) and the manifest writer and verifier (12.12.2) exist too; no real manifest has been written; model fitting, the selection record, the attempt marker and test scoring do not. |
+| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` (12.9.1), `budget-rule-1` (12.8.1) the Arm C encoder (12.10.1), the paired arm builders (12.12.1) and the metric and bootstrap functions (12.11.1) exist so far; the runner foundation (12.11.5), the numerical helpers (12.11.3) and the manifest writer and verifier (12.12.2) exist too; no real manifest has been written; the validation-selection record writer and verifier (12.12.3) exist; model fitting, the attempt marker and test scoring do not. |
 | 14 | Any generator correction beyond G1 and G2 | **Not approved.** Needs a documented reason and approval before the generator is fixed for the confirmatory study (12.2). |
 
 ## 12. Design decisions recorded in D3c-1 (documentation only)
@@ -1336,6 +1337,64 @@ clean repository at the expected commit and the trusted values; it cannot prove 
 repository, the expected values and the file at once. Hashes cover file content, not the Python interpreter or installed dependency versions beyond numpy/BLAS and the
 requirements files. The manifest records the train-only numerical estimates but not fitted model artefacts (those belong to the selection record).
 
+#### 12.12.3 Validation-selection record `validation-selection-record-1` (implemented in D4-6D2B)
+
+`tokenization_ai/heldout_eval/selection_record.py` implements the second write-once record of 12.11.4 item 4 and its verifier. It is infrastructure only: it
+fits and scores nothing, reads **no test label, score or prediction**, stores no request body, has produced **no real record**, and **does not authorize test
+scoring** (`SelectionVerification.authorizes_test_scoring` is always `False`; the runner's training and test gates are unchanged and still blocked; no attempt marker
+exists). Tests: `tests/tokenization_ai/test_selection_record.py` (mock fitted artifacts with explicitly assigned weights, development-seed structure, a throw-away Git
+repository; no confirmatory seed, no research metric). Lifecycle position: written after (future) authorized training and validation, before the one-time test gate.
+
+**Schema (canonical JSON, exactly these top-level fields).** `record_version`; `created_utc`; `manifest` (manifest version, **the externally established SHA-256 of the
+pre-run manifest**, purpose, protocol version and hash, Git branch and full commit, dataset seed, dataset and generator fingerprints, split seed and split manifest hash);
+`validation` (split name, record count, SHA-256 of the sorted validation record ids); `arms` for exactly `A_request_only`, `B_simulated_rules` and `C_char3`, each with
+`selected` (candidate id, `num_buckets`, `epochs`, `relative_step_c`, the manifest's train-only `learning_rate` and its hex form, full-precision and rounded validation
+AP, `lambda-power-1` provenance, number of candidates tied at the rounded AP), `candidates` (exactly the 27 approved candidates sorted by id, with parameters, learning
+rate, full-precision validation AP and the AP rounded to 10 decimals), `tie_break_trace` (survivors after each rule: highest rounded AP, fewer epochs, smaller
+`num_buckets`, smaller `c`, candidate id), `threshold` (below), `tie_diagnostics` (validation records, distinct score values, records in tied blocks, largest tied
+block) and `model` (artifact fingerprint, model source hash, `logit-readout-1`, input representation, readout-compatibility summary); `rules` and `statistics` (copies
+of the manifest's selection rules and statistical protocol, including the primary `AP(B) - AP(A)` contrast and the Arm C secondary definitions); `test_status` (all four
+flags `false`); `code` (hash of this module and of the model source); `vocabulary` and `budget` (the manifest's train-only vocabulary hash and frozen `max_length`);
+`limitations`. The threshold section records the rule, the **raw-logit scale** (`probability_threshold = false`), the value (`null` is the valid all-negative selection),
+the validation F1, the confusion counts, the five threshold metrics with explicit defined/undefined status and the number of candidates considered. A scan rejects any
+data-bearing field named label, score, prediction, logit or body, and any field with a `test` component other than the fixed status flags.
+
+**Model artifact fingerprint.** `model_artifact_fingerprint` binds a fitted `LightweightAnomalyModel` by its bucket count, the SHA-256 of its little-endian float64 weight
+bytes and its exact bias (`float.hex`). The model has no persistence interface, so artifacts are supplied to the writer and verifier as in-memory fitted models; writing
+them to disk is a later step.
+
+**Writer (`build_selection_record`, `write_selection_record`).** Building recomputes everything from the evidence (below) and never trusts a caller-provided "selected"
+flag or threshold object. Writing first verifies the pre-run manifest with the actual `manifest.verify_manifest_bytes` (external digest, clean Git tree, commit, source
+hashes, ...), then rebuilds the record independently and requires equality, and only then creates the file with exclusive creation (canonical bytes, flush, `fsync`, read-back,
+read-only), outside the repository, never overwriting; a failed write is left for review and blocks a silent retry. It returns the SHA-256 of the exact bytes.
+
+**Verifier (`verify_selection_record`, `verify_selection_record_bytes`).** Requires the **expected record SHA-256 from outside**, the manifest bytes with their **expected
+manifest SHA-256**, the `ExpectedRun`, the repository and a `ValidationEvidence` supplied by the caller from outside the record: the validation `ArmInputs` (encoded with the
+frozen vocabulary and budget), the validation labels by record id, the frozen vocabulary, the split result and **the fitted model selected for each arm**. It then rebuilds
+the entire record and compares field by field (floats within 1e-9 relative / 1e-12 absolute), reporting only field paths:
+- the manifest must pass its own verifier and equal the digest named by the record; every manifest identity field in the record must equal the manifest;
+- the 27 candidates per arm must match the manifest's candidate table (identifier, parameters, train-only learning rate), and `runner.select_candidate` is re-run so the
+  AP rounding to 10 decimals, the tie-break order and the winner are recomputed, not read;
+- the selected candidate's validation AP, the F1 threshold (`detection_metrics.select_threshold`), its confusion counts, metric statuses and the score-tie diagnostics are
+  **recomputed from the supplied model's raw logits (`logit-readout-1`) on the supplied validation inputs and labels only**; the readout is checked against `predict()` on an
+  evenly spaced sample of non-saturated inputs;
+- the model fingerprint is recomputed from the supplied model; a missing, extra, unfitted, substituted, stale or wrongly sized model is rejected;
+- the validation count, id hash and split binding must agree with the manifest (count, budget, vocabulary hash, split manifest hash) and with the supplied split result;
+- test-derived content, wrong status flags, duplicate keys, non-canonical or partial bytes are rejected.
+There is no mode that skips the recomputation and no permissive verifier.
+
+**Trust boundaries (stated, not hidden).** (1) The validation APs of the 26 non-selected candidates cannot be recomputed without their models; they are checked for
+consistency with the selection rules and the manifest, but remain claims of the training stage. Only the selected candidate per arm is independently recomputed.
+(2) A threshold can only be shown to come from validation data because the verifier recomputes it from validation inputs and labels that the caller supplies; the caller
+must derive them from the verified split. (3) `selection_record.py` is not in the manifest's default source list (the manifest predates it), so the record carries this
+file's SHA-256 and the verifier compares it with the live file; adding it to the manifest list is a recommended later change to `manifest.py`. (4) The pre-run manifest
+records the validation record count but not a validation id hash; the id hash is bound through the supplied split result and the manifest's split hash. (5) Verification cannot
+prove that no test data was seen by the training process.
+
+**Remaining unavailable before a confirmatory experiment.** The protocol freeze and a real manifest; the training authorization wiring and the training and validation stage
+that produce candidate results and models; model-artifact persistence; the atomic one-time test-attempt marker and the label-recovery and unsealing gate; the failure-report
+format; test scoring, the test-side bootstrap and the final report.
+
 ## 13. Chronological record
 
 This record separates what was found in exploratory data, what was revised in the design, what was decided before
@@ -1359,6 +1418,7 @@ the confirmatory run, and what confirmatory evidence exists. It holds no perform
 | 9e | D4-6C3 | Pre-run decision (recorded) | Primary evidence rule, bootstrap validity convention, strict pairing and fail-closed truncation policy, one-time test gate and crash policy, development-seed policy (12.11.4). No code, no score. |
 | 9f | D4-6D1 / D4-6D1R | Design revision (implemented, then corrected before commit) | Runner foundation written (12.11.5) and tested on development-seed structure and hand-made selection fixtures; test access and training authorization are explicitly unavailable. Safety review: test labels replaced by the invalid sentinel `-1` and a split binding added; the preflight no longer builds Arm C or any `ModelInput`. No fit, no score, no manifest. |
 | 9g | D4-6D2A | Design revision (implemented) | Manifest writer and verifier written (12.12.2) and tested with development-seed objects and throw-away repositories; confirmatory manifests are gated on a frozen protocol. No real manifest, no fit, no score. |
+| 9h | D4-6D2B | Design revision (implemented) | Validation-selection record writer and verifier written (12.12.3) and tested with mock fitted artifacts, development-seed structure and a throw-away repository. No real record, no fit, no score, no test gate. |
 | 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; runner and manifest code (estimator and logit extraction: D4-6C2, 12.11.3). |
 | 11 | Pending | Pre-run decision | Write-once pre-run manifest, before any training or scoring. |
 | 12 | Pending | Confirmatory evidence | Confirmatory dataset (seed 7101), validation-only selection, one scored test run. **No confirmatory evidence exists yet.** |
