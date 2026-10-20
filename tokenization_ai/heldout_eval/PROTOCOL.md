@@ -27,6 +27,7 @@
 | `1.2.0-draft` (D4-6C2) | **`lambda-power-1` and `logit-readout-1` implemented** (`numerics.py`, section 12.11.3): the training-only eigenvalue estimator with arm-relative learning rates, and a faithful raw-logit readout of the unchanged `LightweightAnomalyModel`. Tested on hand-made inputs and explicitly assigned weights; a label-free check on development seed 6101 (training split) matched the D4-6B measurements. No model is fitted or scored, no runner or manifest exists, no confirmatory data; no production, arm, metric, budget, generator, audit or split change; nothing is frozen. |
 | `1.2.0-draft` (D4-6C3) | **Documentation only: remaining scientific evaluation decisions recorded** (section 12.11.4): the primary A-versus-B evidence rule (paired 95% interval strictly above zero, margin zero), the bootstrap validity convention, the strict fail-closed pairing, truncation and exclusion policy, the one-time test gate with its crash policy, and the development-seed policy. No code, runner, manifest, selection record or data was created or changed; the runner, manifest, hashes and final verification are still pending; nothing is frozen. |
 | `1.2.0-draft` (D4-6D1) | **Runner foundation `runner-foundation-1` implemented** (`runner.py`, section 12.11.5): dataset and split validation, by-id label alignment, train-only vocabulary, budget and numerical configuration, the label-free representability preflight (fail-closed), pure validation-only candidate selection, a label-free `SealedTestSet`, and explicitly unavailable training and test-access gates. No model is fitted or scored, no manifest, selection record or attempt marker exists, no confirmatory data; no existing component changed; the test gate is **not** complete; nothing is frozen. |
+| `1.2.0-draft` (D4-6D2A) | **Write-once pre-run manifest `pre-run-manifest-1` implemented** (`manifest.py`, section 12.12.2): canonical JSON schema, exclusive-creation writer with fsync and byte read-back, and an independent verifier (external digest, live Git state, re-hashed sources, protocol and dataset bindings, numerical and statistical re-derivation, environment). Confirmatory manifests require a frozen, externally approved protocol, so none can be written while the protocol is a draft. No model is fitted or scored, no real manifest exists, the selection record and test gate are still unimplemented, and nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -419,7 +420,7 @@ protocol is frozen.
 | 10 | Whether `audit.py` gains path-root and method-by-path-category summaries | **Implemented** (D4-0, section 12.2.2) as a separate descriptive field; audit thresholds, errors and warnings unchanged. |
 | 11 | Scope of label-conditioned audits relative to the sealed test split | **Open** (12.6). |
 | 12 | Whether development-seed (6101) dry runs report any detection metric | **Decided in D4-6C3 (12.11.4):** no detection-quality result is reported or used for any choice from seed 6101; permitted uses are listed there. |
-| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` (12.9.1), `budget-rule-1` (12.8.1) the Arm C encoder (12.10.1), the paired arm builders (12.12.1) and the metric and bootstrap functions (12.11.1) exist so far; the runner foundation (12.11.5) and the numerical helpers (12.11.3) exist too; model fitting, the manifest, the selection record, the attempt marker and test scoring do not. |
+| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` (12.9.1), `budget-rule-1` (12.8.1) the Arm C encoder (12.10.1), the paired arm builders (12.12.1) and the metric and bootstrap functions (12.11.1) exist so far; the runner foundation (12.11.5), the numerical helpers (12.11.3) and the manifest writer and verifier (12.12.2) exist too; no real manifest has been written; model fitting, the selection record, the attempt marker and test scoring do not. |
 | 14 | Any generator correction beyond G1 and G2 | **Not approved.** Needs a documented reason and approval before the generator is fixed for the confirmatory study (12.2). |
 
 ## 12. Design decisions recorded in D3c-1 (documentation only)
@@ -1282,6 +1283,59 @@ wherever it is reported. Results are synthetic held-out performance on the autho
 support claims of real-world attack-detection quality, performance on real traffic, Member 2 or Member 3 integration,
 KPI 5, or calibrated probabilities (section 9).
 
+#### 12.12.2 Pre-run manifest `pre-run-manifest-1` (implemented in D4-6D2A)
+
+`tokenization_ai/heldout_eval/manifest.py` implements the write-once manifest writer and its independent verifier. It is infrastructure only: it trains and
+scores nothing, generates no dataset, reads **no test label, score or prediction**, stores no request body, and has produced **no real confirmatory manifest**
+(the protocol is still a draft, so none can exist yet; seeds 7101-7103 unused). Tests: `tests/tokenization_ai/test_manifest.py` (development-seed objects,
+throw-away Git repositories in temporary directories). The runner's training and test gates are unchanged and still blocked.
+
+**Schema (`pre-run-manifest-1`, canonical JSON; exactly these top-level fields).** `manifest_version`; `purpose` (`confirmatory` or `infrastructure_test`)
+and `confirmatory`; `created_utc`; `protocol` (header version, `DRAFT` or `FROZEN`, SHA-256 of the file, `approved_for_confirmatory`); `git` (branch, full commit,
+`clean`, untracked files considered); `sources` and `config_files` (path to LF-normalized SHA-256; 22 Member 4 source files and the two requirements files by
+default); `data` (generator version/config/fingerprint, catalog and template versions, dataset seed, split `dataset_fingerprint`, split seed, ratios and parameters,
+split manifest hash, train/validation/test counts, splitter exclusions, audit summary, isolation check, `simpol-1` version and hash, reserve-seed log);
+`arms` (`arms-1` and arm identifiers, `request_to_context-v1`, `armc-char3-v1` parameters, `simpol-1` not-verified provenance, runner id, train-only vocabulary
+record and settings, `budget-rule-1` decision, paired alignment hashes, the label-free preflight report); `numerics` (`lambda-power-1` and `logit-readout-1`
+provenance, the 9 train-only eigenvalue estimates with convergence diagnostics, the learning-rate table, the 81 candidates, the approved grids); `selection`
+(validation-AP rule, 10-decimal rounding, tie-break order, validation-only F1 threshold rule, fixed vocabulary settings); `statistics` (the primary
+`AP(B) - AP(A)` contrast, the zero-margin rule, the bootstrap specification, secondary contrasts, the fail-closed policy, interpretation); `environment`
+(Python, numpy, BLAS, SIMD baseline, platform, thread variables); `limitations`. The test side holds only record count, group count and the id-list hash
+(`data.counts.test`); no label count, score or prediction is recorded, a scan rejects data-bearing fields named label, score, prediction, logit or body,
+and the protocol status is recorded as it is (a draft is never described as frozen).
+
+**Writer (`write_manifest`) - write-once semantics.** It validates the schema and internal consistency, runs the same independent checks as the verifier, and
+only then creates the file with **exclusive creation** as canonical JSON (sorted keys, compact separators, ASCII, `allow_nan=False`, one trailing newline),
+flushes and `fsync`s it, reads it back, compares the bytes, marks it read-only and returns the SHA-256 of the exact bytes. An existing path is never
+overwritten; the path must be outside the repository (so writing cannot dirty the tree it certifies) and its directory must exist. If a write fails after the file
+exists the file is **left in place** and the call raises `ManifestWriteError`: nothing is repaired or replaced silently, and the leftover blocks a retry until reviewed.
+
+**Verifier (`verify_manifest`, `verify_manifest_bytes`) - trust model.** A digest inside a manifest proves nothing. Verification therefore requires the
+**expected SHA-256 of the file bytes from outside**, trusted `ExpectedRun` values (purpose, branch, full commit, dataset seed, generator fingerprint, split
+`dataset_fingerprint`, split seed, split manifest hash, and for a confirmatory run the approved protocol hash), and re-derives everything else: the working tree
+must be **clean** according to `git` itself (untracked files count); branch and commit are read from the repository and must equal both the expected and the
+recorded values; every source and configuration file is re-hashed from its exact content and the file lists come from code constants or trusted parameters,
+not from the manifest; the protocol header and hash are re-read; versions, grids, the learning-rate arithmetic (`c / L` recomputed bit-exactly, `L = lambda_max / 4`),
+the statistical protocol, the selection rules and the limitations are re-derived from the code and compared; and the environment is compared with the running
+one (a mismatch raises `EnvironmentMismatchError` unless the caller explicitly allows it, in which case the differences are returned). Bytes must parse
+strictly and be canonical (no duplicate keys, NaN, infinity, reformatting or trailing data). Any mismatch stops with `ManifestVerificationError`; messages
+name fields and categories, never values.
+
+**Frozen-protocol gate.** A `confirmatory` manifest requires a protocol file whose header says `Status: FROZEN`, an externally supplied approved SHA-256 equal to
+that file's hash (`ProtocolNotFrozenError` otherwise), and a dataset seed in the confirmatory plan; an `infrastructure_test` manifest may use a draft but may not use a
+confirmatory seed, and a verifier expecting a confirmatory run rejects it. Because `PROTOCOL.md` is a draft, no confirmatory manifest can currently be written or
+verified. The freeze itself (editing the status, approving its hash) is a later, separate decision.
+
+**Intended timing (unchanged from 12.12).** Protocol and code frozen and committed; the confirmatory dataset generated once; construction, audit and split checks; the
+train-only vocabulary, budget and numerical configuration; the label-free preflight of train, validation and blinded test requests; then **write and verify this
+manifest**; only afterwards may model training begin (through the still-blocked `runner.request_training_authorization`, which is not wired to this module).
+
+**Not implemented / limitations.** The validation-selection record and its verifier; the persistent atomic test-attempt marker and unsealing; connecting a verified
+manifest to the runner's training gate; the failure-report format; the actual freeze and a real manifest. Verification proves the recorded state equals the live,
+clean repository at the expected commit and the trusted values; it cannot prove that a process never saw test data, nor protect against someone who controls the
+repository, the expected values and the file at once. Hashes cover file content, not the Python interpreter or installed dependency versions beyond numpy/BLAS and the
+requirements files. The manifest records the train-only numerical estimates but not fitted model artefacts (those belong to the selection record).
+
 ## 13. Chronological record
 
 This record separates what was found in exploratory data, what was revised in the design, what was decided before
@@ -1304,6 +1358,7 @@ the confirmatory run, and what confirmatory evidence exists. It holds no perform
 | 9d | D4-6C2 | Design revision (implemented) | `lambda-power-1` estimator, relative learning-rate table and `logit-readout-1` written (12.11.3) and tested on hand-made inputs; label-free development check on seed 6101 (training split) reproduced the D4-6B eigenvalues. No model fit, no score. |
 | 9e | D4-6C3 | Pre-run decision (recorded) | Primary evidence rule, bootstrap validity convention, strict pairing and fail-closed truncation policy, one-time test gate and crash policy, development-seed policy (12.11.4). No code, no score. |
 | 9f | D4-6D1 / D4-6D1R | Design revision (implemented, then corrected before commit) | Runner foundation written (12.11.5) and tested on development-seed structure and hand-made selection fixtures; test access and training authorization are explicitly unavailable. Safety review: test labels replaced by the invalid sentinel `-1` and a split binding added; the preflight no longer builds Arm C or any `ModelInput`. No fit, no score, no manifest. |
+| 9g | D4-6D2A | Design revision (implemented) | Manifest writer and verifier written (12.12.2) and tested with development-seed objects and throw-away repositories; confirmatory manifests are gated on a frozen protocol. No real manifest, no fit, no score. |
 | 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; runner and manifest code (estimator and logit extraction: D4-6C2, 12.11.3). |
 | 11 | Pending | Pre-run decision | Write-once pre-run manifest, before any training or scoring. |
 | 12 | Pending | Confirmatory evidence | Confirmatory dataset (seed 7101), validation-only selection, one scored test run. **No confirmatory evidence exists yet.** |
