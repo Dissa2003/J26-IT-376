@@ -25,6 +25,7 @@
 | `1.2.0-draft` (D4-5) | **Detection metrics and paired group bootstrap implemented** (`detection_metrics.py`, `detection-metrics-1`, section 12.11.1): step-wise Average Precision, ROC-AUC, threshold metrics, validation-only F1 threshold selection and a paired normalized-template-group bootstrap of AP(B) - AP(A). Tested on hand-made arrays only: no model is fitted or scored, no real detection metric exists, no development or confirmatory scoring, no success margin; no arm, encoder, generator, policy, audit, split or production change; nothing is frozen. |
 | `1.2.0-draft` (D4-6C1) | **Documentation only: optimization and score-selection decisions recorded** (section 12.11.2): arm-relative learning rates `lr = c / L` with `c` in {0.1, 0.3, 0.8}, the 27-candidate shared grid, validation-AP selection with a fixed tie-break order, raw-logit ranking scores for the held-out evaluation, and numerical-provenance requirements. Informed by the label-free D4-6B diagnostic on development seed 6101. No code, model, dataset, manifest or confirmatory data was created or changed; several items remain open; nothing is frozen. |
 | `1.2.0-draft` (D4-6C2) | **`lambda-power-1` and `logit-readout-1` implemented** (`numerics.py`, section 12.11.3): the training-only eigenvalue estimator with arm-relative learning rates, and a faithful raw-logit readout of the unchanged `LightweightAnomalyModel`. Tested on hand-made inputs and explicitly assigned weights; a label-free check on development seed 6101 (training split) matched the D4-6B measurements. No model is fitted or scored, no runner or manifest exists, no confirmatory data; no production, arm, metric, budget, generator, audit or split change; nothing is frozen. |
+| `1.2.0-draft` (D4-6C3) | **Documentation only: remaining scientific evaluation decisions recorded** (section 12.11.4): the primary A-versus-B evidence rule (paired 95% interval strictly above zero, margin zero), the bootstrap validity convention, the strict fail-closed pairing, truncation and exclusion policy, the one-time test gate with its crash policy, and the development-seed policy. No code, runner, manifest, selection record or data was created or changed; the runner, manifest, hashes and final verification are still pending; nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -177,7 +178,8 @@ not a defect; they limit what a score can mean:
 
 All arms use the same model family and hyperparameter grid with an equal tuning budget. The vocabulary
 is fitted on the training split only, separately per arm. A record that any arm rejects (for example its
-framing exceeds `max_length`) is removed from **all** arms and reported, so comparisons stay paired.
+framing exceeds `max_length`) is removed from **all** arms and reported, so comparisons stay paired. *(Superseded in D4-6C3, section 12.11.4: no
+record is removed; a record the frozen budget cannot represent stops the affected stage for protocol review.)*
 
 **Simulated rules do not prove the value of genuine Member 2 verified rules.** A rule derived
 deterministically from the request adds no information beyond the request; a difference between A and B
@@ -370,7 +372,7 @@ and is not a primary or required result.
 - **Score semantics:** the model score is uncalibrated and is not an attack probability.
 - **No numeric success target** is set. A decision rule for "B improves on A" (for example a paired
   grouped-bootstrap interval for the PR-AUC difference excluding zero, and its margin) must be pre-registered
-  before the scored run. The comparison plan and what is still undecided are in section 12.11.
+  before the scored run. The comparison plan is in section 12.11; the evidence rule recorded in D4-6C3 is in section 12.11.4.
 
 ## 8. Retraining
 
@@ -405,7 +407,7 @@ protocol is frozen.
 | # | Item | Status |
 |---|---|---|
 | 1 | Review of the pilot statistics and audit warnings; revise the generator under a new version | **Implemented** (D3c-2): `synthgen-3` with corrections G1 and G2, design note and development-seed results in 12.2.1. The confirmatory dataset is not generated. |
-| 2 | Decision rule and margin for A versus B; shortcut-flag handling | **Open.** Comparison plan recorded (12.11); the rule and any margin are fixed before the confirmatory scored run. |
+| 2 | Decision rule and margin for A versus B; shortcut-flag handling | Evidence rule **recorded as an accepted draft decision** in D4-6C3 (12.11.4): paired 95% interval strictly above zero, margin zero. Shortcut-flag handling remains as in 12.2-12.3. Not frozen until the manifest. |
 | 3 | Arm C | **Included** (12.10). Model-class compatibility and the feature-budget policy are **open** until checked before coding. A flat-versus-structure-aware tokenization ablation is **not included** and remains open. |
 | 4 | Leave-family-out split | **Open**, not decided. |
 | 5 | `max_length` identical across arms from training-split statistics only | **Rule decided and implemented** (12.8, 12.8.1); the value is computed later from the confirmatory training split. Header handling is identical across arms by sharing `request_to_context-v1` (12.9). |
@@ -415,7 +417,7 @@ protocol is frozen.
 | 9 | Hyperparameter grids, selection criterion, threshold rule, bootstrap settings (resamples, seed) | Threshold rule (maximum validation F1) and bootstrap settings (2,000 resamples, seed 8201, 95% percentile interval, minimum-valid rule) **implemented as draft** in D4-5 (12.11.1). The hyperparameter grid, the model selection criterion with its tie-break order, arm-relative learning rates and the ranking score are **recorded as accepted draft design decisions** in D4-6C1 (12.11.2); the bootstrap minimum-valid rule stays open pending final freeze; nothing is fixed until the manifest (12.12). |
 | 10 | Whether `audit.py` gains path-root and method-by-path-category summaries | **Implemented** (D4-0, section 12.2.2) as a separate descriptive field; audit thresholds, errors and warnings unchanged. |
 | 11 | Scope of label-conditioned audits relative to the sealed test split | **Open** (12.6). |
-| 12 | Whether development-seed (6101) dry runs report any detection metric | **Open.** Until decided, none is reported (12.5). |
+| 12 | Whether development-seed (6101) dry runs report any detection metric | **Decided in D4-6C3 (12.11.4):** no detection-quality result is reported or used for any choice from seed 6101; permitted uses are listed there. |
 | 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` (12.9.1), `budget-rule-1` (12.8.1) the Arm C encoder (12.10.1), the paired arm builders (12.12.1) and the metric and bootstrap functions (12.11.1) exist so far; the runner and manifest tool do not. |
 | 14 | Any generator correction beyond G1 and G2 | **Not approved.** Needs a documented reason and approval before the generator is fixed for the confirmatory study (12.2). |
 
@@ -638,8 +640,8 @@ A reserve seed may be used **only** when all of the following hold:
 The failed seed's dataset is burned and is not used. Association warnings, shortcut statistics, unfavourable
 distributions and any model output are **not** reasons to use a reserve seed. If 7103 also fails, work stops and the
 protocol is revised before any further generation. Development-seed (6101) runs are for debugging and construction
-checks; they are not reported as results and do not select final hyperparameters. Whether such runs may print any
-detection metric is an open item (section 11, item 12): until decided, none is reported.
+checks; they are not reported as results and do not select final hyperparameters. The development-seed metric
+policy was decided in D4-6C3 (section 12.11.4): no detection-quality result is reported or used to choose anything.
 
 ### 12.6 Splitting and the sealed test split
 
@@ -676,7 +678,8 @@ training-split Arm B sequence no longer than the chosen value.
   revised under a new protocol version.
 - A record that any arm rejects (for example because its framing does not fit) is removed from **all** arms and
   reported (section 3). Truncation rates per arm on validation and test are reported, because validation and test
-  sequences can exceed the training maximum.
+  sequences can exceed the training maximum. *(Superseded in D4-6C3, section 12.11.4: nothing is removed or truncated; a record the frozen budget
+  cannot represent in full stops the affected stage for protocol review, and the budget is never raised from validation or test lengths.)*
 - The value is computed after the confirmatory dataset exists and recorded in the manifest (12.12). It is not
   computed in this step.
 
@@ -854,7 +857,8 @@ and `encoder_parameters()` (the fixed configuration, for the manifest). It build
   the same machinery and are reported descriptively, not as the primary claim.
 - **No success margin is set.** The final decision rule for "B improves on A", and any margin, are **fixed before the
   confirmatory scored run** and recorded in the manifest. No improvement is claimed before results exist. "No
-  difference" and "B worse than A" are acceptable outcomes.
+  difference" and "B worse than A" are acceptable outcomes. *(The rule and its zero margin were recorded in D4-6C3, section 12.11.4; they are
+  still part of a draft and are frozen only by the manifest.)*
 - Score semantics are unchanged: the score is uncalibrated and is not an attack probability.
 
 #### 12.11.1 Detection metrics `detection-metrics-1` (implemented in D4-5)
@@ -887,7 +891,7 @@ development-seed or confirmatory score exists, and the confirmatory seeds were n
   match the interval level, not tuned on any result; because invalid replicates are dropped, the interval is conditional on the resample containing
   a positive.
 - **No success margin.** Nothing here decides whether B improves on A. The decision rule and any margin are still fixed before the confirmatory
-  scored run (section 12.11).
+  scored run (section 12.11). *(Recorded in D4-6C3, section 12.11.4.)*
 - **Scope of the interval.** It describes only the sampling variability of the synthetic generator under group resampling of one generated dataset
   and one split. It ignores model-fitting, hyperparameter, threshold and dataset-seed variability, is rough with few groups, and supports no
   real-world detection claim. Scores are uncalibrated ranking scores, and Arm B's simulated rules are not Member 2 verified rules.
@@ -962,11 +966,11 @@ per arm and bucket count; the shared relative-step grid; Python and numpy versio
 hyperparameter grid and tie-breaking rules; and the SHA-256 of the model source (`model.py`) and of the other sources listed in 12.12.
 
 **Decision 6 - matters deliberately kept open (nothing here is silently frozen).**
-- The confirmatory A-versus-B success rule and any margin (12.11).
-- The paired exclusion and truncation policy for records the frozen budget cannot represent (12.8.1, 12.12.1).
-- The bootstrap minimum-valid-replicate rule (12.11.1) pending final freeze.
-- The test-scoring crash and recovery policy (including what happens after an interrupted scoring run).
-- Whether development-seed (6101) scoring may report any detection metric (section 11, item 12).
+- The confirmatory A-versus-B success rule and any margin (12.11). *Since decided in D4-6C3 (12.11.4).*
+- The paired exclusion and truncation policy for records the frozen budget cannot represent (12.8.1, 12.12.1). *Since decided in D4-6C3.*
+- The bootstrap minimum-valid-replicate rule (12.11.1) pending final freeze. *Convention confirmed in D4-6C3; frozen only by the manifest.*
+- The test-scoring crash and recovery policy (including what happens after an interrupted scoring run). *Since decided in D4-6C3.*
+- Whether development-seed (6101) scoring may report any detection metric (section 11, item 12). *Since decided in D4-6C3.*
 - The runner, estimator, logit extraction, manifest and selection-record implementations, and the final protocol freeze.
 
 No confirmatory experiment may start until these are resolved and documented.
@@ -1036,6 +1040,90 @@ and SHA-256 of `numerics.py` and `model.py`. The pre-run manifest (12.12) must r
 learning-rate table, the shared relative-step grid and the environment items of 12.11.2, Decision 5. The manifest, the runner and the selection record are
 not implemented; nothing is frozen.
 
+#### 12.11.4 Remaining scientific decisions (recorded in D4-6C3; documentation only)
+
+**Status: accepted draft decisions, not a protocol freeze.** No runner, manifest, selection record or scoring gate exists; no model was fitted or
+scored and no confirmatory data was generated (seeds 7101-7103 unused). The protocol is frozen only when the runner code, manifest implementation,
+source hashes, final verification and the pre-run manifest exist and are approved (12.12). Retained unchanged: everything in 12.11.2 (relative-step
+learning-rate grid `c` in {0.1, 0.3, 0.8}, `num_buckets` {1024, 2048, 4096}, `epochs` {50, 150, 400}, train-only vocabulary with `min_frequency = 2`,
+raw-logit ranking, validation-AP selection with its tie-break order, fresh model per candidate), the validation-only F1 threshold rule (12.11.1), the
+strict sealing of the test split (12.6) and the synthetic-only limitations (section 9, 12.13).
+
+**1. Primary A-versus-B evidence rule.** The primary contrast is `AP(B_simulated_rules) - AP(A_request_only)` on the test split, with the paired
+normalized-template-group bootstrap of 12.11.1. It is one contrast with one decision; every other comparison, including anything involving Arm C, is
+secondary and descriptive.
+- *Evidence of synthetic Arm B improvement* only if the bootstrap `status` is `ok` and the **whole** reported 95% percentile interval lies strictly above
+  zero (lower end greater than 0). The prespecified margin is **zero**; no minimum effect is set or invented.
+- *Interval entirely below zero (upper end less than 0):* reported as possible worse synthetic performance of Arm B; not interpreted further.
+- *Otherwise (the interval contains zero):* the observed difference and its interval are reported and no improvement is claimed.
+- *Not estimable* (`insufficient_valid_replicates` or `undefined_point_estimate`): the result is **inconclusive**.
+- The point estimate, both Average Precisions and the interval are always reported together; the decision uses the interval only. A zero margin means
+  a statistically distinguishable but practically negligible gain would still be classified as evidence of improvement; the size of the effect is read
+  from the interval, and no practical-importance claim is made.
+- This is a **study-specific evidence rule**, not proof of real-world improvement. Arm B uses simulated rules that are deterministic functions of the
+  request (`simpol-1`), not genuine Member 2 verified rules, so the rule cannot show the value of verified rules. "No difference" and "B worse than A"
+  are acceptable outcomes. The interval describes synthetic-generator sampling uncertainty over template groups only (12.11.1).
+
+**2. Bootstrap validity.** Retained: 2,000 paired template-group replicates, seed 8201, 95% percentile interval, mixed-label groups kept intact,
+undefined replicates tracked and never replaced. The minimum of 95% valid replicates (1,900 of 2,000) for an estimable interval is a **prespecified
+convention**, not a statistical theorem, and is not tuned on any result. Invalid replicates (resamples without a positive record) are dropped, so the
+interval is conditional on a resample containing a positive. As a design-level observation, with several hundred test template groups of which about one
+third hold a suspicious record (2.4, 12.7), such resamples should be very rare; if they are not, the status is reported as it is.
+
+**3. Paired exclusion, truncation and representability (fail-closed).** All three arms contain exactly the same requested records (`ArmInputs` already
+refuses any other pairing).
+- *No automatic exclusion* based on scores, predictions or labels, and no silent paired removal. Nothing is removed from any arm, truncated by choice
+  or re-budgeted.
+- If the frozen `max_length` cannot represent a request of Arm A or B **in full** (the tensorizer outcome is `truncated`, so payload fields would be
+  dropped, or `rejected`, so framing plus rules cannot fit), the runner reports the affected record ids, the arms and the counts (ids and counts only,
+  never request content) and **stops the affected stage** for protocol review. Arm C has no budget and is unaffected.
+- The budget is chosen from the training split only (`budget-rule-1`) and is never raised from validation or test lengths. Training cannot trigger this
+  stop: the budget fits the longest training Arm B sequence and Arm A is a subsequence of Arm B.
+- *Timing.* The check uses only request content and the frozen budget (token counts and tensorizer outcomes; no label and no score). It is run once for
+  validation and test before the manifest and before any training (12.12, step 2), and its result is recorded in the manifest. It does expose the
+  lengths of test requests, but not their labels or any score. If it fails there is no automatic remedy: any change (for example a different budget grid)
+  is a new protocol version decided by review with that exposure disclosed, and the manifest is not written under the failed configuration.
+- If the issue is discovered after the one-time test gate (item 4) has been consumed, the experiment is **not** rerun or modified automatically; the
+  failure follows the crash and review policy of item 4.
+- *Compatibility with the current code (checked in D4-6C3).* `arms.py` already fails closed for `rejected` records (`PairedExclusionRequired`, ids and
+  reasons only), and `ArmInputs` carries the per-record outcomes `outcomes_a` and `outcomes_b` aligned with `record_ids`. The runner can therefore
+  enforce "any outcome other than `fits` stops" and list the ids without changing `arms.py`, `token_budget.py`, the tensorizer or any production file.
+  The builder's tolerance of truncation is a code behavior that the runner must override by checking those outcomes; it is not a study policy. No
+  conflict requiring production changes was found.
+- *Superseded earlier statements:* "removed from all arms and reported" (section 3, 12.8), the removal proposals described for `ExclusionProposal`
+  (12.12.1) and the statement that truncated records are allowed and counted (12.12.1) no longer describe the study policy. Over-budget and truncation
+  counts are still reported; the policy expects them to be zero.
+
+**4. One-time test gate and crash policy.**
+- *Records.* A write-once pre-run manifest and a second write-once validation-selection record are approved (12.12). The second record holds the
+  selected hyperparameters per arm, validation-only results, frozen thresholds, the budget and vocabulary records, the manifest hash, and a statement
+  that no test label or score was accessed. Neither is implemented yet.
+- *Gate.* Test scoring requires **both** records to verify successfully (hashes, source files, configuration and mutual reference). Only then is the
+  one-time attempt marker created **atomically** (exclusive creation, so a second creation fails) and **before** any test label is exposed or any test
+  input is scored. The marker is never deleted or overwritten by code.
+- *Crash.* A crash or failure after the marker exists must **not** trigger another test run automatically. It requires a documented failure report and
+  an explicit manual methodological review before any recovery decision. A rerun of the identical frozen computation (same verified artifacts, no
+  changed choice) may be considered only if no test score or metric was observed beforehand, only for an infrastructure failure, and only after the
+  review is recorded. It must never be used because a result is unfavourable or unexpected. If any test result was seen, no rerun is allowed.
+- *Reserve seeds.* 7102 and 7103 remain restricted to the pre-training construction and infrastructure failures of 12.5 and are never a post-scoring
+  retry.
+- *Limit.* Atomic creation and hash checks prevent accidental or automatic reuse and make tampering visible; they cannot prove that a process never saw
+  test data, so the signature-level separation of 12.6 and the record contents matter too. The failure-report format is left to the runner design.
+
+**5. Development-seed policy (section 11, item 12).** Seed 6101 may be used for preprocessing checks, interface and pipeline smoke tests, label-free
+numerical diagnostics (as in D4-6B and D4-6C2) and synthetic construction checks. **No detection-quality result is reported from it, and no
+experimental choice (grid, learning rate, threshold rule, budget, exclusion rule, decision rule) is tuned on development-seed model scores.** A smoke
+test may be checked only for shape, finiteness, determinism and absence of errors; any metric it incidentally produces is discarded and not recorded
+as a result. Metric unit tests on small manually constructed score arrays remain permitted. The burned seed 5101 stays excluded (12.4).
+
+**6. Consistency.** The decisions above add rules and supersede only the earlier statements named in item 3, each marked where it appears. Nothing in
+12.2-12.10 changes, and no conflict with the existing arms, budget, tensorizer, metrics or numerics code was found.
+
+**Still open before a freeze (nothing here is silently frozen).** The runner, manifest, selection-record and scoring-gate implementations; the
+failure-report format and the manual-review procedure; the manifest source hashes and the final verification; the scope of label-conditioned audits on
+the test split (section 11, item 11); and the final decision to generate the confirmatory dataset and freeze. No confirmatory experiment may start
+before these are resolved and documented.
+
 ### 12.12 Evaluation provenance and the write-once pre-run manifest (plan)
 
 **This step creates no manifest.** The pre-run manifest is written **once**, only after all relevant runner, arm,
@@ -1052,9 +1140,12 @@ Planned order:
    used.
 3. Write the manifest.
 4. Train and select using training and validation data only. Record the selected hyperparameters, threshold and the
-   hashes of the fitted artifacts in a second write-once record **before** the test split is scored (planned; to be
-   confirmed when the runner is reviewed).
-5. Score the test split once.
+   hashes of the fitted artifacts in a second write-once record **before** the test split is scored (approved in D4-6C3,
+   section 12.11.4; the record's implementation is pending).
+5. Score the test split once, only after both records verify and the atomic one-time attempt marker exists (12.11.4).
+
+D4-6C3 clarification of step 2: the representability check of validation and test requests against the frozen budget (12.11.4, item 3) belongs
+here, before the manifest and before any training, so that a problem is found while nothing has been fitted.
 
 The manifest records at least:
 
@@ -1099,7 +1190,8 @@ confirmatory data.
   parameters, training record count) is for the manifest.
 - **Shared budget and exclusions.** The caller selects one `BudgetDecision` with `budget-rule-1` from `training_arm_b_lengths`; the builder never
   chooses a length itself. The same `max_length` is applied to Arm A and Arm B with the real `Tensorizer`. Records that need payload truncation are
-  allowed and counted per arm (`ArmInputs.summary`). A record whose framing plus rules cannot fit the frozen budget makes `build_arm_inputs` fail
+  allowed and counted per arm (`ArmInputs.summary`) *(code behavior; superseded as a study policy by D4-6C3, section 12.11.4: the runner treats any
+  non-`fits` outcome as a stop)*. A record whose framing plus rules cannot fit the frozen budget makes `build_arm_inputs` fail
   closed with `PairedExclusionRequired`; its `ExclusionProposal` lists record ids, arms and a reason only. `propose_exclusions` returns the same
   proposal without raising. Nothing is excluded, truncated or re-budgeted automatically: removing such records from all arms, and every
   truncation rule, must be decided and frozen in the protocol before the final evaluation.
@@ -1145,6 +1237,7 @@ the confirmatory run, and what confirmatory evidence exists. It holds no perform
 | 9b | D4-5 | Design revision (implemented) | Metric and paired group-bootstrap functions, threshold rule and minimum-valid-replicate rule written (12.11.1) and tested on hand-made arrays. No model score, no data, no result. |
 | 9c | D4-6B / D4-6C1 | Exploratory finding, then pre-run decision (recorded) | Label-free feature-scale diagnostic on development seed 6101 (training split, no model); arm-relative learning rates, 27-candidate grid, validation-AP selection with tie-breaks and raw-logit ranking recorded as accepted draft decisions (12.11.2). No code, no score. |
 | 9d | D4-6C2 | Design revision (implemented) | `lambda-power-1` estimator, relative learning-rate table and `logit-readout-1` written (12.11.3) and tested on hand-made inputs; label-free development check on seed 6101 (training split) reproduced the D4-6B eigenvalues. No model fit, no score. |
-| 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; decision rule and any margin; exclusion and truncation policy; recovery policy; runner and manifest code (estimator and logit extraction: D4-6C2, 12.11.3). |
+| 9e | D4-6C3 | Pre-run decision (recorded) | Primary evidence rule, bootstrap validity convention, strict pairing and fail-closed truncation policy, one-time test gate and crash policy, development-seed policy (12.11.4). No code, no score. |
+| 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; runner and manifest code (estimator and logit extraction: D4-6C2, 12.11.3). |
 | 11 | Pending | Pre-run decision | Write-once pre-run manifest, before any training or scoring. |
 | 12 | Pending | Confirmatory evidence | Confirmatory dataset (seed 7101), validation-only selection, one scored test run. **No confirmatory evidence exists yet.** |
