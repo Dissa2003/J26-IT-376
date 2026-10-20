@@ -1,4 +1,4 @@
-"""Tests for the non-model audit of the synthetic dataset (draft protocol heldout-eval-1.1.0-draft).
+"""Tests for the non-model audit of the synthetic dataset (draft protocol heldout-eval-1.2.0-draft).
 
 The audit trains nothing and computes no accuracy, PR-AUC or similar. These tests use only data fabricated
 by the generator, plus small deliberate corruptions to show that each check can fail.
@@ -27,6 +27,7 @@ from tokenization_ai.heldout_eval.audit import (
     scan_label_terms,
     shortcut_statistics,
     split_feature_overlap,
+    structural_coverage,
 )
 from tokenization_ai.heldout_eval import synthetic_catalog as cat
 from tokenization_ai.heldout_eval.generator import GeneratorConfig, SyntheticDataset, generate
@@ -256,7 +257,7 @@ def test_pilot_report_is_json_safe_complete_and_reproducible():
     one, two = build_pilot_report(CFG), build_pilot_report(CFG)
     assert one == two
     text = json.dumps(one, allow_nan=False)
-    assert one["protocol"] == "heldout-eval-1.1.0-draft"
+    assert one["protocol"] == audit.PROTOCOL_LABEL == "heldout-eval-1.2.0-draft"
     for section in ("config", "generation", "distributions", "split", "pool_sharing", "shortcut_statistics",
                     "split_feature_overlap", "errors", "warnings", "notice"):
         assert section in one
@@ -300,7 +301,7 @@ def test_audit_module_uses_only_the_standard_library_and_local_modules():
         elif isinstance(node, ast.ImportFrom):
             imported.add(("." * node.level) + (node.module or "").split(".")[0])
     assert imported <= {"__future__", "dataclasses", "json", "math", "random", "urllib", "collections", "typing",
-                        ".", ".generator", ".splits"}, imported
+                        ".", ".generator", ".policy_sim", ".splits"}, imported
 
 
 # -- content-type semantics and template-supported exclusivity (D3a-R) -----------------------------------------------
@@ -383,3 +384,128 @@ def test_pilot_report_runs_the_content_type_semantics_check_and_lists_no_error(d
     report = build_pilot_report(CFG)
     assert report["construction_checks_passed"] is True
     assert not any(e["check"] == "content_type_semantics" for e in report["errors"])
+
+
+# -- structural coverage (D4-0; descriptive) and the protocol label --------------------------------------------------
+
+
+def _rec(rid, method, path, label, headers=None, body=""):
+    return make_record(rid, method=method, path=path, label=label, body=body,
+                       headers=headers or {"user-agent": "T/1"}, timestamp=1.0, source_id="s1")
+
+
+def _hand_dataset(records):
+    """A dataset built from hand-made records (metadata stays empty: the coverage report must not need it)."""
+    return SyntheticDataset(config=CFG, records=tuple(records), metadata={}, stats=None, fingerprint="x")
+
+
+def _cell(rows, **cell):
+    return next(r for r in rows if r["cell"] == cell)
+
+
+def test_protocol_label_matches_the_protocol_document_header():
+    import re
+
+    text = (Path(audit.__file__).parent / "PROTOCOL.md").read_text(encoding="utf-8")
+    declared = re.search(r"\*\*Protocol version:\*\* `([^`]+)`", text).group(1)
+    assert audit.PROTOCOL_LABEL == declared
+    from tokenization_ai.heldout_eval import splits
+
+    assert splits.PROTOCOL_VERSION == "heldout-eval-1.0.0-draft"  # split-manifest provenance is deliberately untouched
+
+
+def test_path_category_and_query_follow_the_simpol_observation_logic():
+    from tokenization_ai.heldout_eval.policy_sim import observe
+
+    recs = [_rec("a", "GET", "/admin/orders/x", 0), _rec("b", "GET", "/files/orders?page=2", 1),
+            _rec("c", "DELETE", "/orders/55", 0), _rec("d", "POST", "/auth/login", 0), _rec("e", "GET", "/health", 0)]
+    cov = structural_coverage(_hand_dataset(recs))
+    cats = {r["cell"]["path_category"] for r in cov["path_category"]}
+    assert cats == {observe(r.features).path_category for r in recs} == {
+        "admin_area", "files_area", "resource_area", "auth_area", "status_area"}
+    assert _cell(cov["method_by_path_category_by_query"], method="GET", path_category="files_area", query="present")
+    assert _cell(cov["method_by_path_category_by_query"], method="DELETE", path_category="resource_area", query="absent")
+
+
+def test_counting_semantics_one_mixed_template_is_one_template():
+    # Three variants of one template (same method and shape): two normal, one suspicious -> a single mixed template.
+    mixed = [_rec(f"m{i}", "GET", f"/orders/{100 + i}", label) for i, label in enumerate((0, 0, 1))]
+    normal_only = [_rec("n1", "GET", "/invoices/7", 0), _rec("n2", "GET", "/invoices/8", 0)]
+    susp_only = [_rec("s1", "GET", "/tickets/3", 1)]
+    cov = structural_coverage(_hand_dataset(mixed + normal_only + susp_only))
+    row = _cell(cov["method_by_path_category"], method="GET", path_category="resource_area")
+    assert row["records"] == {"normal": 4, "suspicious": 2}
+    t = row["templates"]
+    assert t["distinct"] == 3 and (t["normal_only"], t["suspicious_only"], t["mixed"]) == (1, 1, 1)
+    assert t["with_normal"] == 2 and t["with_suspicious"] == 2  # overlap on the mixed template; not additive
+    assert cov["distinct_templates"] == 3 and cov["template_composition"] == {"normal_only": 1, "suspicious_only": 1, "mixed": 1}
+
+
+def test_class_exclusive_and_sparse_cells():
+    recs = [_rec(f"x{i}", "DELETE", f"/{res}/{i + 1}", 0) for i, res in enumerate(("orders", "invoices", "tickets"))]
+    recs.append(_rec("y1", "POST", "/orders", 1, body="{}",
+                     headers={"user-agent": "T/1", "content-type": "application/json"}))
+    cov = structural_coverage(_hand_dataset(recs))
+    ex = cov["class_exclusive_cells"]["method_by_path_category"]
+    assert [(e["cell"]["method"], e["exclusive_to"]) for e in ex] == [("DELETE", "normal")]
+    sp = cov["sparse_cells"]["method_by_path_category"]
+    assert [(s["cell"]["method"], s["templates"]["distinct"]) for s in sp] == [("POST", 1)]  # exclusive needs >=3 templates
+
+
+def test_coverage_is_deterministic_ordered_and_json_safe(ds):
+    one, two = structural_coverage(ds), structural_coverage(ds)
+    assert one == two and json.dumps(one, allow_nan=False) == json.dumps(two, allow_nan=False)
+    for level in ("path_category", "method_by_path_category", "method_by_path_category_by_query"):
+        keys = [tuple(r["cell"].values()) for r in one[level]]
+        assert keys == sorted(keys) and len(keys) == len(set(keys))
+        assert sum(r["records"]["normal"] + r["records"]["suspicious"] for r in one[level]) == len(ds.records)
+        for r in one[level]:
+            t = r["templates"]
+            assert t["distinct"] == t["normal_only"] + t["suspicious_only"] + t["mixed"]
+    assert one["records"] == len(ds.records) and one["distinct_templates"] == ds.stats.actual_templates
+    comp = one["template_composition"]
+    assert (comp["normal_only"], comp["suspicious_only"], comp["mixed"]) == (
+        ds.stats.templates_all_normal, ds.stats.templates_all_suspicious, ds.stats.templates_mixed)
+
+
+def test_coverage_holds_no_raw_content_metadata_or_performance_metrics(ds):
+    cov = structural_coverage(ds)
+    text = json.dumps(cov)
+    for rec in ds.records[:50]:
+        assert rec.features.path not in text and "Bearer" not in text
+    for fam in cat.family_names():
+        assert fam not in text
+    banned = ("accuracy", "auc", "precision", "recall", "f1", "roc", "prediction", "score")
+    keys = {k.lower() for k in _keys(cov)}
+    assert not any(b in k for k in keys for b in banned)
+
+
+def test_coverage_is_an_additive_field_that_leaves_existing_report_content_unchanged():
+    report = build_pilot_report(CFG)
+    assert report["structural_coverage"] == structural_coverage(generate(CFG))
+    without = [k for k in report if k != "structural_coverage"]
+    assert without == ["protocol", "config", "generation", "distributions", "split", "pool_sharing",
+                       "shortcut_statistics", "split_feature_overlap", "errors", "warnings",
+                       "construction_checks_passed", "notice"]
+    # Exclusive cells are never promoted to warnings or errors.
+    assert not any("structural" in w["check"] for w in report["warnings"] + report["errors"])
+    # The established thresholds are unchanged.
+    assert (audit.DEFAULT_MIN_SUPPORT, audit.DEFAULT_MIN_TEMPLATE_SUPPORT, audit.DEFAULT_WARN_EXCLUSIVE_SHARE) == (5, 3, 0.05)
+
+
+def test_coverage_on_the_development_pilot_reports_the_documented_structure():
+    dev = generate(GeneratorConfig(seed=6101, n_templates=250))  # development seed only
+    cov = structural_coverage(dev)
+    excl = {tuple(e["cell"].values()) for e in cov["class_exclusive_cells"]["method_by_path_category"]}
+    assert excl == {("GET", "status_area")}  # SIM-P06's documented structural association
+    files = _cell(cov["method_by_path_category"], method="GET", path_category="files_area")
+    assert files["templates"]["with_normal"] >= 3 and files["templates"]["with_suspicious"] >= 3  # SIM-P07: both classes
+    delete = _cell(cov["method_by_path_category"], method="DELETE", path_category="resource_area")
+    assert delete["templates"]["with_normal"] >= 1 and delete["templates"]["with_suspicious"] >= 1  # SIM-P04: both classes
+    assert not any(r["cell"]["path_category"] == "status_area" and r["records"]["suspicious"] for r in cov["path_category"])
+
+
+def test_coverage_code_does_not_import_a_model_or_the_prediction_pipeline():
+    tree = ast.parse(Path(audit.__file__).read_text(encoding="utf-8"))
+    names = {n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
+    assert not names & {"model", "service", "tensorizer", "tokenizer", "vocabulary"}

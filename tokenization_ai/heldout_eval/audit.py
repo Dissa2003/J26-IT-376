@@ -1,4 +1,4 @@
-"""Non-model quality checks for the synthetic dataset (draft protocol heldout-eval-1.1.0-draft).
+"""Non-model quality checks for the synthetic dataset (draft protocol heldout-eval-1.2.0-draft).
 
 These checks inspect the generated data and its split. They train nothing and compute no accuracy,
 PR-AUC or any other detection-performance number. They produce two kinds of output:
@@ -28,6 +28,7 @@ from typing import Any
 
 from . import synthetic_catalog as cat
 from .generator import GeneratorConfig, SyntheticDataset, generate
+from .policy_sim import observe
 from .splits import (
     FORBIDDEN_FEATURE_FIELD_NAMES,
     PRIMARY_SPLIT_SEED,
@@ -41,6 +42,10 @@ from .splits import (
     split_records,
     verify_split_isolation,
 )
+
+# Protocol version this audit reports under. It must match the PROTOCOL.md header (a test checks this). It is
+# unrelated to splits.PROTOCOL_VERSION, which labels the splitting code and is part of the split-manifest hash.
+PROTOCOL_LABEL = "heldout-eval-1.2.0-draft"
 
 DEFAULT_MIN_SUPPORT = 5  # legacy record-level support
 DEFAULT_MIN_TEMPLATE_SUPPORT = 3  # a value must occur in at least this many distinct templates
@@ -461,6 +466,98 @@ def split_feature_overlap(dataset: SyntheticDataset, seed: int = PRIMARY_SPLIT_S
 # -- pilot report -------------------------------------------------------------------------------------------
 
 
+# -- structural coverage (descriptive; D4-0) -------------------------------------------------------------
+
+
+_COVERAGE_LEVELS = (
+    ("path_category", ("path_category",)),
+    ("method_by_path_category", ("method", "path_category")),
+    ("method_by_path_category_by_query", ("method", "path_category", "query")),
+)
+
+
+def structural_coverage(dataset: SyntheticDataset, *, min_template_support: int = DEFAULT_MIN_TEMPLATE_SUPPORT) -> dict[str, Any]:
+    """Descriptive coverage of request structure by class. Not a model, not a pass/fail check.
+
+    Counting semantics (stated once, used everywhere):
+
+    * A request's *path category* and *method* come from ``policy_sim.observe`` (the same definition the simulated
+      rule catalog uses); *query* is ``present`` when the request has a non-empty query string, else ``absent``.
+    * **Record counts** count requests per class (normal = label 0, suspicious = label 1).
+    * A **template** is one normalized template group (``group_id_for``). It is counted **once per cell**, never once per
+      class, so a mixed-label template is a single template. Within a cell each template is classified by the labels
+      its records carry *in that cell*: ``normal_only``, ``suspicious_only`` or ``mixed`` (both classes).
+      ``templates_with_normal`` = normal_only + mixed and ``templates_with_suspicious`` = suspicious_only + mixed overlap
+      on mixed templates and must not be added together.
+    * A cell is **class-exclusive** when it holds records of one class only and at least ``min_template_support`` distinct
+      templates. A cell is **sparse** when it holds fewer than ``min_template_support`` distinct templates.
+
+    Output is deterministic (cells sorted by their key) and JSON-safe. It holds no raw request content. Class-exclusive
+    cells are attention flags only: they are not added to the audit's errors or warnings and do not affect
+    ``construction_checks_passed``.
+    """
+    observed = []
+    for r in dataset.records:
+        o = observe(r.features)
+        observed.append((o.method, o.path_category, "present" if o.has_query else "absent", r.meta.label,
+                         group_id_for(r.features)))
+    keys_of = {"method": 0, "path_category": 1, "query": 2}
+    out: dict[str, Any] = {}
+    exclusive: dict[str, list[dict[str, Any]]] = {}
+    sparse: dict[str, list[dict[str, Any]]] = {}
+    for level, fields in _COVERAGE_LEVELS:
+        cells: dict[tuple[str, ...], dict[str, Any]] = {}
+        for row in observed:
+            key = tuple(row[keys_of[f]] for f in fields)
+            cell = cells.setdefault(key, {"records": Counter(), "labels_by_template": {}})
+            cell["records"][row[3]] += 1
+            cell["labels_by_template"].setdefault(row[4], set()).add(row[3])
+        rows, excl, spr = [], [], []
+        for key in sorted(cells):
+            cell = cells[key]
+            sets = list(cell["labels_by_template"].values())
+            n_only0 = sum(1 for s in sets if s == {0})
+            n_only1 = sum(1 for s in sets if s == {1})
+            n_mixed = sum(1 for s in sets if s == {0, 1})
+            total = len(sets)
+            entry = {
+                "cell": dict(zip(fields, key)),
+                "records": {"normal": cell["records"][0], "suspicious": cell["records"][1]},
+                "templates": {"distinct": total, "normal_only": n_only0, "suspicious_only": n_only1, "mixed": n_mixed,
+                              "with_normal": n_only0 + n_mixed, "with_suspicious": n_only1 + n_mixed},
+            }
+            rows.append(entry)
+            if total >= min_template_support and (cell["records"][0] == 0 or cell["records"][1] == 0):
+                excl.append({**entry, "exclusive_to": "normal" if cell["records"][1] == 0 else "suspicious"})
+            if total < min_template_support:
+                spr.append(entry)
+        out[level] = rows
+        exclusive[level] = excl
+        sparse[level] = spr
+    all_templates: dict[str, set[int]] = {}
+    for row in observed:
+        all_templates.setdefault(row[4], set()).add(row[3])
+    return {
+        "definition": ("Cells use policy_sim.observe (method, path category, query present/absent). Each normalized "
+                       "template is counted once per cell; mixed-label templates are single templates, reported separately "
+                       "from one-class templates. Descriptive only."),
+        "min_template_support": min_template_support,
+        "records": len(observed),
+        "distinct_templates": len(all_templates),
+        "template_composition": {
+            "normal_only": sum(1 for v in all_templates.values() if v == {0}),
+            "suspicious_only": sum(1 for v in all_templates.values() if v == {1}),
+            "mixed": sum(1 for v in all_templates.values() if v == {0, 1}),
+        },
+        **out,
+        "class_exclusive_cells": exclusive,
+        "sparse_cells": sparse,
+        "note": ("Descriptive attention output, not pass/fail criteria; it does not change the audit's errors or "
+                 "warnings. Passing the audit does not show the absence of shortcut features or leakage, and this is not "
+                 "an AI detection-quality evaluation."),
+    }
+
+
 def build_pilot_report(config: GeneratorConfig | None = None, split_seed: int = PRIMARY_SPLIT_SEED) -> dict[str, Any]:
     """Generate once and run every non-model check. JSON-safe; holds no raw request content."""
     cfg = config or GeneratorConfig()
@@ -481,7 +578,7 @@ def build_pilot_report(config: GeneratorConfig | None = None, split_seed: int = 
     warnings = [f for f in all_findings if f.severity == "warning"]
     stats = dataset.stats
     return {
-        "protocol": "heldout-eval-1.1.0-draft",
+        "protocol": PROTOCOL_LABEL,
         "config": cfg.to_dict(),
         "generation": {
             "requested_templates": stats.requested_templates, "actual_templates": stats.actual_templates,
@@ -495,6 +592,7 @@ def build_pilot_report(config: GeneratorConfig | None = None, split_seed: int = 
         "pool_sharing": sharing,
         "shortcut_statistics": shortcuts,
         "split_feature_overlap": overlap,
+        "structural_coverage": structural_coverage(dataset),
         "errors": [f.to_dict() for f in hard_errors],
         "warnings": [f.to_dict() for f in warnings],
         "construction_checks_passed": not hard_errors,

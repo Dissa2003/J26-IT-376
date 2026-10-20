@@ -17,6 +17,7 @@
 | `1.1.0-draft` (D3b, same draft version) | **Simulated policy rule catalog `simpol-1`** (`policy_sim.py`) and its descriptive diagnostics (`policy_diagnostics.py`) for Arm B. Rules are deterministic functions of observable request properties, carry explicit simulated provenance and no verification status, and are not connected to any API. See section 3.1. |
 | `1.2.0-draft` (D3c-1) | **Scientific design decisions recorded; documentation only.** Approves generator `synthgen-3` with two planned corrections (G1, G2), keeps `simpol-1` unchanged, marks the seed-5101 pilot as exploratory/burned, fixes the seed plan, the full-study scale, the equal-`max_length` rule, the request-to-context mapping `request_to_context-v1`, the Arm C definition, the primary-metric comparison plan and the pre-run manifest plan. See section 12 and the chronological record in section 13. **No code, generator, split, catalog or dataset changed in this step, and nothing is frozen.** |
 | `1.2.0-draft` (D3c-2) | **Generator `synthgen-3` / catalog `synthetic-catalog-3` implemented (G1 and G2 only).** Normal `/files/...` paths (`crud_read`, `hn_dotted_paths`) and comparable DELETE structures in both classes (`crud_write`; `traversal_like`, `sqli_like`, `cmdi_like`, `markup_like`). No label rule, weight, pool, split code, `simpol-1`, `policy_sim.py`, `policy_diagnostics.py` or audit threshold changed. The default dataset seed is now the development seed 6101. Design note, development-seed results and remaining limitations are in section 12.2.1. The confirmatory dataset is not generated and nothing is frozen. |
+| `1.2.0-draft` (D4-0) | **Descriptive structural-coverage diagnostics added to `audit.py`; audit protocol label corrected.** `structural_coverage` is a new, separate field of the audit report (section 12.2.2). Existing audit checks, thresholds, errors, warnings, `construction_checks_passed`, fingerprints and split logic are unchanged. The report's `protocol` label now reads `heldout-eval-1.2.0-draft` (it read `1.1.0-draft`); `splits.PROTOCOL_VERSION` is deliberately untouched. No generator, catalog, `simpol-1` or split change; nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -405,7 +406,7 @@ protocol is frozen.
 | 7 | Final scale and prevalence sensitivities | Scale **proposed** (12.7, subject to feasibility). Prevalence sensitivities are **open**. |
 | 8 | Arm C feature-budget policy, n-gram settings and equal hyperparameter-search effort | **Open** (12.10). |
 | 9 | Hyperparameter grids, selection criterion, threshold rule, bootstrap settings (resamples, seed) | **Open**; to be fixed before the manifest (12.11, 12.12). |
-| 10 | Whether `audit.py` gains path-root and method-by-path-category summaries | **Proposed, not approved.** Needs a separate approval before any code change. |
+| 10 | Whether `audit.py` gains path-root and method-by-path-category summaries | **Implemented** (D4-0, section 12.2.2) as a separate descriptive field; audit thresholds, errors and warnings unchanged. |
 | 11 | Scope of label-conditioned audits relative to the sealed test split | **Open** (12.6). |
 | 12 | Whether development-seed (6101) dry runs report any detection metric | **Open.** Until decided, none is reported (12.5). |
 | 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). |
@@ -547,6 +548,36 @@ Remaining limitations, reported and not adjusted:
   check, not part of the audit. The audit report's `protocol` label still reads `heldout-eval-1.1.0-draft`; it was
   not changed in this step.
 - The tokenizer limitation in 12.9 is unchanged: query-borne text remains inside one atomic path token for Arms A and B.
+
+#### 12.2.2 Structural coverage diagnostics (D4-0; descriptive)
+
+`audit.structural_coverage(dataset)` reports, by class, the distribution of requests over path category, over method by path
+category, and over method by path category by query presence (present/absent). Categories, methods and query presence come
+from `policy_sim.observe`, the definition the simulated rule catalog uses.
+
+- **Record level versus template level.** Each cell reports record counts per class (normal / suspicious) and distinct
+  normalized-template counts. A template is counted **once per cell**; a mixed-label template stays one template and is
+  reported separately from `normal_only` and `suspicious_only` templates (`with_normal` and `with_suspicious` overlap on
+  mixed templates and are not additive).
+- **Class-exclusive cells** (records of one class only, supported by at least 3 distinct templates) and **sparse cells**
+  (fewer than 3 distinct templates) are listed as attention output.
+- **Nothing else changes.** The report is a separate `structural_coverage` field. The audit's errors, warnings,
+  thresholds (record support 5, template support 3, exclusive share 0.05), `construction_checks_passed`, fingerprints and
+  duplicate and group-overlap checks are exactly as before; exclusive or sparse cells are never promoted to warnings.
+  Output is deterministic, JSON-safe and holds no raw request content.
+- **Construction diagnostics are not detection-quality evaluation.** This output trains no model and computes no PR-AUC, ROC-AUC,
+  F1 or accuracy. A zero-warning audit, with or without this field, does not show that shortcut features or leakage are absent.
+
+Development-seed observations (seed 6101 only; confirmatory and reserve seeds not used). At 2,000 templates (12,068 records):
+the only class-exclusive (method, path category) cell is GET on status paths (0 / 26 suspicious / normal templates; SIM-P06 is
+accepted as a one-class structural association); GET on files paths holds 76 normal-only, 39 suspicious-only and no mixed
+templates (SIM-P07, both classes); DELETE on resource paths holds 31 normal-only and 30 suspicious-only (SIM-P04, both
+classes); and SIM-P12 remains unused (no anonymous request reaches a protected path). The accepted no-query DELETE
+imbalance is visible as 12 normal-only versus 19 suspicious-only templates with query absent (30 templates, 19 normal-only and 11
+suspicious-only, with a text query present). Sparse cells at that scale: DELETE and PATCH on documents paths without a query
+(1 template each); DELETE on documents paths with a query is exclusive to suspicious (3 templates). At 250 templates the
+no-query DELETE cell holds only suspicious templates (3), and several further small cells are exclusive or sparse; such small-scale
+cells are expected sampling variation, are reported, and are not repaired.
 
 ### 12.3 Simulated rule catalog `simpol-1`: unchanged
 
@@ -761,6 +792,7 @@ the confirmatory run, and what confirmatory evidence exists. It holds no perform
 | 7 | D3c-1 | Design revision (recorded) | `synthgen-3` with G1 and G2 approved (12.2); `simpol-1` kept (12.3); pilot marked exploratory and burned (12.4). |
 | 8 | D3c-1 | Pre-run decision (recorded) | Seed plan (12.5), splitting and sealed test (12.6), scale (12.7), `max_length` rule (12.8), `request_to_context-v1` (12.9), Arm C definition (12.10), metric plan (12.11), manifest plan (12.12). |
 | 9 | D3c-2 | Design revision (implemented) | G1/G2 implementation note written before any generator code was changed; `synthgen-3` / `synthetic-catalog-3` implemented; default dataset seed set to the development seed 6101; checked on the development seed only, structure and construction checks, no model (12.2.1). Structural before/after figures were read from the development seed after the design constants were fixed; the constants were not adjusted. |
+| 9a | D4-0 | Design revision (diagnostics only) | `structural_coverage` added to the audit report and the audit protocol label corrected (12.2.2). Development seed 6101 only. |
 | 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; hyperparameter grids; decision rule and any margin; runner, budget-rule and manifest code. |
 | 11 | Pending | Pre-run decision | Write-once pre-run manifest, before any training or scoring. |
 | 12 | Pending | Confirmatory evidence | Confirmatory dataset (seed 7101), validation-only selection, one scored test run. **No confirmatory evidence exists yet.** |
