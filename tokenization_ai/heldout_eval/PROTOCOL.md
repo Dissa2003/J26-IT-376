@@ -29,6 +29,7 @@
 | `1.2.0-draft` (D4-6D1) | **Runner foundation `runner-foundation-1` implemented** (`runner.py`, section 12.11.5): dataset and split validation, by-id label alignment, train-only vocabulary, budget and numerical configuration, the label-free representability preflight (fail-closed), pure validation-only candidate selection, a label-free `SealedTestSet`, and explicitly unavailable training and test-access gates. No model is fitted or scored, no manifest, selection record or attempt marker exists, no confirmatory data; no existing component changed; the test gate is **not** complete; nothing is frozen. |
 | `1.2.0-draft` (D4-6D2A) | **Write-once pre-run manifest `pre-run-manifest-1` implemented** (`manifest.py`, section 12.12.2): canonical JSON schema, exclusive-creation writer with fsync and byte read-back, and an independent verifier (external digest, live Git state, re-hashed sources, protocol and dataset bindings, numerical and statistical re-derivation, environment). Confirmatory manifests require a frozen, externally approved protocol, so none can be written while the protocol is a draft. No model is fitted or scored, no real manifest exists, the selection record and test gate are still unimplemented, and nothing is frozen. |
 | `1.2.0-draft` (D4-6D2B) | **Validation-selection record `validation-selection-record-1` implemented** (`selection_record.py`, section 12.12.3): canonical write-once record bound to the exact pre-run manifest digest, with an independent verifier that rebuilds the record from trusted validation evidence (27 candidates per arm, rounding and tie-break recomputed, selected AP, raw-logit F1 threshold and model fingerprint recomputed from the supplied fitted models). It never authorizes test scoring. No real record exists, no model is trained, the attempt marker and test gate are unimplemented, and nothing is frozen. |
+| `1.2.0-draft` (D4-6D2C) | **One-time test attempt gate `test-attempt-gate-1` and marker `test-attempt-marker-1` implemented** (`attempt_gate.py`, section 12.12.4): the real manifest and selection-record verifiers must pass before an atomic `O_EXCL` marker is created in a trusted directory outside the repository; only afterwards are the authentic test labels recovered from the source records and validated; any failure after the marker leaves it intact and writes a redacted failure report. No real marker exists, nothing is scored, the runner's gates are still blocked and unconnected, the draft protocol cannot open the gate, and nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -421,7 +422,7 @@ protocol is frozen.
 | 10 | Whether `audit.py` gains path-root and method-by-path-category summaries | **Implemented** (D4-0, section 12.2.2) as a separate descriptive field; audit thresholds, errors and warnings unchanged. |
 | 11 | Scope of label-conditioned audits relative to the sealed test split | **Open** (12.6). |
 | 12 | Whether development-seed (6101) dry runs report any detection metric | **Decided in D4-6C3 (12.11.4):** no detection-quality result is reported or used for any choice from seed 6101; permitted uses are listed there. |
-| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` (12.9.1), `budget-rule-1` (12.8.1) the Arm C encoder (12.10.1), the paired arm builders (12.12.1) and the metric and bootstrap functions (12.11.1) exist so far; the runner foundation (12.11.5), the numerical helpers (12.11.3) and the manifest writer and verifier (12.12.2) exist too; no real manifest has been written; the validation-selection record writer and verifier (12.12.3) exist; model fitting, the attempt marker and test scoring do not. |
+| 13 | Runner, arm, budget-rule and manifest code; the actual manifest | **Not implemented** (12.12). Only `request_to_context-v1` (12.9.1), `budget-rule-1` (12.8.1) the Arm C encoder (12.10.1), the paired arm builders (12.12.1) and the metric and bootstrap functions (12.11.1) exist so far; the runner foundation (12.11.5), the numerical helpers (12.11.3) and the manifest writer and verifier (12.12.2) exist too; no real manifest has been written; the validation-selection record writer and verifier (12.12.3) and the one-time test attempt gate with its marker and label-recovery primitives (12.12.4) exist, none connected to the runner and none exercised on real data; model fitting and test scoring do not. |
 | 14 | Any generator correction beyond G1 and G2 | **Not approved.** Needs a documented reason and approval before the generator is fixed for the confirmatory study (12.2). |
 
 ## 12. Design decisions recorded in D3c-1 (documentation only)
@@ -1395,6 +1396,58 @@ prove that no test data was seen by the training process.
 that produce candidate results and models; model-artifact persistence; the atomic one-time test-attempt marker and the label-recovery and unsealing gate; the failure-report
 format; test scoring, the test-side bootstrap and the final report.
 
+#### 12.12.4 One-time test attempt gate `test-attempt-gate-1` and marker `test-attempt-marker-1` (implemented in D4-6D2C)
+
+`tokenization_ai/heldout_eval/attempt_gate.py` implements the fail-closed infrastructure for a persistent, atomic, one-time confirmatory test attempt and the safe recovery of
+the authentic test labels. It scores **nothing**, trains nothing, generates no data, and **has created no real attempt marker** (seeds 7101-7103 unused). It is not
+connected to the runner: `runner.request_training_authorization()` and `runner.request_test_access()` are unchanged and still always raise. Tests:
+`tests/tokenization_ai/test_attempt_gate.py` run the **real** manifest and validation-selection verifiers on disposable fixtures (a throw-away Git repository whose
+protocol header says FROZEN, development-seed structure, mock fitted artifacts, and a monkeypatched seed tuple that lets the development seed stand in for the
+confirmatory seed). The gate's production code has no flag, callback or already-verified object that can do the same. The module is named `attempt_gate.py` (renamed in D4-6D2C from a first name that matched pytest's
+`test_*.py` collection pattern) so that no collection of the `heldout_eval` directory can mistake it for a test module.
+
+**Verification order (`verify_attempt_inputs`; nothing is created on failure).** (1) The expected run must be `confirmatory` (an infrastructure run, or any draft, cannot open
+the gate). (2) Manifest and selection record must be supplied as their **exact bytes** (a dictionary, a string or a flag is refused). (3) The real
+`manifest.verify_manifest_bytes`: external digest, `Status: FROZEN` protocol with an externally approved hash, confirmatory seed, clean tree, commit, source and config hashes,
+dataset/split provenance, compatible environment. (4) The real `selection_record.verify_selection_record_bytes`: external digest, binding to that exact manifest digest, full
+recomputation from the supplied validation evidence and fitted artifacts, no test-derived content; the result must not authorize test scoring. (5) The record's
+`test_status` must report no prior test access. (6) The `SealedTestSet` must match the manifest (id-list hash, count, group count, split manifest hash) and the supplied split
+result (test membership, group ids, group fingerprint). Only then is a `VerifiedAttempt` produced (constructible only inside the module).
+
+**Atomic marker (`create_attempt_marker`).** The marker file is `test-attempt-<experiment_id>.json` in a **trusted, explicitly supplied attempt directory outside the
+repository**; the name derives only from the experiment identity (SHA-256 of dataset seed, generator and dataset fingerprints, split seed and split manifest hash of the
+verified manifest), so a record cannot redirect it and a re-written manifest or selection record cannot buy a second attempt. It is created with `O_CREAT | O_EXCL`,
+written, `fsync`ed, read back byte for byte, directory-synced (POSIX) and marked read-only. Content (canonical JSON, under 4 KiB): marker and gate version, lifecycle state
+`attempt_started`, experiment id, manifest and selection-record digests, dataset seed and fingerprints, split manifest hash, test id-list hash and count, creation time. No
+label, prediction, score, raw request or secret. Any file at that path (valid, partial, empty, malformed or substituted) is a spent attempt (`AttemptAlreadyConsumed`);
+the code never overwrites, resets or deletes a marker. If creation fails with nothing on disk the error is `MarkerCreationError`; if the marker exists but persistence cannot be
+confirmed, it is **left in place** (`MarkerPersistenceError`) and counts as a consumed attempt requiring review.
+
+**When test labels become accessible.** Only inside `recover_test_labels`, which requires a `MarkerReceipt` (proof that this process created and read back the marker), re-reads the marker
+from disk, re-checks the sealed set and split result against the verified attempt, and **then** calls the caller-supplied `label_provider`. The provider returns the original
+source records (the caller may regenerate them deterministically inside it, which therefore happens only after the marker exists). The gate then requires: exactly the sealed record ids
+(no missing, extra or duplicate), `EvalRecord` objects, labels that are integers 0 or 1 (the blinded placeholder `-1`, booleans, `None` and other values are refused), request content
+equal to the sealed records, and split (`test`) and group agreement with the split result. The labels are returned in a `RecoveredTestLabels` holder: ordered by sorted record id,
+redacted `repr`, not picklable or copyable, no dict export; they appear in no log, failure report or gate record. Ordinary runner preparation and selection functions never receive them.
+The gate cannot guarantee what unrelated code already read (the caller holds the source records).
+
+**Failure policy.** Failures before the marker raise (`GateVerificationError`, `MarkerCreationError`, `AttemptAlreadyConsumed`) and create nothing. Any failure after the marker exists leaves the
+marker intact, never retries, regenerates, re-seeds or resets, and writes a versioned failure report (`test-attempt-failure-report-1`, `test-attempt-<id>.failure-<n>.json`, exclusive
+creation) holding only the stage, a fixed category, the attempt binding (experiment id and the two digests), `marker_present = true`, `retry_authorized = false` and the required next step
+(a separate explicit methodological review and a future authorization mechanism, **neither of which is implemented**). Exceptions are reported by class name only. A report, or its
+absence, never unlocks another attempt. `open_test_attempt` runs the whole sequence and returns an `AttemptOutcome` (`test_scored = false`).
+
+**Implemented versus not integrated.** Implemented: verification order, experiment identity, atomic marker, post-marker label recovery with validation, failure reports, and tests for ordering,
+repeat attempts, partial/malformed/substituted markers, persistence and creation failures, 16-thread exclusivity, restart persistence in a fresh process, id/split/group/placeholder
+checks and redaction. Not implemented: wiring to the runner's gates and to any training or scoring stage; the manual-review and recovery-authorization mechanism; model-artifact persistence;
+test scoring, the test-side bootstrap and the final report; the protocol freeze.
+
+**Limitations.** `O_EXCL` is atomic on local filesystems but not guaranteed on some network filesystems; in-process code can bypass in-process guards (the private key objects prevent accidental
+misuse, not a malicious process); the marker's trusted directory is the caller's responsibility; the gate cannot see test data read before it ran.
+
+**Remaining blockers before confirmatory evaluation.** The protocol freeze and a real manifest; generation of the confirmatory dataset; the training-authorization wiring and the training and validation
+stage; a real selection record; the manual-review procedure; the test-scoring stage that consumes the gate; and the final report.
+
 ## 13. Chronological record
 
 This record separates what was found in exploratory data, what was revised in the design, what was decided before
@@ -1419,6 +1472,7 @@ the confirmatory run, and what confirmatory evidence exists. It holds no perform
 | 9f | D4-6D1 / D4-6D1R | Design revision (implemented, then corrected before commit) | Runner foundation written (12.11.5) and tested on development-seed structure and hand-made selection fixtures; test access and training authorization are explicitly unavailable. Safety review: test labels replaced by the invalid sentinel `-1` and a split binding added; the preflight no longer builds Arm C or any `ModelInput`. No fit, no score, no manifest. |
 | 9g | D4-6D2A | Design revision (implemented) | Manifest writer and verifier written (12.12.2) and tested with development-seed objects and throw-away repositories; confirmatory manifests are gated on a frozen protocol. No real manifest, no fit, no score. |
 | 9h | D4-6D2B | Design revision (implemented) | Validation-selection record writer and verifier written (12.12.3) and tested with mock fitted artifacts, development-seed structure and a throw-away repository. No real record, no fit, no score, no test gate. |
+| 9i | D4-6D2C | Design revision (implemented) | One-time attempt gate, atomic marker, post-marker label recovery and failure reports written (12.12.4) and tested with the real verifiers on disposable fixtures. No real marker, no scoring, runner gates unchanged. |
 | 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; runner and manifest code (estimator and logit extraction: D4-6C2, 12.11.3). |
 | 11 | Pending | Pre-run decision | Write-once pre-run manifest, before any training or scoring. |
 | 12 | Pending | Confirmatory evidence | Confirmatory dataset (seed 7101), validation-only selection, one scored test run. **No confirmatory evidence exists yet.** |
