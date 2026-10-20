@@ -2,9 +2,9 @@
 
 **Protocol version:** `heldout-eval-1.1.0-draft`  **Status: DRAFT, not frozen.**
 **Template version:** `tmpl-1`  **Generator:** `synthgen-2`  **Catalog:** `synthetic-catalog-2`
-**Code (this folder):** `splits.py`, `synthetic_catalog.py`, `generator.py`, `audit.py`
+**Code (this folder):** `splits.py`, `synthetic_catalog.py`, `generator.py`, `audit.py`, `policy_sim.py`, `policy_diagnostics.py`  **Simulated rule catalog:** `simpol-1`
 **Tests:** `tests/tokenization_ai/test_heldout_splits.py`, `test_synthetic_catalog.py`,
-`test_synthetic_generator.py`, `test_heldout_audit.py`
+`test_synthetic_generator.py`, `test_heldout_audit.py`, `test_policy_sim.py`
 
 ## Change history
 
@@ -13,6 +13,7 @@
 | `1.0.0-draft` | First draft: SR-BH as the candidate dataset; leakage-safe group splitting (`splits.py`). |
 | `1.1.0-draft` | **Synthetic API requests are the primary evaluation source.** SR-BH is deferred and not downloaded. Added the scenario catalog, deterministic generator and non-model audit, and a pilot stage. The comparison arms, primary metric, splitting rules and leakage controls are unchanged. The `1.0.0-draft` text remains in git history. |
 | `1.1.0-draft` (D3a-R refinement, same draft version) | **Dataset quality refinement after reviewing the first pilot's six descriptive warnings** (generator `synthgen-1` -> `synthgen-2`, catalog `-1` -> `-2`). See section 2.6 for what was changed and why, section 2.7 for the intentional associations that remain, and section 4.1 for the pilot record. The audit gained a template-supported exclusivity measure and an independent content-type semantics check. Splitting code is unchanged. |
+| `1.1.0-draft` (D3b, same draft version) | **Simulated policy rule catalog `simpol-1`** (`policy_sim.py`) and its descriptive diagnostics (`policy_diagnostics.py`) for Arm B. Rules are deterministic functions of observable request properties, carry explicit simulated provenance and no verification status, and are not connected to any API. See section 3.1. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -20,8 +21,8 @@ stays tied to its original protocol. Nothing in this folder changes the producti
 prediction API or the dashboard.
 
 > **Scope of this step:** the protocol text, the leakage-safe splitting code, the synthetic scenario
-> catalog, the deterministic generator and the non-model audit exist. There is **no model training,
-> metrics runner, rule simulator or A/B/C runner yet, and no accuracy, PR-AUC or other
+> catalog, the deterministic generator, the non-model audit and the simulated rule catalog exist. There is
+> **no model training, metrics runner or A/B/C runner yet, and no accuracy, PR-AUC or other
 > detection-performance figure exists.** The draft becomes a frozen protocol only after the pilot
 > (section 4) is reviewed and the open items in section 11 are decided.
 
@@ -153,7 +154,7 @@ not a defect; they limit what a score can mean:
 | Arm | Input | Notes |
 |---|---|---|
 | **A** | Request-only features | The existing pipeline with an empty rule list. This path is supported today: `service.analyze` accepts `rules=[]` and emits `[RULES_START] [RULES_END]` framing (checked by a test). |
-| **B** | Request + **simulated** rule tokens | Rules come from a deterministic function of request-observable fields only (for example method, path prefix, content type, header presence), from a catalog written and frozen **before** labels are examined, with neutral policy ids. Labels, scenario families and detector output never enter rule construction. **Not implemented yet.** |
+| **B** | Request + **simulated** rule tokens | Rules come from a deterministic function of request-observable fields only (for example method, path prefix, content type, header presence), from a catalog written and frozen **before** labels are examined, with neutral policy ids. Labels, scenario families and detector output never enter rule construction. **The catalog `simpol-1` exists (section 3.1); the runner that uses it is not implemented yet.** |
 | **C** | Conventional HTTP preprocessing baseline | A standard, non-structure-aware preprocessing of the same requests (for example hashed character n-grams), same classifier and bucket sizes. **Not implemented yet.** |
 
 All arms use the same model family and hyperparameter grid with an equal tuning budget. The vocabulary
@@ -171,6 +172,85 @@ fusion in general.
 Known confounds to control: rule tokens use part of the fixed token budget (report truncation rates per
 arm; use the same `max_length` for all arms); request framing (method, path, headers) is mandatory in
 the tensor, and a request whose framing alone exceeds `max_length` is rejected, not truncated.
+
+### 3.1 Simulated policy rule catalog `simpol-1` (Arm B input)
+
+**All rules are simulated.** They are not Member 2 output, not formally verified, and carry no verification status.
+Nothing in `policy_sim.py` imports or calls Member 2, makes a network call, or connects to the API, dashboard or
+pipeline.
+
+- **Version / provenance:** `simpol-1`; catalog SHA-256
+  `79273ba6dac5cfa453e258024c2a9e4510e041b68c8db8b79781c52b4de1ba79` (covers every id, attribute and applicability
+  condition; pinned in `test_policy_sim.py`). Every result is a `SimulatedRuleSet` with `provenance="simulated"`,
+  `verification_status="not_verified_simulated"`, the catalog version and hash.
+- **Catalog:** 13 policies with neutral sequential ids `SIM-P01`...`SIM-P13` and three allowlisted attributes
+  (`action`, `resource`, `effect`) from fixed vocabularies; `subject` and `interpretation` are deliberately omitted to
+  keep each rule at 20 tokens in the existing tokenizer. Ids and attributes never name a label, attack, scenario or
+  family (checked at import and in tests).
+- **Allowed inputs (the only things that may decide applicability):** HTTP method; a coarse path category from the
+  first path segment (admin, auth, files, documents, status, other resource); the *declared* content-type class
+  (json, xml, form, plain, other, none) from the header value only; presence (not value) of an authorization header;
+  presence of a body; presence of a query string.
+- **Never used:** labels, scenario families, template ids, source ids, split assignments, record ids, timestamps,
+  generated metadata, role-header values, body or query content, model predictions. `simulate_rules` accepts only an
+  event id and `RequestFeatures`, so none of these can be passed in.
+- **Assignment:** every policy whose conditions hold is assigned, in catalog order, with no duplicates and no
+  selection by label. An empty list is valid and means only that no simulated policy applies.
+
+| Id | Applies when | Action / resource / effect |
+|---|---|---|
+| SIM-P01 | admin path | manage / admin-area / Allow |
+| SIM-P02 | other path, GET, authorization present | read / resources / Allow |
+| SIM-P03 | other path, POST/PUT/PATCH, authorization present | write / resources / Allow |
+| SIM-P04 | other path, DELETE | delete / resources / Allow |
+| SIM-P05 | auth path, POST | authenticate / sessions / Allow |
+| SIM-P06 | status path, GET | read / status / Allow |
+| SIM-P07 | files path, authorization present | read / files / Allow |
+| SIM-P08 | documents path | read / documents / Allow |
+| SIM-P09 | has body, declared JSON | submit / json-payloads / Allow |
+| SIM-P10 | has body, declared XML or plain text | submit / text-payloads / Allow |
+| SIM-P11 | has body, declared form | submit / form-payloads / Allow |
+| SIM-P12 | no authorization header, admin / files / documents / other path | access / protected-resources / Deny |
+| SIM-P13 | GET with a query string | search / query-parameters / Allow |
+
+**Rule-source label.** The existing API `RuleSource` has only `none`, `mock_fixture` and `verified`. There is no
+`simulated` value, `verified` would be false, and `mock_fixture` is only the nearest honest label. The pipeline's
+input type is named `VerifiedRuleInfo`; that name must not be read as a claim about these rules. The simulator is
+therefore kept isolated from the API rather than misrepresenting the rules, and no API or dashboard file was changed.
+
+**Why Arm B results will not prove the value of real verified rules.** Every rule is a deterministic function of the
+request, so the rules add no independent security information. A difference between Arm A and Arm B can only show
+whether the rule-token *representation* changes results on synthetic requests. It cannot show the effectiveness of
+genuine, independently verified Member 2 rules, and fusion is neither expected nor assumed to help. The catalog was
+authored by the same author who wrote the generator, with knowledge of its path conventions (but not of labels), and
+was written before any rule-specific diagnostics were run (the pilot's labels had already been seen in the earlier
+generator audits, but no condition in the catalog refers to a label); the diagnostics below describe it and were **not**
+used to choose, add or drop a rule.
+
+**Pilot diagnostics (`synthgen-2` pilot, 1,501 requests; descriptive only; no model).**
+
+| Item | Result |
+|---|---|
+| Rules per request | mean 1.88, range 1-2 (177 requests with 1 rule, 1,324 with 2) |
+| Requests with no rule | 0% |
+| Duplicate policy ids within a request | 0 |
+| Policy with zero coverage | `SIM-P12` (no anonymous request reaches a protected path in this synthetic data) |
+| Policies applied to one class only (3+ templates) | `SIM-P04` (DELETE on resource paths: normal only), `SIM-P06` (status paths: normal only), `SIM-P07` (files paths: suspicious only) |
+| Rule-set feature, normalized association with label | 0.115 (label-shuffled reference maximum 0.020); 11.0% of records have a rule set seen in 3+ templates and one class |
+| Tokens per rule / per request | 20 per rule; +37.6 per request on average (max +40) |
+| Request tokens, Arm A / Arm B | mean 50.1 / 87.8, max 102 / 142 |
+| At `max_length` 128 | Arm A: 0 requests longer; Arm B: 18 longer (payload truncated), 0 rejected |
+| At `max_length` 256 | none longer in either arm, none rejected |
+
+Reading the diagnostics: the class-aligned policies mirror structure of the generator rather than new information.
+The first-segment `files` path occurs only in traversal scenarios, DELETE on ordinary resource paths occurs only in
+normal scenarios, and status paths are normal health calls, so each rule restates a path or method association the
+request tokens already carry. These are attention flags, not proof of leakage absence or presence. They show a
+property of the synthetic data (some structural combinations exist in only one class) that the earlier audit did not
+surface because it does not summarize path category; any generator revision is a separate, reviewed step and must not
+be driven by labels in the catalog. Because rule tokens are 20 per rule, Arm B uses more of a fixed token budget:
+`max_length` must be identical across arms and chosen from training-split length statistics, or truncation rates must
+be reported per arm (at 128 only Arm B is truncated for 1.2% of requests).
 
 ## 4. Pilot stage (before the full study)
 
@@ -289,7 +369,7 @@ and dashboard keep their current demo model.
 Before the scored run a pre-run manifest must be written once and never overwritten, recording: protocol
 version and the hash of this file; hashes of `splits.py`, `synthetic_catalog.py`, `generator.py` and
 `audit.py`; generator, catalog and template versions; dataset seed and split seeds; generator
-`fingerprint`, split `manifest_sha256` and `dataset_fingerprint`; the frozen rule catalog hash; and the
+`fingerprint`, split `manifest_sha256` and `dataset_fingerprint`; the simulated rule catalog version and SHA-256 (`simpol-1`, section 3.1) and the hash of `policy_sim.py`; and the
 SHA-256 of every production source file used. The new modules are outside the archived KPI source-hash
 inventory, so the archived reports do not cover them. Archived KPI 1-4 fixtures, protocols, hashes and
 reports must not be modified or regenerated.
@@ -301,5 +381,5 @@ reports must not be modified or regenerated.
 3. Whether Arm C and a flat-versus-structure-aware tokenization ablation are included.
 4. Whether to add a leave-family-out split (an explicit group key would be needed in `splits.py`).
 5. `max_length` and header handling identical across arms, fixed from training-split length statistics only.
-6. Approval of the simulated-rule catalog before labels are examined.
+6. Review of the simulated-rule catalog `simpol-1` and its diagnostics (section 3.1), including whether the generator should add normal files-path requests and non-administrator DELETE requests so those structures occur in both classes. Any catalog change needs a new catalog version and must not be chosen using labels.
 7. Final scale of the full study (templates and records) and prevalence sensitivities.
