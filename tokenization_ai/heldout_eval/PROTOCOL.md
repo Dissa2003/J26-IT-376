@@ -24,6 +24,7 @@
 | `1.2.0-draft` (D4-4) | **Paired A/B/C arm builders implemented** (`arms.py`, `arms-1`, section 12.12.1): the three representations of the same requests, one train-only shared vocabulary, the shared `budget-rule-1` budget with fail-closed handling of unrepresentable records, a fresh-model factory and manifest provenance. Preparation only: no model is fitted, predicted with or scored, no metric, no runner, no confirmatory data; no production, adapter, encoder, budget, generator, policy, audit or split change; nothing is frozen. |
 | `1.2.0-draft` (D4-5) | **Detection metrics and paired group bootstrap implemented** (`detection_metrics.py`, `detection-metrics-1`, section 12.11.1): step-wise Average Precision, ROC-AUC, threshold metrics, validation-only F1 threshold selection and a paired normalized-template-group bootstrap of AP(B) - AP(A). Tested on hand-made arrays only: no model is fitted or scored, no real detection metric exists, no development or confirmatory scoring, no success margin; no arm, encoder, generator, policy, audit, split or production change; nothing is frozen. |
 | `1.2.0-draft` (D4-6C1) | **Documentation only: optimization and score-selection decisions recorded** (section 12.11.2): arm-relative learning rates `lr = c / L` with `c` in {0.1, 0.3, 0.8}, the 27-candidate shared grid, validation-AP selection with a fixed tie-break order, raw-logit ranking scores for the held-out evaluation, and numerical-provenance requirements. Informed by the label-free D4-6B diagnostic on development seed 6101. No code, model, dataset, manifest or confirmatory data was created or changed; several items remain open; nothing is frozen. |
+| `1.2.0-draft` (D4-6C2) | **`lambda-power-1` and `logit-readout-1` implemented** (`numerics.py`, section 12.11.3): the training-only eigenvalue estimator with arm-relative learning rates, and a faithful raw-logit readout of the unchanged `LightweightAnomalyModel`. Tested on hand-made inputs and explicitly assigned weights; a label-free check on development seed 6101 (training split) matched the D4-6B measurements. No model is fitted or scored, no runner or manifest exists, no confirmatory data; no production, arm, metric, budget, generator, audit or split change; nothing is frozen. |
 
 This protocol is **separate from** the archived KPI 1-4 evaluation (`../evaluation/`, its protocols,
 fixtures, manifests and reports). Nothing here re-runs, replaces or reinterprets that evidence, which
@@ -974,6 +975,67 @@ No confirmatory experiment may start until these are resolved and documented.
 grid" idea from the D4-6A/D4-6B review (a common absolute grid {0.002, 0.005, 0.012} was proposed there and not adopted). Where section 12.12.1
 says every hyperparameter setting needs a fresh model, that still holds.
 
+#### 12.11.3 `lambda-power-1` and `logit-readout-1` (implemented in D4-6C2)
+
+`tokenization_ai/heldout_eval/numerics.py` implements the two numerical components approved in 12.11.2. It fits and scores no model, reads no label,
+changes no production file, and has not been run on any confirmatory data. Tests: `tests/tokenization_ai/test_numerics.py`.
+
+**`lambda-power-1` (training-only eigenvalue and learning rates).**
+- *Input and split restriction.* `estimate_lambda_max(inputs, split=, arm=, num_buckets=)` takes `ModelInput` objects of one arm (A, B or C) and one
+  `num_buckets`, and the split must be named `"train"` explicitly (any other value, including `"validation"`, `"test"`, a different spelling or a
+  non-string, is refused). Split identity is never inferred from request content. `estimate_from_arm_inputs` takes one arm of an `ArmInputs` and
+  requires its declared `split == "train"`. Empty, malformed (production `_validate_model_input` rules, plus integer-only ids and mask), duplicate-id
+  and non-finite inputs are refused; errors name positions only, never record content.
+- *Feature matrix.* Built with the model's own `LightweightAnomalyModel._features` on an untrained instance, the routine `fit` uses (unigram + adjacent
+  bigram hashing; padding excluded), into one preallocated float64 `n x num_buckets` array (66-264 MB at the planned 8,450 training records).
+- *Algorithm.* Largest eigenvalue of `[X | 1]^T [X | 1] / n` (the ones column is the bias), by deterministic power iteration without forming the
+  matrix (two matrix-vector products per iteration). Start vector uniform, every entry `1/sqrt(d)`, `d = num_buckets + 1`; no random numbers. The
+  matrix is entrywise non-negative, so by Perron-Frobenius the dominant eigenvector is non-negative and the uniform start cannot be orthogonal to it.
+  The estimate is the Rayleigh quotient of the current unit vector. Convergence: relative change of the Rayleigh quotient between successive
+  iterations at most `1e-10`; at most `5,000` iterations. `L = lambda_max / 4`.
+- *Failure.* A non-finite or non-positive estimate raises `EigenvalueError`; non-convergence raises `EigenvalueConvergenceError`. There is no fallback
+  learning rate. Learning-rate helpers refuse estimates that are unconverged, not from the training split, from another method, or whose `L` differs
+  from `lambda_max / 4`.
+- *Result record.* `LambdaEstimate.to_dict()` is strict-JSON-safe: method, arm, split, `num_buckets`, training-record count, dimension, `lambda_max`,
+  `L`, iterations, convergence flag, tolerance and iteration limit, the final relative change, the relative eigenvector residual `||Av - lambda v|| /
+  lambda` (diagnostic only, not a gate), feature-mass mean and maximum, mean squared norm, trace, and the SHA-256 of the sorted record-id list.
+- *Learning rates.* `learning_rate = c / L` for `c` in (0.1, 0.3, 0.8) (`0 < c < 2` enforced). `learning_rates` returns each rate as a double and its
+  `float.hex()` for exact reproduction. `learning_rate_table` requires exactly one estimate per arm and `num_buckets` of the approved grid (9 cells), with
+  no gaps or duplicates. Nothing is selected or tuned on labels or performance; the study's values come only from confirmatory training features.
+- *Label-free development check (seed 6101, primary split seed 4401, training split only; no fit, no predict).* At 2,000 templates (8,450 training records)
+  `lambda_max` was 116.77 / 113.33 / 111.82 (Arm A), 283.42 / 276.40 / 269.92 (B) and 475.62 / 368.72 / 308.01 (C) for 1024 / 2048 / 4096 buckets, in 6-8 iterations
+  with final relative change at most 1e-10; at 250 templates (1,024 records) A 117.79-113.20, B 296.12-274.46, C 461.84-301.53. These agree with the D4-6B
+  diagnostic to the printed precision, so the packaged estimator reproduces the earlier script; no discrepancy needed explaining. The resulting
+  development-seed rates (for example Arm C at 1024 buckets: 0.000841, 0.002523, 0.006728; Arm A at 4096 buckets: 0.003577, 0.010731, 0.028616) are
+  illustrations of the arithmetic on development data, not values for the study.
+
+**`logit-readout-1` (raw logit).**
+- `raw_logit(model, model_input)` and `raw_logits(model, inputs)` return `numpy.dot(model._features(ids, mask), model.weights) + model.bias` as a Python
+  float, the same expression `predict` evaluates before its sigmoid, so `predict(x) == sigmoid(raw_logit(x))` exactly for the stable sigmoid the model uses.
+  The hashing is the model's own (nothing is re-implemented in production paths); the tests re-state the documented constants independently to detect drift.
+- *Model checks.* The model must be a `LightweightAnomalyModel` with `is_trained` true, a 1-D float64 weight vector of length `num_buckets` with finite
+  entries, and a finite bias. Inputs get the production validation. A non-finite logit (for example an overflow) is an explicit error, not a warning.
+  The helper never changes weights or bias, never calls `fit`, and never routes the value through a sigmoid.
+- *Compatibility guard.* `verify_logit_compatibility(model, inputs)` compares `predict` with a stable sigmoid of the logit on non-saturated inputs
+  (`|logit| <= 30`, tolerance `1e-12`), counts saturated ones without comparing them, and raises on any disagreement or when no input can be checked. The
+  future runner must call it on validation inputs of each fitted model before relying on the readout; a failure stops the run and requests approval rather
+  than touching production code.
+- *Semantics.* The output is an uncalibrated ranking score, not a probability; a threshold chosen on it is a logit-scale threshold (12.11.2, Decision 4). In
+  saturated cases `predict` returns exactly 1.0 or 0.0 for different logits, while the logits remain finite and ordered (tested with hand-assigned weights).
+
+**Reliance on non-public production-model interfaces.** `numerics.py` calls two private members of `LightweightAnomalyModel`, `_features` and
+`_validate_model_input`, and reads the public `weights`, `bias`, `is_trained` and `num_buckets`. The unchanged model has no public feature or logit
+method; adding one would change production code and was not done. A change to those members in `model.py` can break or alter these helpers, which is why
+the manifest records the SHA-256 of `model.py`, the tests pin the feature map independently, and the compatibility guard above is mandatory in the runner.
+
+**Reproducibility and limitations.** Results are deterministic for fixed inputs, numpy and BLAS; input order changes the eigenvalue only at rounding level
+(tested to relative 1e-8). The Rayleigh quotient is a lower bound on the true largest eigenvalue, and a small change between iterations is strong
+evidence, not proof, of convergence when the two largest eigenvalues are close (the reported residual helps to judge this); the estimate varies by a few
+percent across datasets; `L` is a stability bound, not evidence of predictive quality. `provenance()` returns the identifiers, settings, numpy version
+and SHA-256 of `numerics.py` and `model.py`. The pre-run manifest (12.12) must record that provenance, every training `LambdaEstimate`, the resulting
+learning-rate table, the shared relative-step grid and the environment items of 12.11.2, Decision 5. The manifest, the runner and the selection record are
+not implemented; nothing is frozen.
+
 ### 12.12 Evaluation provenance and the write-once pre-run manifest (plan)
 
 **This step creates no manifest.** The pre-run manifest is written **once**, only after all relevant runner, arm,
@@ -1082,6 +1144,7 @@ the confirmatory run, and what confirmatory evidence exists. It holds no perform
 | 9a | D4-0 | Design revision (diagnostics only) | `structural_coverage` added to the audit report and the audit protocol label corrected (12.2.2). Development seed 6101 only. |
 | 9b | D4-5 | Design revision (implemented) | Metric and paired group-bootstrap functions, threshold rule and minimum-valid-replicate rule written (12.11.1) and tested on hand-made arrays. No model score, no data, no result. |
 | 9c | D4-6B / D4-6C1 | Exploratory finding, then pre-run decision (recorded) | Label-free feature-scale diagnostic on development seed 6101 (training split, no model); arm-relative learning rates, 27-candidate grid, validation-AP selection with tie-breaks and raw-logit ranking recorded as accepted draft decisions (12.11.2). No code, no score. |
-| 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; decision rule and any margin; exclusion and truncation policy; recovery policy; runner, estimator, logit extraction and manifest code. |
+| 9d | D4-6C2 | Design revision (implemented) | `lambda-power-1` estimator, relative learning-rate table and `logit-readout-1` written (12.11.3) and tested on hand-made inputs; label-free development check on seed 6101 (training split) reproduced the D4-6B eigenvalues. No model fit, no score. |
+| 10 | Pending | Pre-run decision | Arm C compatibility check and feature-budget policy; decision rule and any margin; exclusion and truncation policy; recovery policy; runner and manifest code (estimator and logit extraction: D4-6C2, 12.11.3). |
 | 11 | Pending | Pre-run decision | Write-once pre-run manifest, before any training or scoring. |
 | 12 | Pending | Confirmatory evidence | Confirmatory dataset (seed 7101), validation-only selection, one scored test run. **No confirmatory evidence exists yet.** |
