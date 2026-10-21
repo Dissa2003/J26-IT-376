@@ -100,6 +100,27 @@ def test_uncovered_action_and_request_mutations():
     assert other_subject["decision"] == admin["decision"]
 
 
+def test_unmatched_roles_are_reported_only_when_not_determined():
+    standard = [
+        "The request roles are a complete role assignment for the subject.",
+        "Policy conditions are outside the supported policy grammar.",
+    ]
+    near_miss = _request(["Administrators can delete user accounts."], ["Administrator"]).json()
+    assert near_miss["decision"] == "NOT_DETERMINED"
+    assert near_miss["limitations"] == standard + [
+        "Role 'Administrator' matched no policy role. Did you mean 'Administrators'?"
+    ]
+
+    unrelated = _request(["Administrators can delete user accounts."], ["Guests"]).json()
+    assert unrelated["limitations"] == standard + ["Role 'Guests' matched no policy role."]
+
+    allowed = _request(
+        ["Administrators can delete user accounts."], ["Administrators", "Contractors"]
+    ).json()
+    assert allowed["decision"] == "ALLOWED"
+    assert allowed["limitations"] == standard
+
+
 def test_request_names_match_policy_regardless_of_spacing_and_case():
     response = _request(
         ["Administrators can delete user accounts."],

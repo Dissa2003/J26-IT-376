@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "PowerShell(git branch -r; foreach \\($b in \"origin/main\",\"origin/dev\",\"origin/develop\"\\) { if \\(git rev-parse --verify --quiet $b\\) { \"{0}: HEAD ahead {1}, behind {2}\" -f $b, \\(git rev-list --count \"$b..HEAD\"\\), \\(git rev-list --count \"HEAD..$b\"\\) } }; \"--- files changed vs origin/dev:\"; git diff --stat origin/dev...HEAD 2>$null | Select-Object -Last 1; \"--- recent PR merges into main:\"; git log origin/main --merges --oneline -5; Get-Command gh -ErrorAction SilentlyContinue; Test-Path \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\")",
-      "PowerShell(git push origin feature/policy_verification 2>&1)"
+      "PowerShell(git push origin feature/policy_verification 2>&1)",
+      "PowerShell(python -m pytest -q --ignore=tests/engine 2>&1 | Select-Object -Last 1; 1..3 | ForEach-Object { python -m pytest -q tests/engine 2>&1 | Select-Object -Last 1 })",
+      "PowerShell(git fetch origin --quiet; git status --short; \"--- vs origin/dev: ahead {0}, behind {1}\" -f \\(git rev-list --count origin/dev..HEAD\\), \\(git rev-list --count HEAD..origin/dev\\); \"--- new on dev since we branched:\"; git log --oneline HEAD..origin/dev; \"--- vs own remote:\"; git status -sb | Select-Object -First 1)",
+      "PowerShell(git merge --ff-only origin/dev 2>&1)"
     ]
   }
 }
