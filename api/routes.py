@@ -1,3 +1,5 @@
+import difflib
+import logging
 import uuid
 
 from fastapi import APIRouter, FastAPI, HTTPException, status
@@ -5,6 +7,7 @@ from typing import List
 from pydantic import BaseModel, Field, field_validator
 from src.policy_verifier.models import (
     MultiPolicyVerificationReport,
+    RequestDecision,
     RequestDecisionReport,
     SecurityPolicy,
     SubmissionInfo,
@@ -16,6 +19,7 @@ from src.policy_verifier.cache import LocalRuleCache
 from src.policy_verifier.parser import PolicyParser, UnsupportedPolicyError, _canonical
 from src.policy_verifier.pipeline import VerificationPipeline
 
+log = logging.getLogger(__name__)
 app = FastAPI(title="Policy Verification Engine API")
 router = APIRouter()
 pipeline = VerificationPipeline()
@@ -216,13 +220,41 @@ def verify_request(body: IndependentRequestBody):
         )
         for policy in body.policies
     ]
-    return pipeline.engine.check_request(
+    roles = [resolve(role) for role in body.request.roles]
+    action = resolve(body.request.action)
+    resource = resolve(body.request.resource)
+    policy_roles = sorted({policy.subject for policy in policies})
+    unmatched_roles = [role for role in dict.fromkeys(roles) if role not in policy_roles]
+    log.debug(
+        "verify-request names: policy roles=%s actions=%s resources=%s | "
+        "request roles=%s action=%r resource=%r | unmatched request roles=%s",
+        policy_roles,
+        sorted({policy.action for policy in policies}),
+        sorted({policy.resource for policy in policies}),
+        roles,
+        action,
+        resource,
+        unmatched_roles,
+    )
+    report = pipeline.engine.check_request(
         policies,
         subject_id=body.request.subject_id,
-        roles=[resolve(role) for role in body.request.roles],
-        action=resolve(body.request.action),
-        resource=resolve(body.request.resource),
+        roles=roles,
+        action=action,
+        resource=resource,
     )
+    if report.decision is RequestDecision.NOT_DETERMINED:
+        report.limitations.extend(
+            _unmatched_role_note(role, policy_roles) for role in unmatched_roles
+        )
+    return report
+
+
+def _unmatched_role_note(role: str, policy_roles: list[str]) -> str:
+    keys = {_name_key(name): name for name in policy_roles}
+    close = difflib.get_close_matches(_name_key(role), list(keys), n=1, cutoff=0.8)
+    note = f"Role '{role}' matched no policy role."
+    return f"{note} Did you mean '{keys[close[0]]}'?" if close else note
 
 
 def _name_key(value: str) -> str:
