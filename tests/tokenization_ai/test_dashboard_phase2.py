@@ -221,7 +221,7 @@ def test_components_page_uses_real_health_and_no_other_module_status():
         "Not integrated",
         "Pending contract",
         "Not measured",
-        "to_runtime_verification_output raises NotImplementedError",
+        "to_runtime_verification_output returns runtime-verification-input-1",
         "not part of docker-compose",
         "never calls it",
         "generic StubModel",

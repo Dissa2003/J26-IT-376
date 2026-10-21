@@ -13,10 +13,7 @@ from .models import (
     ModelInput,
     RuleInfo,
     TokenSequence,
-    UnifiedApiContext,
     UnifiedContext,
-    VerifiedRule,
-    VerifiedRuleInfo,
 )
 from .normalization import NormalizationResult, Normalizer
 from .tensorizer import Tensorizer
@@ -126,39 +123,18 @@ class TokenizationAIService:
 
     @classmethod
     def create_default(
-        cls, max_length: int = 64, num_buckets: int = 256
+        cls, max_length: int = 128, num_buckets: int = 256
     ) -> "TokenizationAIService":
-        """Construct a ready-to-serve pipeline instance with pre-calibrated baseline weights."""
-        from .vocabulary import Vocabulary
-        fusion = InputFusion()
-        masker = PrivacyMasker()
-        normalizer = Normalizer()
-        tokenizer = HybridTokenizer()
+        """A ready-to-run pipeline for demonstrations and integration smoke tests.
 
-        vocabulary = Vocabulary()
-        initial_context = UnifiedApiContext(
-            event_id="init-event",
-            method="POST",
-            path="/api/v1/init",
-            client_ip="127.0.0.1",
-            payload={"action": "manage", "role": "admin", "amount": 100},
-            threat_score=0.1,
-        )
-        initial_rules = VerifiedRuleInfo(
-            event_id="init-event",
-            rules=[VerifiedRule(rule_id="R-INIT", attributes={"effect": "allow"})],
-        )
-        fused = fusion.fuse(initial_context, initial_rules)
-        mask_result = masker.mask_with_provenance(fused)
-        norm_result = normalizer.normalize_with_provenance(
-            mask_result.fused, mask_result.masked_paths
-        )
-        seq = tokenizer.tokenize(norm_result.fused, norm_result.masked_paths)
+        This is the standalone demo pipeline: vocabulary and model are genuinely fitted (gradient
+        descent) on the two bundled SYNTHETIC demo fixtures. It is not calibrated and not a
+        detection model -- its score only shows that the stages run end to end. There are no
+        random "pre-calibrated" weights: an unfitted model still refuses to predict.
+        """
+        from .demo import _build_demo_service  # local import: demo imports this module
 
-        vocabulary.fit([seq])
-        tensorizer = Tensorizer(vocabulary, max_length=max_length)
-        model = LightweightAnomalyModel.create_calibrated(num_buckets=num_buckets)
-        return cls(fusion, masker, normalizer, tokenizer, tensorizer, model)
+        return _build_demo_service(max_length=max_length, num_buckets=num_buckets)
 
     def predict(
         self,

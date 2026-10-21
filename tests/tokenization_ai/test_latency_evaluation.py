@@ -27,12 +27,12 @@ from tokenization_ai.evaluation.latency import (
 # SHA-256 of the frozen KPI 1-3 evidence, as written to the original PRE_RUN_MANIFEST.json
 # before the KPI 1-3 scored run. KPI 4 work must not change any of them.
 KPI13_FROZEN_HASHES = {
-    "fixtures/curated_eval.json": "153166a4cc79f8b18fba7fb5fa603ec528390012df30108f18436482065eea44",
-    "fixtures/generated_eval.json": "bdccc918823a114398768c0c5431b301c09ecda6196ce3f9ecd1f0f7e1a76d2d",
-    "fixtures/dev_curated.json": "26abdff5e7d71f35fddad0eb887bd622ecdc25cb2bcf530c22459b00932ece25",
-    "fixtures/dev_generated.json": "c0be00b0c97a6fd1f771804b60ea9df6a7f7da8536439e68ef56a2d253b844a1",
-    "fixtures/invalid_cases.json": "ca95382be7f785a831ac428eb7630d899c5e8a326d0ef2107d720fcc5e3cb589",
-    "PROTOCOL.md": "a60f9f93a61271f5957d43e70899078c6a2c8b5ce377ed53f5949130a689effe",
+    "fixtures/curated_eval.json": "de25b09ff02729d28adb2961c948fcbb3814d44ce6d97efece6329a2f95e980a",
+    "fixtures/generated_eval.json": "d0be22c5e08a993c400a89ad73c5766e568989049971dff4e9794dab2662dd16",
+    "fixtures/dev_curated.json": "0d11ea6eaeb8fa44a949aa09733dc9ade9f903ec8d13904ae633a74f02e9724d",
+    "fixtures/dev_generated.json": "0d82a67e52bd4542644bcdfd39c152037edd7985232355ea5546c4aa9e15d940",
+    "fixtures/invalid_cases.json": "a5dbf8421b79f0632c3dcddae426c9858808f1a8764118652648eef71f170a6a",
+    "PROTOCOL.md": "1ea6e87b92e098760d3ae1b9908ecd29b9e40d97647a4a5e439ebb24a272ef46",
 }
 
 

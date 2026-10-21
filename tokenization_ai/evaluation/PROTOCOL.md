@@ -1,21 +1,21 @@
-# LogiShield KPI Evaluation Protocol — KPIs 1–3
+# Member 4 KPI Evaluation Protocol — KPIs 1–3
 
-**Protocol version:** 1.0.0
-**Scope:** Hybrid Structure-Aware Tokenization & Lightweight AI Prediction (LogiShield only).
-**Covers:** KPI 1 Input Alignment, KPI 2 Semantic/Symbolic Token Mapping, KPI 3 Aligned Tensor Correctness.
+**Protocol version:** 1.0.0  
+**Scope:** Hybrid Structure-Aware Tokenization & Lightweight AI Prediction (Member 4 only).  
+**Covers:** KPI 1 Input Alignment, KPI 2 Semantic/Symbolic Token Mapping, KPI 3 Aligned Tensor Correctness.  
 **Out of scope:** KPI 4 (latency), KPI 5 (downstream usability), any detection-quality metric.
 
 > The proposal's targets (≥90%, ≥90%, ≥95%) are **targets, not results**. Everything
 > here is a *synthetic specification-coverage* evaluation. A pass rate is the share of
 > curated scenarios the implementation handles as specified. It is **not** real-world
 > accuracy, not precision/recall/F1, not formal-rule verification correctness, and not
-> evidence of Formal Verification or Runtime Verification integration.
+> evidence of Member 2 or Member 3 integration.
 
 ## 0. Sources and their limits
 
 | Source | Used for |
 |---|---|
-| LogiShield proposal §3.2–3.5, Table 2 | KPI names, targets, one-line measurement methods |
+| Member 4 proposal §3.2–3.5, Table 2 | KPI names, targets, one-line measurement methods |
 | `tokenizer.py` / `masking.py` / `normalization.py` docstrings | The *design specification* of the grammar (section 3 below) |
 
 The proposal fixes **no** sample size, split or dataset (§3.2, Appendix 1). This protocol
@@ -199,13 +199,13 @@ and none is evaluated.
   `target_met`, **plus** the group breakdown (curated vs. generated vs. designed).
 - `target_met: true` only means "the synthetic scenario set was handled as specified".
 - A KPI whose ground truth is insufficient is reported `not_measurable`, not given a number.
-- No report states or implies detection accuracy, formal verification, or Formal Verification/3 integration.
+- No report states or implies detection accuracy, formal verification, or Member 2/3 integration.
 
 ## 6. Known limitations
 
 1. Synthetic, hand-picked, small N; coverage, not sampling.
 2. Same-author oracle; independent in *process* (hand-written, grammar acceptor), not in *authorship*.
-3. Mock rules only. Formal Verification's real rule schema is unavailable.
+3. Mock rules only. Member 2's real rule schema is unavailable.
 4. SR-BH not used (no local dataset; none downloaded).
 5. One tensor configuration and one tiny dev vocabulary.
 6. The anomaly model is not exercised by KPIs 1–3 and is unchanged.

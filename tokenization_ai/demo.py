@@ -78,8 +78,12 @@ _DEMO_EVENTS: list[tuple[UnifiedApiContext, VerifiedRuleInfo]] = [
 _DEMO_LABELS = [0, 1]
 
 
-def _build_demo_service() -> TokenizationAIService:
-    """Fit a vocabulary/model on the demo fixtures so the demo is self-contained."""
+def _build_demo_service(max_length: int = 128, num_buckets: int = 256) -> TokenizationAIService:
+    """Fit a vocabulary/model on the demo fixtures so the demo is self-contained.
+
+    The model is genuinely trained (gradient descent on the two synthetic fixtures) but it is
+    not a detection model: its scores only show that the stages are wired end to end.
+    """
     fusion, masker, normalizer, tokenizer = (
         InputFusion(),
         PrivacyMasker(),
@@ -99,9 +103,9 @@ def _build_demo_service() -> TokenizationAIService:
 
     vocabulary = Vocabulary()
     vocabulary.fit(sequences)
-    tensorizer = Tensorizer(vocabulary, max_length=128)
+    tensorizer = Tensorizer(vocabulary, max_length=max_length)
 
-    model = LightweightAnomalyModel(num_buckets=256)
+    model = LightweightAnomalyModel(num_buckets=num_buckets)
     model.fit(
         [tensorizer.tensorize(sequence) for sequence in sequences],
         _DEMO_LABELS,
@@ -132,7 +136,7 @@ def main() -> None:
     print("=" * 72)
     print("LogiShield PP1 demonstration -- SYNTHETIC DATA ONLY, NOT A REAL DATASET")
     print("Verified-rule fixtures are MOCK data, not genuine Formal Verification output.")
-    print("Formal Verification/3 integration is not exercised in this demo.")
+    print("Formal Verification and Runtime Verification integration is not exercised in this demo.")
     print("=" * 72)
 
     results = run_demo()

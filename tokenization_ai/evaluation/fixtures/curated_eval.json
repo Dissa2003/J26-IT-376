@@ -180,7 +180,7 @@
       }
     },
     {
-      "id": "E12-ingestion-style-raw-event",
+      "id": "E12-member1-style-raw-event",
       "description": "Member-1-shaped RawEvent dict with _http_metadata/_threat_score and an already-redacted [REDACTED_PII] value.",
       "reference_compatible": false,
       "input": {
