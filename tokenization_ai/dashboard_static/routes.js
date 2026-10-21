@@ -51,24 +51,9 @@ export const ROUTES = [
     subtitle: "Implementation surface reserved for a future deployment integration."
   },
   {
-    id: "traffic", label: "API Traffic", icon: "traffic", kind: "pending",
-    title: "API Traffic",
-    subtitle: "Request volume, methods, endpoints and status codes (planned).",
-    owner: "Ingestion · Data Processing",
-    shows: ["Request volume over time", "Request methods and status codes", "Top endpoints"],
-    requires: [
-      "Aggregate traffic metrics from Ingestion's ingestion service (it currently handles one event per request and exposes no aggregate endpoint)",
-      "A stored request history to chart"
-    ],
-    status: [
-      "LogiShield does not observe API traffic; it only analyzes requests posted to it.",
-      "Ingestion → LogiShield is tested in-process only, not as a deployed link."
-    ],
-    placeholders: [
-      { title: "Request volume", icon: "traffic", needs: "Needs aggregate traffic metrics" },
-      { title: "Request methods", icon: "layers", needs: "Needs a request history" },
-      { title: "Top endpoints", icon: "list", needs: "Needs a request history" }
-    ]
+    id: "traffic", label: "API Traffic", icon: "traffic", kind: "ingestion",
+    title: "Data Ingestion & Traffic Interception",
+    subtitle: "Intercept HTTP traffic, apply AST PII data masking, serialize to Protobuf, and generate Unified Context Vectors."
   },
   {
     id: "anomaly", label: "Anomaly Detection", icon: "alert", kind: "anomaly",

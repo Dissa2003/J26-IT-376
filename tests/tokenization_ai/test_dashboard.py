@@ -184,7 +184,8 @@ def test_navigation_has_every_required_page_and_a_placeholder_settings():
     assert routes.count('kind: "components"') == 1
     assert routes.count('kind: "overview"') == 1
     assert routes.count('kind: "reports"') == 1  # Phase 4
-    assert routes.count('kind: "pending"') == 4
+    assert routes.count('kind: "ingestion"') == 1  # Ingestion connected
+    assert routes.count('kind: "pending"') == 3
 
 
 def test_pending_pages_show_no_data_and_say_so():

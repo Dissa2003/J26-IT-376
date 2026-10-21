@@ -19,12 +19,13 @@ if (Test-Path -LiteralPath $pidFile -PathType Leaf) {
         $saved = Get-Content -LiteralPath $pidFile -Raw | ConvertFrom-Json
         Stop-Tree $saved.dashboard_pid "Dashboard"
         Stop-Tree $saved.policy_pid "Policy service"
+        Stop-Tree $saved.ingestion_pid "Ingestion service"
     } catch {
         Write-Host "The PID file could not be read; using the safe port fallback." -ForegroundColor Yellow
     }
     Remove-Item -LiteralPath $pidFile -Force
 } else {
-    foreach ($port in @(8002, 8010)) {
+    foreach ($port in @(8001, 8002, 8010)) {
         $connections = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
         foreach ($connection in $connections) {
             $process = Get-CimInstance Win32_Process -Filter ("ProcessId = {0}" -f $connection.OwningProcess) -ErrorAction SilentlyContinue

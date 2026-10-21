@@ -325,6 +325,7 @@ def create_app(
     service: TokenizationAIService | None = None,
     model_note: str | None = None,
     policy_url: str | None = None,
+    ingestion_url: str | None = None,
 ) -> FastAPI:
     """Build the app. ``service`` is injectable; the default is the PP1 demo service."""
     if service is None:
@@ -335,6 +336,7 @@ def create_app(
 
     app = FastAPI(title="tokenization_ai")
     policy_base_url = (policy_url or get_settings().policy_url).rstrip("/")
+    ingestion_base_url = (ingestion_url or get_settings().ingestion_url).rstrip("/")
 
     def _ready() -> bool:
         return bool(service.tensorizer.vocabulary.is_fitted and service.model.is_trained)
@@ -487,6 +489,56 @@ def create_app(
         except httpx.HTTPError as exc:
             log.exception("Policy verification service unavailable")
             return _error(502, "policy_service_unavailable", "Policy verification service is unavailable.")
+        headers = {}
+        content_type = upstream.headers.get("content-type")
+        if content_type:
+            headers["content-type"] = content_type
+        return Response(
+            content=upstream.content,
+            status_code=upstream.status_code,
+            headers=headers,
+        )
+
+    @app.api_route(
+        "/api/ingestion/{path:path}",
+        methods=["GET", "POST"],
+        include_in_schema=False,
+    )
+    async def ingestion_proxy(path: str, request: Request):
+        """Proxy dashboard ingestion calls to the standalone ingestion service."""
+        try:
+            body = await request.body()
+            clean_path = path.strip("/")
+            if clean_path == "health":
+                target_url = f"{ingestion_base_url}/health"
+            elif clean_path.startswith("v1/"):
+                target_url = f"{ingestion_base_url}/{clean_path}"
+            else:
+                target_url = f"{ingestion_base_url}/v1/{clean_path}"
+
+            fwd_headers = {}
+            if "content-type" in request.headers:
+                fwd_headers["content-type"] = request.headers["content-type"]
+            for h in ["x-event-id", "correlation-id"]:
+                if h in request.headers:
+                    fwd_headers[h] = request.headers[h]
+
+            async with httpx.AsyncClient() as client:
+                upstream = await client.request(
+                    request.method,
+                    target_url,
+                    params=request.query_params,
+                    content=body,
+                    headers=fwd_headers,
+                    timeout=10.0,
+                )
+        except httpx.HTTPError as exc:
+            log.exception("Ingestion service unavailable")
+            return _error(
+                502,
+                "ingestion_service_unavailable",
+                f"Ingestion service is unavailable at {ingestion_base_url}. Ensure it is running (python -m ingestion).",
+            )
         headers = {}
         content_type = upstream.headers.get("content-type")
         if content_type:

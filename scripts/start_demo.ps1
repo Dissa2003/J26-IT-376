@@ -27,7 +27,7 @@ function Get-PortOwner($port) {
     return [PSCustomObject]@{ Port = $port; Pid = $process.Id; Name = $process.ProcessName }
 }
 
-foreach ($port in @(8002, 8010)) {
+foreach ($port in @(8001, 8002, 8010)) {
     $owner = Get-PortOwner $port
     if ($null -ne $owner) {
         Write-Host ("Port {0} is already in use by {1} (PID {2}). Nothing was started." -f $owner.Port, $owner.Name, $owner.Pid) -ForegroundColor Red
@@ -64,22 +64,33 @@ function Wait-Http200($url, $label) {
     return $false
 }
 
+$ingestionCommand = "`$Host.UI.RawUI.WindowTitle = 'LogiShield ingestion service :8001'; Set-Location '$repoRoot'; & '$python' -m uvicorn ingestion.app:app --host 127.0.0.1 --port 8001"
+$ingestionProcess = Start-VisibleService "LogiShield ingestion service :8001" $ingestionCommand
+
+if (-not (Wait-Http200 "http://127.0.0.1:8001/health" "Ingestion service")) {
+    Stop-StartedProcess $ingestionProcess.Id
+    exit 3
+}
+
 $policyCommand = "`$Host.UI.RawUI.WindowTitle = 'LogiShield policy service :8002'; Set-Location '$repoRoot'; & '$python' -m uvicorn api.routes:app --host 127.0.0.1 --port 8002"
 $policyProcess = Start-VisibleService "LogiShield policy service :8002" $policyCommand
 
 if (-not (Wait-Http200 "http://127.0.0.1:8002/" "Policy service")) {
     Stop-StartedProcess $policyProcess.Id
+    Stop-StartedProcess $ingestionProcess.Id
     exit 3
 }
 
 $env:POLICY_URL = "http://127.0.0.1:8002"
+$env:INGESTION_URL = "http://127.0.0.1:8001"
 $reloadArgument = if ($Reload) { " --reload" } else { "" }
-$dashboardCommand = "`$Host.UI.RawUI.WindowTitle = 'LogiShield dashboard :8010'; Set-Location '$repoRoot'; `$env:POLICY_URL = 'http://127.0.0.1:8002'; & '$python' -m uvicorn tokenization_ai.app:app --host 127.0.0.1 --port 8010$reloadArgument"
+$dashboardCommand = "`$Host.UI.RawUI.WindowTitle = 'LogiShield dashboard :8010'; Set-Location '$repoRoot'; `$env:POLICY_URL = 'http://127.0.0.1:8002'; `$env:INGESTION_URL = 'http://127.0.0.1:8001'; & '$python' -m uvicorn tokenization_ai.app:app --host 127.0.0.1 --port 8010$reloadArgument"
 $dashboardProcess = Start-VisibleService "LogiShield dashboard :8010" $dashboardCommand
 
 if (-not (Wait-Http200 "http://127.0.0.1:8010/health" "Dashboard")) {
     Stop-StartedProcess $dashboardProcess.Id
     Stop-StartedProcess $policyProcess.Id
+    Stop-StartedProcess $ingestionProcess.Id
     exit 4
 }
 
@@ -100,7 +111,35 @@ try {
     Write-Host ("WARNING: dashboard policy proxy smoke check failed with HTTP {0}. Servers remain running." -f $status) -ForegroundColor Yellow
 }
 
+$ingestionSmoke = @{
+    metadata = @{
+        method = "POST"
+        path = "/orders"
+        content_type = "application/json"
+    }
+    payload = @{
+        email = "customer@example.com"
+        password = "secretPassword123"
+        amount = 149.95
+    }
+    threat_score = 0.5
+} | ConvertTo-Json -Depth 4 -Compress
+
+try {
+    $ingestResponse = Invoke-WebRequest -Uri "http://127.0.0.1:8010/api/ingestion/intercept" `
+        -Method Post -ContentType "application/json" -Body $ingestionSmoke -UseBasicParsing -TimeoutSec 10
+    if ($ingestResponse.StatusCode -eq 200) {
+        Write-Host "PASS: dashboard ingestion proxy smoke check returned HTTP 200." -ForegroundColor Green
+    } else {
+        Write-Host ("WARNING: dashboard ingestion proxy smoke check returned HTTP {0}." -f $ingestResponse.StatusCode) -ForegroundColor Yellow
+    }
+} catch {
+    $status = if ($_.Exception.Response) { [int]$_.Exception.Response.StatusCode } else { "no response" }
+    Write-Host ("WARNING: dashboard ingestion proxy smoke check failed with HTTP {0}. Servers remain running." -f $status) -ForegroundColor Yellow
+}
+
 $pidData = @{
+    ingestion_pid = $ingestionProcess.Id
     policy_pid = $policyProcess.Id
     dashboard_pid = $dashboardProcess.Id
     repo_root = $repoRoot
@@ -109,15 +148,17 @@ $pidData = @{
 $pidData | ConvertTo-Json | Set-Content -LiteralPath $pidFile -Encoding UTF8
 
 if (-not $NoBrowser) {
-    Start-Process "http://127.0.0.1:8010/dashboard#/policy-verification"
+    Start-Process "http://127.0.0.1:8010/dashboard#/ingestion"
 }
 
 Write-Host ""
 Write-Host "LogiShield demo is running." -ForegroundColor Cyan
-Write-Host "Policy service: http://127.0.0.1:8002/"
-Write-Host "Dashboard:      http://127.0.0.1:8010/dashboard#/policy-verification"
-Write-Host ("Policy PID:     {0}" -f $policyProcess.Id)
-Write-Host ("Dashboard PID:  {0}" -f $dashboardProcess.Id)
+Write-Host "Ingestion service: http://127.0.0.1:8001/health"
+Write-Host "Policy service:    http://127.0.0.1:8002/"
+Write-Host "Dashboard:         http://127.0.0.1:8010/dashboard#/ingestion"
+Write-Host ("Ingestion PID:     {0}" -f $ingestionProcess.Id)
+Write-Host ("Policy PID:        {0}" -f $policyProcess.Id)
+Write-Host ("Dashboard PID:     {0}" -f $dashboardProcess.Id)
 Write-Host "Run scripts\stop_demo.ps1 to stop."
 
 Write-Host ""

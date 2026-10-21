@@ -42,6 +42,7 @@ DASHBOARD_ASSETS: dict[str, str] = {
     "page-components.js": "text/javascript; charset=utf-8",
     "page-policy.js": "text/javascript; charset=utf-8",
     "page-policy-data.js": "text/javascript; charset=utf-8",
+    "page-ingestion.js": "text/javascript; charset=utf-8",
     "page-pending.js": "text/javascript; charset=utf-8",
     "logo.svg": "image/svg+xml",
 }

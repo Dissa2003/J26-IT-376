@@ -121,3 +121,67 @@ export async function analyze(request) {
     clearTimeout(timer);
   }
 }
+
+export async function getIngestionHealth() {
+  try {
+    const response = await fetch("/api/ingestion/health", { cache: "no-store", credentials: "same-origin" });
+    let payload = null;
+    try { payload = await response.json(); } catch (error) { payload = null; }
+    return { ok: response.ok, status: response.status, payload };
+  } catch (error) {
+    return { ok: false, status: 0, payload: null, networkError: true };
+  }
+}
+
+export async function interceptRequest(requestData, eventId) {
+  const headers = { "Content-Type": "application/json" };
+  if (eventId) {
+    headers["X-Event-ID"] = eventId;
+  }
+  try {
+    const response = await fetch("/api/ingestion/intercept", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(requestData),
+      credentials: "same-origin",
+      cache: "no-store"
+    });
+    let payload = null;
+    try { payload = await response.json(); } catch (error) { payload = null; }
+    return { ok: response.ok, status: response.status, payload };
+  } catch (error) {
+    return { ok: false, status: 0, payload: null, networkError: true };
+  }
+}
+
+export async function submitThreatScore(eventId, threatScore) {
+  try {
+    const response = await fetch("/api/ingestion/threat-score", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event_id: eventId, threat_score: threatScore }),
+      credentials: "same-origin",
+      cache: "no-store"
+    });
+    let payload = null;
+    try { payload = await response.json(); } catch (error) { payload = null; }
+    return { ok: response.ok, status: response.status, payload };
+  } catch (error) {
+    return { ok: false, status: 0, payload: null, networkError: true };
+  }
+}
+
+export async function getContextStream(limit = 20) {
+  try {
+    const response = await fetch(`/api/ingestion/context-stream?limit=${encodeURIComponent(limit)}`, {
+      cache: "no-store",
+      credentials: "same-origin"
+    });
+    let payload = null;
+    try { payload = await response.json(); } catch (error) { payload = null; }
+    return { ok: response.ok, status: response.status, payload };
+  } catch (error) {
+    return { ok: false, status: 0, payload: null, networkError: true };
+  }
+}
+

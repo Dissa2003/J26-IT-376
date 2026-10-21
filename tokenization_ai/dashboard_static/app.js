@@ -12,6 +12,7 @@ import * as reports from "./page-reports.js";
 import { mountPending } from "./page-pending.js";
 import * as policy from "./page-policy.js";
 import * as policyData from "./page-policy-data.js";
+import * as ingestion from "./page-ingestion.js";
 
 let activeUnmount = null;
 
@@ -33,7 +34,8 @@ function buildNav() {
 
 function currentRouteId() {
   const hash = window.location.hash || "";
-  return hash.indexOf("#/") === 0 ? hash.slice(2) : "";
+  const id = hash.indexOf("#/") === 0 ? hash.slice(2) : "";
+  return id === "ingestion" ? "traffic" : id;
 }
 
 function render() {
@@ -49,7 +51,7 @@ function render() {
   clear(view);
 
   const pages = {
-    overview: overview, policy: policy, anomaly: anomaly, logs: logs,
+    overview: overview, ingestion: ingestion, policy: policy, anomaly: anomaly, logs: logs,
     components: components, reports: reports, "policy-data": policyData,
     conflicts: policyData, cache: policyData, explainability: policyData,
     evaluation: policyData, implementation: policyData
