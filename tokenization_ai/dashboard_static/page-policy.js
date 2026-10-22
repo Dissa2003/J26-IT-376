@@ -17,43 +17,141 @@ function statusTone(status) {
   return "pending";
 }
 
-function stage(title, iconName, content, tone = "info") {
-  const item = el("article", "policy-stage");
-  const head = el("div", "policy-stage-head");
-  const marker = el("span", "policy-stage-marker");
-  marker.appendChild(icon(iconName, 18));
-  head.appendChild(marker);
-  head.appendChild(el("h3", null, title));
-  head.appendChild(badge(tone === "live" ? "Complete" : "Returned", tone));
-  item.appendChild(head);
-  item.appendChild(content);
-  return item;
+/* Collapsible section using native <details>; closed by default. */
+function disclosure(label, content) {
+  const box = el("details", "pv-disclosure");
+  box.appendChild(el("summary", null, label));
+  box.appendChild(content);
+  return box;
 }
 
-function renderReport(root, report) {
-  clear(root);
-  const hasConflict = Array.isArray(report.conflicts) && report.conflicts.length > 0;
-  const isEntailed = report.status === "UNSAT"
-    && report.solver_result
-    && report.solver_result.is_entailment === true;
-  const resultTone = hasConflict ? "bad" : isEntailed ? "live" : "pending";
-  const result = el("div", "policy-result " + resultTone);
-  result.appendChild(el("div", "policy-result-status", isEntailed
-    ? "Verified – conclusion entailed"
-    : hasConflict ? "Policy conflict detected" : "Verification returned"));
-  const resultText = isEntailed
-    ? "Raw solver status: " + report.status
-    : report.solver_result && report.solver_result.is_entailment
-      ? "Raw solver status: " + report.status + ". Entailment established by the negated-conclusion query."
-      : "Raw solver status: " + report.status + ". The solver status is not, by itself, proof that the policy is valid.";
-  result.appendChild(el("p", null, resultText));
-  root.appendChild(result);
+/* ---- Step scaffolding ---------------------------------------------------- */
 
-  const stages = el("div", "policy-stages");
-  stages.appendChild(stage("Policy input", "file", codeBlock(report.original_policy || "Not returned.")));
-  stages.appendChild(stage("Attribute extraction", "layers", codeBlock(report.attributes || "Not returned.")));
-  stages.appendChild(stage("Structured representation", "grid", codeBlock(report.structured_policy || "Not returned.")));
-  stages.appendChild(stage("Predicate logic", "code", codeBlock(report.fol_formula || "Not returned.")));
+const STEPS = [
+  { title: "Policy input", icon: "file" },
+  { title: "Attribute extraction", icon: "layers" },
+  { title: "Predicate logic", icon: "code" },
+  { title: "Formal calculus check", icon: "merge" },
+  { title: "Constraint encoding", icon: "lock" },
+  { title: "Z3 solver result", icon: "shield" },
+  { title: "Final decision", icon: "decisions" }
+];
+
+function createStep(index) {
+  const spec = STEPS[index];
+  const root = el("article", "pv-step is-pending");
+  const head = el("div", "pv-step-head");
+  head.appendChild(el("span", "pv-step-number", String(index + 1)));
+  const marker = el("span", "policy-stage-marker");
+  marker.appendChild(icon(spec.icon, 18));
+  head.appendChild(marker);
+  head.appendChild(el("h3", null, "Step " + (index + 1) + " — " + spec.title));
+  const status = badge("Not reached", "pending");
+  head.appendChild(status);
+  const waiting = el("p", "pv-waiting", "Waiting for the previous step.");
+  const body = el("div", "pv-step-body");
+  body.hidden = true;
+  root.appendChild(head);
+  root.appendChild(waiting);
+  root.appendChild(body);
+  return { root, body, status, waiting };
+}
+
+function setStatus(step, text, tone) {
+  step.status.textContent = text;
+  step.status.className = "badge badge-" + tone;
+}
+
+function resetStep(step) {
+  step.root.className = "pv-step is-pending";
+  clear(step.body);
+  step.body.hidden = true;
+  step.waiting.hidden = false;
+  setStatus(step, "Not reached", "pending");
+}
+
+function revealStep(step, content, text, tone) {
+  clear(step.body);
+  step.body.appendChild(content);
+  step.body.hidden = false;
+  step.waiting.hidden = true;
+  step.root.className = "pv-step is-revealed";
+  setStatus(step, text, tone);
+}
+
+function arrow() {
+  const node = el("div", "pv-arrow");
+  node.setAttribute("aria-hidden", "true");
+  node.appendChild(icon("arrowDown", 20));
+  return node;
+}
+
+/* ---- Step content builders ------------------------------------------------ */
+
+function attributesView(attributes) {
+  const grid = el("div", "pv-attr-grid");
+  [["Role", attributes.subject], ["Action", attributes.action], ["Resource", attributes.resource]].forEach((pair) => {
+    const box = el("div", "pv-attr");
+    box.appendChild(el("span", "pv-attr-label", pair[0]));
+    box.appendChild(el("span", "pv-attr-value", pair[1] || "Not returned"));
+    grid.appendChild(box);
+  });
+  const wrap = el("div", "pv-stack");
+  wrap.appendChild(grid);
+  wrap.appendChild(el("p", "card-note", "Effect: " + (attributes.effect || "not returned")
+    + " · Interpretation: " + (attributes.interpretation || "not returned")));
+  return wrap;
+}
+
+/* The sentence follows the policy's meaning; the three forms are not equivalent. */
+function sentenceParts(attributes) {
+  const role = attributes.subject || "?";
+  const action = attributes.action || "?";
+  const resource = attributes.resource || "?";
+  if (attributes.interpretation === "only_role") {
+    return [["IF", "kw"], [" a user can ", null], [action, "val"], [" on ", null], [resource, "val"],
+      [" THEN", "kw"], [" they must have role ", null], [role, "val"]];
+  }
+  if (attributes.effect === "Deny" || attributes.interpretation === "role_prohibition") {
+    return [["IF", "kw"], [" a user has role ", null], [role, "val"], [" THEN", "kw"],
+      [" they cannot ", null], [action, "val"], [" on ", null], [resource, "val"]];
+  }
+  return [["IF", "kw"], [" a user has role ", null], [role, "val"], [" THEN", "kw"],
+    [" they can ", null], [action, "val"], [" on ", null], [resource, "val"]];
+}
+
+function predicateView(report) {
+  const wrap = el("div", "pv-stack");
+  const sentence = el("p", "pv-sentence");
+  sentenceParts(report.attributes || {}).forEach((part) => {
+    sentence.appendChild(el(part[1] === "kw" ? "span" : part[1] === "val" ? "strong" : "span",
+      part[1] === "kw" ? "pv-kw" : null, part[0]));
+  });
+  wrap.appendChild(sentence);
+  const formula = report.fol_formula && report.fol_formula.formula;
+  wrap.appendChild(el("code", "pv-formula", formula || "Formula not returned."));
+  if (report.structured_policy) {
+    wrap.appendChild(disclosure("Show structured policy", codeBlock(report.structured_policy)));
+  }
+  return wrap;
+}
+
+function hasConflict(report) {
+  return (Array.isArray(report.conflicts) && report.conflicts.length > 0)
+    || report.rule_status === "conflicted" || report.rule_status === "contradictory";
+}
+
+function calculusView(report) {
+  const wrap = el("div", "pv-stack");
+  const conflicted = hasConflict(report);
+  const banner = el("div", "pv-banner " + (conflicted ? "bad" : "live"));
+  banner.appendChild(el("div", "pv-banner-title", conflicted
+    ? "❌ Conflict detected — rules contradict each other"
+    : "✅ No conflicts — rules are consistent"));
+  banner.appendChild(el("p", null, conflicted
+    ? "The conflict detector or consistency check rejected this policy."
+    : "No permission/prohibition conflict was found for this policy. Several policies are checked against each other by POST /api/v1/verify-policies."));
+  wrap.appendChild(banner);
 
   const inference = el("div", "policy-inference");
   if (Array.isArray(report.inference_trace) && report.inference_trace.length) {
@@ -62,41 +160,16 @@ function renderReport(root, report) {
       row.appendChild(el("span", "step-number", String(step.step_number)));
       const body = el("div");
       body.appendChild(el("strong", null, step.rule));
-      body.appendChild(codeBlock({
-        premises: step.premises,
-        conclusion: step.conclusion,
-        explanation: step.explanation
-      }));
+      (step.premises || []).forEach((premise) => body.appendChild(el("code", "pv-formula", premise)));
+      body.appendChild(el("code", "pv-formula pv-conclusion", "⊢ " + step.conclusion));
+      body.appendChild(el("p", "card-note", step.explanation));
       row.appendChild(body);
       inference.appendChild(row);
     });
   } else {
     inference.appendChild(el("p", "empty-note", "No inference steps were returned."));
   }
-  stages.appendChild(stage("Formal calculus", "merge", inference));
-  stages.appendChild(stage("Constraint generation", "lock", codeBlock(report.constraints || "Not returned.")));
-
-  const solver = report.solver_result || {};
-  const solverBody = el("div", "solver-summary");
-  solverBody.appendChild(el("p", "card-note", "The request here is generated from the policy itself. Use 'Check a request' below for an independent request."));
-  solverBody.appendChild(el("div", "solver-line", "Query type: " + (solver.query_type || "not returned")));
-  solverBody.appendChild(el("div", "solver-line", "Entailment established: " + (solver.is_entailment ? "Yes" : "No")));
-  solverBody.appendChild(el("p", "card-note", solver.explanation || "No solver explanation was returned."));
-  if (solver.model) { solverBody.appendChild(codeBlock(solver.model)); }
-  stages.appendChild(stage("Demonstration check (synthetic request)", "shield", solverBody, resultTone));
-  if (solver.is_entailment === true) {
-    const caveat = el("div", "caveat", "Note: This proof uses a fixed demonstration individual (Alice) derived from the policy itself. The entailment holds by construction. Use the 'Check a request' form below to evaluate real access decisions.");
-    caveat.setAttribute("role", "note");
-    stages.appendChild(caveat);
-  }
-
-  const explanation = report.explanation || {};
-  stages.appendChild(stage("Explanation", "info", codeBlock(explanation), "info"));
-  stages.appendChild(stage("Rule-cache eligibility", "database", codeBlock({
-    status: report.rule_status || "not returned",
-    formally_established: explanation.formally_established === true,
-    limitations: report.limitations || explanation.limitations || []
-  }), report.rule_status === "eligible" ? "live" : "pending"));
+  wrap.appendChild(inference);
 
   if (Array.isArray(report.conflicts) && report.conflicts.length) {
     const conflicts = el("div", "policy-conflicts");
@@ -104,10 +177,74 @@ function renderReport(root, report) {
       conflicts.appendChild(el("p", null, conflict.explanation));
       conflicts.appendChild(codeBlock(conflict));
     });
-    stages.appendChild(stage("Conflicts", "alert", conflicts, "bad"));
+    wrap.appendChild(disclosure("Show conflict details", conflicts));
   }
-  root.appendChild(stages);
+  return wrap;
 }
+
+function encodingView(report) {
+  const wrap = el("div", "pv-stack");
+  const constraints = Array.isArray(report.constraints) ? report.constraints : [];
+  const rule = constraints.find((item) => item.kind === "rule");
+  wrap.appendChild(el("p", "card-note", "The rule constraint passed to the solver, as readable first-order logic:"));
+  wrap.appendChild(codeBlock(rule ? rule.expression : "No rule constraint was returned."));
+  if (constraints.length) {
+    const list = el("div", "pv-constraint-list");
+    constraints.forEach((item) => {
+      const row = el("div", "pv-constraint");
+      row.appendChild(badge(item.kind, "info"));
+      row.appendChild(el("code", "pv-formula", item.expression));
+      list.appendChild(row);
+    });
+    wrap.appendChild(disclosure("Show full encoding (" + constraints.length + " constraints)", list));
+  }
+  return wrap;
+}
+
+function solverView(report) {
+  const solver = report.solver_result || {};
+  const status = report.status || "UNKNOWN";
+  const isEntailed = status === "UNSAT" && solver.is_entailment === true;
+  const wrap = el("div", "pv-stack");
+
+  const row = el("div", "pv-solver-row");
+  row.appendChild(el("span", "pv-solver-badge " + (isEntailed ? "live" : "mock"), status));
+  const meaning = el("div");
+  meaning.appendChild(el("div", "pv-banner-title", isEntailed
+    ? "Verified – conclusion entailed"
+    : status === "UNKNOWN" ? "Solver could not decide" : "Conclusion not entailed"));
+  meaning.appendChild(el("p", "card-note", isEntailed
+    ? "Raw solver status: " + status + ". For an entailment query UNSAT means the negated conclusion is impossible, so the proof succeeded."
+    : "Raw solver status: " + status + ". The solver status is not, by itself, proof that the policy is valid."));
+  row.appendChild(meaning);
+  wrap.appendChild(row);
+
+  wrap.appendChild(el("p", "card-note", "Demonstration check (synthetic request). The request here is generated from the policy itself. Use 'Check a request' below for an independent request."));
+  if (solver.is_entailment === true) {
+    const caveat = el("div", "caveat", "Note: This proof uses a fixed demonstration individual (Alice) derived from the policy itself. The entailment holds by construction. Use the 'Check a request' form below to evaluate real access decisions.");
+    caveat.setAttribute("role", "note");
+    wrap.appendChild(caveat);
+  }
+
+  const explanation = report.explanation || {};
+  const details = el("div", "pv-stack");
+  details.appendChild(el("div", "solver-line", "Query type: " + (solver.query_type || "not returned")));
+  details.appendChild(el("div", "solver-line", "Entailment established: " + (solver.is_entailment ? "Yes" : "No")));
+  details.appendChild(el("p", "card-note", solver.explanation || "No solver explanation was returned."));
+  if (solver.model) { details.appendChild(codeBlock(solver.model)); }
+  details.appendChild(el("h4", null, "Explanation"));
+  details.appendChild(codeBlock(explanation));
+  details.appendChild(el("h4", null, "Rule-cache eligibility"));
+  details.appendChild(codeBlock({
+    status: report.rule_status || "not returned",
+    formally_established: explanation.formally_established === true,
+    limitations: report.limitations || explanation.limitations || []
+  }));
+  wrap.appendChild(disclosure("Show solver details and rule-cache eligibility", details));
+  return { content: wrap, isEntailed };
+}
+
+/* ---- Errors ---------------------------------------------------------------- */
 
 function renderError(root, message, unsupported = false) {
   clear(root);
@@ -118,12 +255,20 @@ function renderError(root, message, unsupported = false) {
   root.appendChild(box);
 }
 
+/* ---- Step 7: independent request and final decision ----------------------- */
+
 const REASON_WORDS = {
   request_entailed: "The request is allowed by the policies.",
   request_prohibited: "The request is denied by the policies.",
   not_covered_by_policies: "Policies do not decide this request.",
   policy_set_contradictory: "The submitted policies contradict each other.",
   solver_unknown: "The solver could not determine the request."
+};
+
+const DECISION_VIEW = {
+  ALLOWED: ["✅ ALLOWED", "live"],
+  DENIED: ["❌ DENIED", "bad"],
+  NOT_DETERMINED: ["⚠️ NOT_DETERMINED", "mock"]
 };
 
 function queryRow(label, query) {
@@ -133,16 +278,20 @@ function queryRow(label, query) {
   return row;
 }
 
+function bulletList(items) {
+  const list = el("ul", "pv-list");
+  (items || []).forEach((item) => list.appendChild(el("li", null, item)));
+  if (!list.firstChild) { list.appendChild(el("li", null, "None returned.")); }
+  return list;
+}
+
 function requestReport(root, report) {
   clear(root);
-  const decision = report.decision || "NOT_DETERMINED";
-  const isUndetermined = decision === "NOT_DETERMINED";
-  const result = el("div", "policy-result request-decision " + (
-    decision === "ALLOWED" ? "live" : decision === "DENIED" ? "bad" : "mock"
-  ));
-  result.appendChild(el("div", "policy-result-status", isUndetermined
-    ? "Policies do not decide this request"
-    : decision));
+  const decision = DECISION_VIEW[report.decision] ? report.decision : "NOT_DETERMINED";
+  const view = DECISION_VIEW[decision];
+  const result = el("div", "pv-decision " + view[1]);
+  result.setAttribute("role", "status");
+  result.appendChild(el("div", "pv-decision-value", view[0]));
   result.appendChild(el("p", null, REASON_WORDS[report.reason_code] || "The backend returned an unrecognised reason."));
   root.appendChild(result);
 
@@ -154,10 +303,11 @@ function requestReport(root, report) {
   details.appendChild(el("h3", null, "Z3 queries"));
   details.appendChild(queries);
   details.appendChild(el("h3", null, "Assumptions"));
-  details.appendChild(codeBlock(report.assumptions || []));
+  details.appendChild(bulletList(report.assumptions));
   details.appendChild(el("h3", null, "Limitations"));
-  details.appendChild(codeBlock(report.limitations || []));
-  root.appendChild(details);
+  details.appendChild(bulletList(report.limitations));
+  root.appendChild(disclosure("Show Z3 queries, assumptions and limitations", details));
+  return decision;
 }
 
 function requestError(root, message) {
@@ -182,12 +332,10 @@ function policyForRequest(report) {
   };
 }
 
-function createRequestPanel(report) {
-  const requestCard = card({
-    title: "Check a request",
-    icon: "shield",
-    badge: badge("Independent request", "info")
-  });
+function createRequestPanel(report, step) {
+  const wrap = el("div", "pv-stack");
+  wrap.appendChild(el("h4", "pv-subhead", "Check a request"));
+  wrap.appendChild(el("p", "card-note", "Enter an independent subject and role assignment. The decision comes from POST /api/v1/verify-request."));
   const form = el("form", "policy-form request-form");
   const subject = el("input", "text-input");
   subject.type = "text";
@@ -212,6 +360,7 @@ function createRequestPanel(report) {
   const submit = button("Check request", "btn-primary", null, "play");
   submit.type = "submit";
   const output = el("div", "policy-output");
+  output.appendChild(el("p", "pv-waiting", "No request checked yet — the final decision appears here."));
   form.appendChild(field("Subject ID", subject));
   form.appendChild(field("Roles (comma-separated)", roles));
   form.appendChild(field("Action", action));
@@ -245,30 +394,35 @@ function createRequestPanel(report) {
             ? detail.message
             : "The backend rejected the request (HTTP " + result.status + ").";
         requestError(output, message);
+        setStatus(step, "Request failed", "bad");
         return;
       }
-      requestReport(output, result.payload);
+      const decision = requestReport(output, result.payload);
+      setStatus(step, decision, DECISION_VIEW[decision][1]);
     } catch (error) {
       requestError(output, "The request verification API could not be reached. Try again.");
+      setStatus(step, "Request failed", "bad");
     } finally {
       submit.disabled = false;
       submit.textContent = "Check request";
     }
   });
-  requestCard.body.appendChild(form);
-  requestCard.body.appendChild(output);
-  return requestCard.root;
+  wrap.appendChild(form);
+  wrap.appendChild(output);
+  return wrap;
 }
 
-async function verify(text, policyId, output, submit, requestHost, workspaceBadge) {
+/* ---- Pipeline run ------------------------------------------------------------ */
+
+async function verify(text, policyId, steps, inputOutput, submit, workspaceBadge) {
   submit.disabled = true;
   submit.textContent = "Verifying…";
   workspaceBadge.textContent = "AWAITING SUBMISSION";
   workspaceBadge.className = "badge badge-pending";
-  clear(output);
-  clear(requestHost);
-  requestHost.hidden = true;
-  output.appendChild(el("p", "loading-note", "Running parser, calculus, constraints and Z3 verification…"));
+  steps.slice(1).forEach(resetStep);
+  clear(inputOutput);
+  inputOutput.appendChild(el("p", "loading-note", "Running parser, calculus, constraints and Z3 verification…"));
+  setStatus(steps[0], "Verifying…", "info");
   try {
     const result = await verifyPolicyText(text, policyId);
     const payload = result.payload;
@@ -277,17 +431,27 @@ async function verify(text, policyId, output, submit, requestHost, workspaceBadg
       const message = detail && typeof detail.message === "string"
         ? detail.message
         : "The backend returned HTTP " + result.status + ".";
-      renderError(output, message, detail && detail.code === "unsupported_policy");
+      const unsupported = detail && detail.code === "unsupported_policy";
+      renderError(inputOutput, message, unsupported);
+      setStatus(steps[0], unsupported ? "Unsupported" : "Failed", "bad");
       return;
     }
-    renderReport(output, payload);
+    clear(inputOutput);
+    inputOutput.appendChild(el("p", "card-note", "Submitted: " + (payload.original_policy || text)));
+    setStatus(steps[0], "Submitted", "live");
+    revealStep(steps[1], attributesView(payload.attributes || {}), "Extracted", "live");
+    revealStep(steps[2], predicateView(payload), "Translated", "live");
+    const conflicted = hasConflict(payload);
+    revealStep(steps[3], calculusView(payload), conflicted ? "Conflict" : "Consistent", conflicted ? "bad" : "live");
+    revealStep(steps[4], encodingView(payload), "Encoded", "live");
+    const solver = solverView(payload);
+    revealStep(steps[5], solver.content, payload.status || "UNKNOWN", solver.isEntailed ? "live" : "mock");
+    revealStep(steps[6], createRequestPanel(payload, steps[6]), "Awaiting request", "pending");
     workspaceBadge.textContent = "COMPLETE";
     workspaceBadge.className = "badge badge-live";
-    clear(requestHost);
-    requestHost.appendChild(createRequestPanel(payload));
-    requestHost.hidden = false;
   } catch (error) {
-    renderError(output, "The verification API could not be reached. Start the local FastAPI service and try again.");
+    renderError(inputOutput, "The verification API could not be reached. Start the local FastAPI service and try again.");
+    setStatus(steps[0], "Failed", "bad");
   } finally {
     submit.disabled = false;
     submit.textContent = "Verify policy";
@@ -306,10 +470,14 @@ export function mount(root, route) {
   notice.appendChild(el("p", null, "Results below come from POST /api/v1/verify-text. SAT, UNSAT and UNKNOWN are solver statuses, not interchangeable verification conclusions."));
   root.appendChild(notice);
 
-  const formCard = card({ title: "Submit a security policy", icon: "shield", badge: badge("Deterministic grammar", "info") });
+  const workspaceBadge = badge("AWAITING SUBMISSION", "pending");
+  const flowCard = card({ title: "Verification workspace", icon: "layers", badge: workspaceBadge });
+  const flow = el("div", "pv-flow");
+  const steps = STEPS.map((_, index) => createStep(index));
+
   const form = el("form", "policy-form");
   const text = el("textarea", "policy-input");
-  text.rows = 4;
+  text.rows = 3;
   text.required = true;
   text.maxLength = 500;
   text.placeholder = EXAMPLE;
@@ -320,28 +488,30 @@ export function mount(root, route) {
   id.placeholder = "Optional policy ID";
   const submit = button("Verify policy", "btn-primary", null, "play");
   submit.type = "submit";
-  const output = el("div", "policy-output");
-  const workspaceBadge = badge("AWAITING SUBMISSION", "pending");
-  form.appendChild(field("Natural-language policy", text));
+  const inputOutput = el("div", "policy-output");
+  form.appendChild(field("Enter a plain-English access policy", text));
+  form.appendChild(el("p", "card-note", "Supported forms: '<role> can <action> <resource>', 'only <role> can …', '<role> cannot …'."));
   form.appendChild(field("Policy identifier", id));
   form.appendChild(submit);
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     if (!text.value.trim()) {
-      renderError(output, "Enter a policy using the supported grammar.");
+      renderError(inputOutput, "Enter a policy using the supported grammar.");
       return;
     }
-    verify(text.value.trim(), id.value.trim(), output, submit, requestHost, workspaceBadge);
+    verify(text.value.trim(), id.value.trim(), steps, inputOutput, submit, workspaceBadge);
   });
-  formCard.body.appendChild(form);
-  root.appendChild(formCard.root);
+  const inputBody = el("div", "pv-stack");
+  inputBody.appendChild(form);
+  inputBody.appendChild(inputOutput);
+  revealStep(steps[0], inputBody, "Ready", "info");
 
-  const resultCard = card({ title: "Verification workspace", icon: "layers", badge: workspaceBadge });
-  resultCard.body.appendChild(output);
-  root.appendChild(resultCard.root);
-  const requestHost = el("div");
-  requestHost.hidden = true;
-  root.appendChild(requestHost);
+  steps.forEach((step, index) => {
+    if (index > 0) { flow.appendChild(arrow()); }
+    flow.appendChild(step.root);
+  });
+  flowCard.body.appendChild(flow);
+  root.appendChild(flowCard.root);
 }
 
 export function unmount() {

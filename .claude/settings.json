@@ -5,7 +5,12 @@
       "PowerShell(git push origin feature/policy_verification 2>&1)",
       "PowerShell(python -m pytest -q --ignore=tests/engine 2>&1 | Select-Object -Last 1; 1..3 | ForEach-Object { python -m pytest -q tests/engine 2>&1 | Select-Object -Last 1 })",
       "PowerShell(git fetch origin --quiet; git status --short; \"--- vs origin/dev: ahead {0}, behind {1}\" -f \\(git rev-list --count origin/dev..HEAD\\), \\(git rev-list --count HEAD..origin/dev\\); \"--- new on dev since we branched:\"; git log --oneline HEAD..origin/dev; \"--- vs own remote:\"; git status -sb | Select-Object -First 1)",
-      "PowerShell(git merge --ff-only origin/dev 2>&1)"
+      "PowerShell(git merge --ff-only origin/dev 2>&1)",
+      "PowerShell(Get-Content tokenization_ai\\\\dashboard_static\\\\page-policy.js -Raw | node --input-type=module --check; \"node check exit: $LASTEXITCODE\"; python -m pytest -q tests/tokenization_ai/test_dashboard.py tests/tokenization_ai/test_dashboard_phase2.py tests/tokenization_ai/test_dashboard_phase3.py tests/tokenization_ai/test_dashboard_phase4.py tests/tokenization_ai/test_dashboard_final_qa.py 2>&1 | Select-String \"FAILED|passed|error\" | Select-Object -Last 8)",
+      "PowerShell(foreach \\($p in 8002, 8010\\) { $c = Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1; \"port {0}: {1}\" -f $p, $\\(if \\($c\\) { \"PID $\\($c.OwningProcess\\) \" + \\(Get-CimInstance Win32_Process -Filter \"ProcessId = $\\($c.OwningProcess\\)\"\\).CreationDate } else { \"free\" }\\) }; Select-String -Path tokenization_ai\\\\dashboard.py -Pattern \"read_bytes|read_text|lru_cache|_ASSETS\" | Select-Object -First 5)",
+      "Skill(browser-automation)",
+      "Skill(browser-automation:*)",
+      "PowerShell(node \"C:\\\\Users\\\\user\\\\.claude\\\\skills\\\\browser-automation\\\\browser.mjs\" \"http://127.0.0.1:8010/dashboard#/policy-verification\" --script \"C:\\\\Users\\\\user\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\d--Research-J26-IT-376\\\\ce3b7bea-4006-4faa-8d02-0fcba820a751\\\\scratchpad\\\\policy_flow_qa.mjs\" --timeout 30000)"
     ]
   }
 }

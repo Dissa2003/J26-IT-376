@@ -1,0 +1,37 @@
+// SZ-CFM context envelope (schema version 1).
+//
+// The Python message classes are built from an equivalent descriptor in
+// ingestion/szcfm_proto.py because protoc is not part of the project toolchain;
+// tests/ingestion/test_szcfm.py checks that both definitions stay identical.
+// Raw credentials are never carried: authorization is reduced to presence and
+// scheme, and the payload is masked before serialization.
+syntax = "proto3";
+
+package logishield.szcfm.v1;
+
+import "google/protobuf/struct.proto";
+
+message GatewayMetadata {
+  string method = 1;
+  string path = 2;
+  string content_type = 3;
+  string client_role = 4;
+  bool authorization_present = 5;
+  string authorization_scheme = 6;
+  map<string, string> headers = 7;
+}
+
+message SZCFMEnvelope {
+  string schema_version = 1;
+  string event_id = 2;
+  string request_id = 3;
+  string correlation_id = 4;
+  string source = 5;
+  int64 ingested_at_unix_ns = 6;
+  GatewayMetadata metadata = 7;
+  google.protobuf.Struct masked_payload = 8;
+  string feature_schema_version = 9;
+  repeated double feature_vector = 10;
+  bool has_prior_threat_score = 11;
+  double prior_threat_score = 12;
+}
