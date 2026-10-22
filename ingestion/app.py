@@ -12,7 +12,9 @@ from typing import Any
 import uuid
 
 import httpx
-from fastapi import Body, FastAPI, HTTPException, Header
+from fastapi import Body, FastAPI, HTTPException, Header, Request
+from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from redis.exceptions import RedisError
 
@@ -21,7 +23,19 @@ from shared_contracts.interfaces import EventConsumer, EventProducer, Processing
 from shared_contracts.models import ErrorResponse, Prediction, RawEvent
 
 from .broker import InMemoryBroker, create_broker
+from .feature_schema import FEATURE_SCHEMA_VERSION, FEATURES
+from .inference import InferenceBackend
 from .pii_masker import PIIMasker
+from .request_state import RingFullError
+from .szcfm import (
+    CorrelationConflictError,
+    EventValidationError,
+    MalformedRequestError,
+    PayloadTooLargeError,
+    SZCFMPipeline,
+)
+from .szcfm_policy import SZCFMConfig
+from .szcfm_schema import SZCFMResult
 from .validator import IngestionValidator
 from .vector_builder import UnifiedContextVectorBuilder
 
@@ -174,10 +188,39 @@ class _ProcessingDispatcher:
                     task.result.set_result(prediction)
 
 
+def _is_szcfm_envelope(payload: dict[str, Any]) -> bool:
+    """Envelopes that previously fell through to ``RawEvent`` and failed on ``source``."""
+    return "schema_version" in payload or (
+        "metadata" in payload and "payload" in payload and "threat_score" not in payload
+    )
+
+
+def _szcfm_error(exc: Exception) -> JSONResponse:
+    """Map SZ-CFM ingestion failures to safe HTTP responses (no input echo)."""
+    if isinstance(exc, PayloadTooLargeError):
+        return JSONResponse({"error": "payload_too_large", "detail": str(exc)}, status_code=413)
+    if isinstance(exc, MalformedRequestError):
+        return JSONResponse({"error": "malformed_request", "detail": str(exc)}, status_code=400)
+    if isinstance(exc, EventValidationError):
+        return JSONResponse({"error": "validation_error", "detail": exc.errors}, status_code=422)
+    if isinstance(exc, CorrelationConflictError):
+        return JSONResponse({"error": "correlation_conflict", "detail": str(exc)}, status_code=422)
+    if isinstance(exc, RingFullError):
+        return JSONResponse(
+            {"error": "capacity_exhausted", "detail": "request-state ring is full"},
+            status_code=503,
+            headers={"Retry-After": "1"},
+        )
+    raise exc
+
+
 def create_app(
     processing: ProcessingClient | None = None,
     broker: EventProducer & EventConsumer | None = None,
     processing_timeout: float = 5.0,
+    szcfm_config: SZCFMConfig | None = None,
+    szcfm_backend: InferenceBackend | None = None,
+    szcfm_forwarder: Any = None,
 ) -> FastAPI:
     """Create the ingestion API with optional downstream processing and broker clients."""
     settings = get_settings()
@@ -188,6 +231,13 @@ def create_app(
     vector_builder = UnifiedContextVectorBuilder()
     dispatcher = _ProcessingDispatcher(processing) if processing is not None else None
     pending: dict[str, Future[Prediction]] = {}
+    szcfm = SZCFMPipeline(
+        szcfm_config or SZCFMConfig.from_env(),
+        backend=szcfm_backend,
+        masker=pii_masker,
+        publisher=event_broker,
+        forwarder=szcfm_forwarder,
+    )
 
     def forward(event: RawEvent) -> None:
         """Queue a consumed event for asynchronous processing."""
@@ -207,6 +257,7 @@ def create_app(
         ).start()
 
     app = FastAPI(
+        on_shutdown=[szcfm.close],
         title="Dissanayaka Ingestion API",
         description=(
             "Validates incoming real-time events, publishes them to the configured "
@@ -260,6 +311,92 @@ def create_app(
             "stream": "unified-context-stream",
             "count": len(envelopes),
             "envelopes": envelopes,
+        }
+
+    app.state.szcfm = szcfm
+
+    @app.post(
+        "/v1/szcfm/events",
+        tags=[INGESTION_TAG],
+        summary="Process an event through the SZ-CFM pipeline",
+        description=(
+            "Validates the canonical envelope, masks it, serializes a protobuf "
+            "context envelope, extracts the v1 feature vector, correlates an "
+            "asynchronous AI assessment through a generation-stamped request "
+            "slot and returns the final ALLOW/CHALLENGE/BLOCK decision."
+        ),
+        response_model=SZCFMResult,
+        responses={
+            400: {"model": ErrorResponse},
+            413: {"model": ErrorResponse},
+            422: {"description": "Schema validation error or correlation conflict"},
+            503: {"description": "Request-state ring full; retry later"},
+        },
+    )
+    async def szcfm_events(
+        request: Request,
+        x_correlation_id: str | None = Header(None, alias="X-Correlation-ID"),
+    ) -> Any:
+        """Stage A: read at most ``max_request_bytes``, then run the pipeline off the event loop."""
+        started = time.perf_counter_ns()
+        limit = szcfm.config.max_request_bytes
+        declared = request.headers.get("content-length")
+        if declared is not None and declared.isdigit() and int(declared) > limit:
+            szcfm.metrics.count("requests_received")
+            szcfm.metrics.count("rejected_oversized")
+            return _szcfm_error(PayloadTooLargeError(f"declared {declared} bytes; limit is {limit}"))
+        chunks, size = [], 0
+        async for chunk in request.stream():
+            size += len(chunk)
+            if size > limit:
+                szcfm.metrics.count("requests_received")
+                szcfm.metrics.count("rejected_oversized")
+                return _szcfm_error(PayloadTooLargeError(f"request exceeds {limit} bytes"))
+            chunks.append(chunk)
+        try:
+            event = szcfm.parse(b"".join(chunks))
+            return await run_in_threadpool(
+                szcfm.process,
+                event,
+                header_correlation_id=x_correlation_id,
+                started_ns=started,
+                validation_ns=time.perf_counter_ns() - started,
+            )
+        except (ValueError, RingFullError) as exc:
+            return _szcfm_error(exc)
+
+    @app.get(
+        "/v1/szcfm/metrics",
+        tags=[INGESTION_TAG],
+        summary="SZ-CFM runtime metrics",
+        description="Counters, latency percentiles, ring occupancy and inference queue depth.",
+    )
+    def szcfm_metrics() -> dict[str, Any]:
+        """Return a snapshot of SZ-CFM runtime metrics."""
+        return szcfm.stats()
+
+    @app.get(
+        "/v1/szcfm/feature-schema",
+        tags=[INGESTION_TAG],
+        summary="SZ-CFM feature schema",
+        description="Ordered feature definitions of the Unified Context Vector.",
+    )
+    def szcfm_feature_schema() -> dict[str, Any]:
+        """Return the ordered, versioned feature definitions."""
+        return {
+            "schema_version": FEATURE_SCHEMA_VERSION,
+            "feature_count": len(FEATURES),
+            "features": [
+                {
+                    "index": index,
+                    "name": spec.name,
+                    "description": spec.description,
+                    "units": spec.units,
+                    "normalization": spec.normalization,
+                    "missing_default": spec.missing_default,
+                }
+                for index, spec in enumerate(FEATURES)
+            ],
         }
 
     def _handle_interception(
@@ -388,7 +525,7 @@ def create_app(
             "payload with metadata and a threat score."
         ),
         status_code=202,
-        response_model=Prediction | AcceptedEvent | InterceptionAcknowledgement,
+        response_model=Prediction | AcceptedEvent | InterceptionAcknowledgement | SZCFMResult,
         responses={
             202: {
                 "description": "Event accepted and captured for downstream processing.",
@@ -479,7 +616,8 @@ def create_app(
             },
         ),
         x_event_id: str | None = Header(None, alias="X-Event-ID"),
-    ) -> Prediction | AcceptedEvent | InterceptionAcknowledgement:
+        x_correlation_id: str | None = Header(None, alias="X-Correlation-ID"),
+    ) -> Any:
         """Validate, publish, and await processing for standard events."""
         started_ns = time.perf_counter_ns()
         correlation_id = x_event_id or payload.get("event_id") or (
@@ -487,6 +625,16 @@ def create_app(
             if isinstance(payload.get("metadata"), dict)
             else None
         )
+        if _is_szcfm_envelope(payload):
+            try:
+                return szcfm.process(
+                    szcfm.validate(payload),
+                    header_correlation_id=x_correlation_id,
+                    started_ns=started_ns,
+                )
+            except (ValueError, RingFullError) as exc:
+                return _szcfm_error(exc)
+
         interception = "metadata" in payload and "threat_score" in payload
         if interception:
             return _handle_interception(

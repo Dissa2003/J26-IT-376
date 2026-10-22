@@ -32,6 +32,26 @@ _CREDENTIAL_KEYS = {
     "refresh_token",
     "secret",
     "token",
+    "client_secret",
+    "cookie",
+    "session_id",
+    "session_token",
+    "set_cookie",
+    "x_api_key",
+}
+
+# ``*_name`` keys are personal names by default; these name business objects.
+_NON_PERSONAL_NAME_KEYS = {
+    "merchant_name",
+    "company_name",
+    "app_name",
+    "service_name",
+    "type_name",
+    "class_name",
+    "product_name",
+    "item_name",
+    "brand_name",
+    "category_name",
 }
 
 _PII_KEYS = {
@@ -101,10 +121,29 @@ _SYNTACTIC_ATTACK_PATTERN = re.compile(
 )
 
 
+def _normalize(key: str) -> str:
+    """Normalize a key for case- and separator-insensitive rule matching."""
+    return key.casefold().replace("-", "_").replace(" ", "_")
+
+
 class ASTPIIMasker:
     """Mask sensitive values in JSON-compatible AST structures with syntax preservation and memory hygiene."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        extra_credential_keys: set[str] | frozenset[str] = frozenset(),
+        extra_pii_keys: set[str] | frozenset[str] = frozenset(),
+        non_personal_name_keys: set[str] | frozenset[str] | None = None,
+    ) -> None:
+        """Configure masking rules; extra keys extend the built-in defaults."""
+        self._credential_keys = _CREDENTIAL_KEYS | {_normalize(k) for k in extra_credential_keys}
+        self._pii_keys = _PII_KEYS | {_normalize(k) for k in extra_pii_keys}
+        self._non_personal_name_keys = (
+            _NON_PERSONAL_NAME_KEYS
+            if non_personal_name_keys is None
+            else {_normalize(k) for k in non_personal_name_keys}
+        )
         self.masked_count: int = 0
         self.retained_count: int = 0
         self.preserved_attack_tokens: int = 0
@@ -207,21 +246,17 @@ class ASTPIIMasker:
         """Check if string contains SQLi/XSS/Command-Injection metacharacters."""
         return bool(_SYNTACTIC_ATTACK_PATTERN.search(value))
 
-    @staticmethod
-    def _is_credential_key(key: str) -> bool:
+    def _is_credential_key(self, key: str) -> bool:
         """Match common credential names, including hyphenated variants."""
-        normalized = key.casefold().replace("-", "_").replace(" ", "_")
-        return normalized in _CREDENTIAL_KEYS or normalized.endswith("_token")
+        normalized = _normalize(key)
+        return normalized in self._credential_keys or normalized.endswith("_token")
 
-    @staticmethod
-    def _is_pii_key(key: str) -> bool:
+    def _is_pii_key(self, key: str) -> bool:
         """Match personal identity, contact, payment, and address keys."""
-        normalized = key.casefold().replace("-", "_").replace(" ", "_")
-        if normalized in _PII_KEYS:
+        normalized = _normalize(key)
+        if normalized in self._pii_keys:
             return True
-        if normalized.endswith("_name") and normalized not in {
-            "merchant_name", "company_name", "app_name", "service_name", "type_name", "class_name"
-        }:
+        if normalized.endswith("_name") and normalized not in self._non_personal_name_keys:
             return True
         if normalized.endswith("_email") or normalized.endswith("_phone") or normalized.endswith("_phone_number"):
             return True

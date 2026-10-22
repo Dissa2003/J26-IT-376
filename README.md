@@ -78,7 +78,7 @@ Open `http://127.0.0.1:8010/dashboard#/policy-verification` after starting.
 ## Per-member guide
 Run a single module locally: `python -m <module>` (set URLs in `.env`), test: `pytest tests/<module>`.
 
-1. **Ingestion – ingestion**: ingress interception, buffering/serialization, data masking, and context dispatching, producing the Structured Unified API Context. Test: `pytest tests/ingestion`.
+1. **Ingestion – ingestion**: ingress interception, buffering/serialization, data masking, and context dispatching, producing the Structured Unified API Context. Test: `pytest tests/ingestion`. The SZ-CFM request/AI correlation pipeline (`POST /v1/szcfm/events`) is documented in [docs/szcfm/README.md](docs/szcfm/README.md).
 2. **Policy Verification – api + src/policy_verifier**: policy parsing, FOL/SMT verification, conflict detection, and rule cache. Run: `python -m api`; test: `pytest tests/test_policy_verifier.py tests/test_policy_evaluation.py`.
 3. **Runtime Verification – engine / api_gateway**: the Z3 runtime rule engine, hybrid circuit breaker, and mock API gateway router, producing the Allow/Block Verdict and XAI Trace. Test: `pytest tests/engine`, `pytest tests/api_gateway`.
 4. **LogiShield – tokenization_ai**: input fusion, privacy-aware masking, structure-aware tokenization, token/embedding mapping, tensor preparation, and lightweight AI prediction, producing the Anomaly Prediction, AI-ready Representation, Rule-aligned Signal, and Logs/Trace. Test: `pytest tests/tokenization_ai`.

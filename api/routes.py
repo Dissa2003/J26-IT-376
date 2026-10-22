@@ -1,5 +1,6 @@
 import difflib
 import logging
+import os
 import uuid
 
 from fastapi import APIRouter, FastAPI, HTTPException, status
@@ -18,6 +19,7 @@ from src.policy_verifier.conflict_detector import ConflictDetector
 from src.policy_verifier.cache import LocalRuleCache
 from src.policy_verifier.parser import PolicyParser, UnsupportedPolicyError, _canonical
 from src.policy_verifier.pipeline import VerificationPipeline
+from src.policy_verifier.request_cache import RequestDecisionCache, cache_key
 
 log = logging.getLogger(__name__)
 app = FastAPI(title="Policy Verification Engine API")
@@ -26,6 +28,12 @@ pipeline = VerificationPipeline()
 conflict_detector = ConflictDetector()
 parser = PolicyParser()
 rule_cache = LocalRuleCache()
+# Redis cache for verify-request. POLICY_REDIS_URL picks the server (the shared
+# REDIS_URL points at the docker-compose host name); POLICY_REQUEST_CACHE=0 turns it off.
+request_cache = RequestDecisionCache.from_url(
+    None if os.environ.get("POLICY_REQUEST_CACHE", "1") == "0"
+    else os.environ.get("POLICY_REDIS_URL", "redis://localhost:6379/0")
+)
 verification_records: list[VerificationReport] = []
 
 
@@ -236,13 +244,17 @@ def verify_request(body: IndependentRequestBody):
         resource,
         unmatched_roles,
     )
-    report = pipeline.engine.check_request(
-        policies,
-        subject_id=body.request.subject_id,
-        roles=roles,
-        action=action,
-        resource=resource,
-    )
+    key = cache_key(policies, body.request.subject_id, roles, action, resource)
+    report = request_cache.get(key)
+    if report is None:
+        report = pipeline.engine.check_request(
+            policies,
+            subject_id=body.request.subject_id,
+            roles=roles,
+            action=action,
+            resource=resource,
+        )
+        request_cache.set(key, report)
     if report.decision is RequestDecision.NOT_DETERMINED:
         report.limitations.extend(
             _unmatched_role_note(role, policy_roles) for role in unmatched_roles

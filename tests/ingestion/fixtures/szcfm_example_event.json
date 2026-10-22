@@ -1,0 +1,74 @@
+{
+  "metadata": {
+    "method": "POST",
+    "path": "/v1/orders",
+    "content_type": "application/json",
+    "client_ip": "198.51.100.42",
+    "client_role": "customer",
+    "authorization": "Bearer [REDACTED]",
+    "headers": {
+      "x-request-source": "web",
+      "x-api-version": "v1"
+    }
+  },
+  "payload": {
+    "request_id": "req-20261022-000184",
+    "correlation_id": "corr-7f83a91b2c",
+    "client": {
+      "client_id": "client-9281",
+      "device_type": "desktop",
+      "operating_system": "Windows 11",
+      "browser": "Chrome",
+      "country": "LK"
+    },
+    "authentication": {
+      "type": "Bearer",
+      "user_id": "user-10482",
+      "roles": ["customer"],
+      "session_id": "sess-a83f29",
+      "mfa_verified": true
+    },
+    "request_body": {
+      "order_id": "ORD-20261022-901",
+      "customer_id": "CUST-10482",
+      "items": [
+        {
+          "product_id": "PROD-101",
+          "product_name": "Wireless Keyboard",
+          "quantity": 2,
+          "unit_price": 4500.0
+        },
+        {
+          "product_id": "PROD-205",
+          "product_name": "Wireless Mouse",
+          "quantity": 1,
+          "unit_price": 2500.0
+        }
+      ],
+      "subtotal": 11500.0,
+      "currency": "LKR",
+      "payment_method": "card",
+      "shipping_address": {
+        "city": "Colombo",
+        "country": "LK"
+      }
+    },
+    "traffic_context": {
+      "requests_per_minute": 24,
+      "requests_last_10_seconds": 4,
+      "failed_logins_last_5_minutes": 0,
+      "previous_requests_from_ip": 18,
+      "endpoint_requests_last_minute": 7,
+      "average_request_size_bytes": 920,
+      "current_request_size_bytes": 1842
+    },
+    "security_context": {
+      "ip_reputation_score": 0.12,
+      "rate_limit_exceeded": false,
+      "authentication_anomaly": false,
+      "sql_injection_indicator": false,
+      "xss_indicator": false
+    }
+  },
+  "threat_score": 0.12
+}
