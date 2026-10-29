@@ -32,7 +32,7 @@ scores quoted in §7. Historical figures keep the commit they were recorded at. 
 |---|---|
 | `dev` | Group integration branch (<https://github.com/Dissa2003/J26-IT-376/tree/dev>). At review time `origin/dev` was at `dcfa71c` (merge of PR #19). It already contains this component's code up to `81fd942` (merged via PR #16, `79df875`), but **not** the README finalization commit `4c64a7a`. |
 | `integration/member4-dev-sync` | Member 4 merged with `dev` (`f8282f5`), plus the model-initialization fix and runtime adapters (`81fd942`) and the README finalization (`4c64a7a`). |
-| `docs/member4-readme-checklist1-20261029` | Pushed documentation branch; its tip is `4c64a7a`. Draft PR #21 tracks it and is not merged. |
+| `docs/member4-readme-checklist1-20261029` | Pushed documentation branch; initially created at `4c64a7a`; subsequent documentation updates are tracked in Git history. Draft PR #21 tracks it and is not merged. |
 | `feature/member4-tokenization-ai` | Member 4's earlier development branch; older than the two above and not the reference for current behaviour. |
 
 ---
