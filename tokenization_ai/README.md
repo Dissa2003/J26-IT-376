@@ -1,6 +1,6 @@
-# LogiShield — Hybrid Structure-Aware Tokenization & Lightweight AI Prediction
+# Member 4 — Hybrid Structure-Aware Tokenization & Lightweight AI Prediction
 
-Research ID **J-26-IT-376** · LogiShield: Neuro-Symbolic AI Verification for API Gateways
+**LogiShield** · Research ID **J-26-IT-376** · Neuro-Symbolic AI Verification for API Gateways
 
 > **Status in one paragraph.** This package is a working, tested **proof of concept** of
 > LogiShield's component: it fuses an API request with verified-rule information, masks
@@ -10,10 +10,20 @@ Research ID **J-26-IT-376** · LogiShield: Neuro-Symbolic AI Verification for AP
 > components, and every reported measurement is from **synthetic** data on a single machine.
 > See [Limitations](#9-scientific-limitations) and [INTEGRATION_STATUS.md](INTEGRATION_STATUS.md).
 
-*Documentation was last verified against the repository at commit `ea50a49` (branch
-`feature/logishield-tokenization-ai`; the masking hardening of audit finding D3 is included).
-Counts and numbers below come from the stated source files or from the evidence reports named
-in §8; nothing here was re-measured when writing it.*
+*Documentation review of 29 October 2026, checked against the working tree of branch
+`integration/member4-dev-sync` (HEAD `81fd942`). Counts and numbers below come from the stated
+source files or from the evidence reports named in §8; nothing was re-measured when writing it,
+except that the console demo (`python -m tokenization_ai.demo`) was re-run and reproduced the
+scores quoted in §7. Historical figures keep the commit they were recorded at. Commit `ea50a49`
+(cited in §8) is the commit the KPI 4 post-D3 figures are tied to; it predates the current branch.*
+
+### Branches
+
+| Branch | Role |
+|---|---|
+| `dev` | Group integration branch. At review time, the local `origin/dev` ref contained this branch's committed work (merge of PR #16, tip `79df875`). This README edit is uncommitted and is not yet on `dev`. |
+| `integration/member4-dev-sync` | Branch this README was reviewed on: Member 4 merged with `dev`, plus the model-initialization fix and runtime adapters (`81fd942`). |
+| `feature/member4-tokenization-ai` | Member 4's earlier development branch; older than the two above and not the reference for current behaviour. |
 
 ---
 
@@ -22,6 +32,18 @@ in §8; nothing here was re-measured when writing it.*
 **Component responsibility (proposal):** preprocess a unified API context together with
 verified symbolic rule information into an AI-ready representation, run a lightweight model,
 and emit an anomaly-aware signal for the next stage (Runtime Verification's runtime verification).
+
+**Research problem.** An API gateway that verifies requests symbolically still needs a
+lightweight way to turn heterogeneous request data (method, path, headers, JSON payload) and
+rule information into a form a small model can score quickly, without exposing sensitive
+values and without losing the structure that distinguishes, for example, a header value from a
+payload value.
+
+**Objective and responsibilities (Member 4).** Fuse the unified API context with rule
+information, mask sensitive values, normalize, tokenize with an explicit grammar, prepare a
+fixed-size tensor, and produce an uncalibrated anomaly score with `event_id` and
+`model_version`. **Member 4 does not make Allow/Block decisions**; any threshold or final
+decision belongs to Runtime Verification.
 
 **Research gap addressed (proposal §1.3):** little evidence exists for a low-latency
 preprocessing pipeline that combines API context with *already-verified symbolic rule
@@ -52,10 +74,11 @@ Unified API context  +  verified-rule information
 3 Normalization          normalization.py Normalizer.normalize_with_provenance
 4 Tokenization           tokenizer.py     HybridTokenizer.tokenize  → tokens + roles
 5 Token IDs + tensor     vocabulary.py, tensorizer.py   → input_ids + attention_mask
-6 Lightweight prediction model.py         LightweightAnomalyModel.predict → score in [0,1]
+6 Hashed features +      model.py         hashed unigram/bigram token-id counts
+  logistic regression                     → LightweightAnomalyModel.predict → score in [0,1]
    │  service.py   TokenizationAIService.predict / analyze   (orchestration + tracing)
    ▼
-AnomalyPrediction(event_id, score, model_version)      ← handoff to Runtime Verification NOT implemented
+AnomalyPrediction(event_id, score, model_version)      ← handoff adapter exists but is not wired to Runtime Verification
 ```
 
 | Stage | What it does | Source |
@@ -74,6 +97,15 @@ features; there is no embedding table), a **rule-aligned signal**, a **runtime c
 Verification (`adapters.to_runtime_verification_output` returns the handoff `runtime-verification-input-1`, but nothing in
 the running system calls it), an anomaly **label / threshold**, and a request-only vs rule-fused **baseline result**
 (the held-out evaluation infrastructure exists; no confirmatory result does). See INTEGRATION_STATUS.md (2026-10-21).
+
+### Implementation status at a glance
+
+| Category | Items |
+|---|---|
+| **Implemented code** (unit-tested) | Stages 1–6 above; `service.py`; HTTP API and `/demo` (`app.py`, `static/`); `/dashboard` (`dashboard.py`, `dashboard_static/`); evaluation and held-out infrastructure |
+| **Compatibility-tested adapters** (pure functions over caller-supplied data; **not wired** into any running path) | `policy_report_adapter.py`, `request_decision_adapter.py` (Formal Verification `verify-request-response-v1` → `VerifiedRuleInfo`), `anomaly_signal.py`, `runtime_handoff.py` / `adapters.to_runtime_verification_output` (`runtime-verification-input-1`) |
+| **Mock / synthetic demonstrations** | Both demo requests, `MOCK-*` rule fixtures, and the bundled model fitted on two synthetic fixtures (`demo.py`) |
+| **Pending full runtime integration** | Gateway routing to this service, a LogiShield service in `docker-compose.yml`, replacing Runtime Verification's `StubModel`, score threshold ownership, KPI 5 (see [INTEGRATION_STATUS.md](INTEGRATION_STATUS.md)) |
 
 ## 3. Input and output structures
 
@@ -186,18 +218,20 @@ or call Member 2, and nothing in the pipeline, API or dashboard uses it.
 ## 5. Setup
 
 Requirements: Python 3.12+ (developed and measured on 3.14.7), the packages in the root
-`requirements.txt`, **plus NumPy** (kept out of the root requirements file; LogiShield only):
+`requirements.txt`, **plus NumPy**. NumPy is verified **not** to be in the root
+`requirements.txt`; it is declared only in `tokenization_ai/requirements-ml.txt` (`numpy>=1.26`)
+and is imported by `model.py`, so both files must be installed:
+
+Open PowerShell in the repository root (the folder that contains `requirements.txt`), then run:
 
 ```powershell
-cd C:\Users\kavin\Documents\LogiShield-Research\J26-IT-376
 python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-pip install -r tokenization_ai\requirements-ml.txt     # numpy>=1.26
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m pip install -r tokenization_ai\requirements-ml.txt   # numpy>=1.26
 ```
 
 `fastapi`, `uvicorn`, `httpx`, `pydantic`, `pytest` come from the root `requirements.txt`.
-The commands below call `.venv\Scripts\python.exe` directly so activation is optional.
+The commands below call `.venv\Scripts\python.exe` directly, so activating the environment is not required.
 Run everything from the repository root.
 
 ## 6. Running the backend, API and browser demo
@@ -210,7 +244,8 @@ Run everything from the repository root.
 
 | URL | Purpose |
 |---|---|
-| `http://127.0.0.1:8004/demo` | Browser demonstration (static HTML/CSS/JS, same origin) |
+| `http://127.0.0.1:8004/demo` | Browser demonstration (static HTML/CSS/JS, same origin); offers the **Benign** and **Suspicious API request** synthetic scenarios (`static/scenarios.json`) |
+| `http://127.0.0.1:8004/dashboard` | Local browser dashboard (`dashboard.py`, `dashboard_static/`); presentation only, calls the same `POST /v1/analyze` and `GET /health`. Some pages are marked pending and show no real data |
 | `http://127.0.0.1:8004/health` | `{"status":"ok","service":"tokenization_ai","ready":true}`; 503 if the model/vocabulary is not ready |
 | `http://127.0.0.1:8004/docs` | Auto-generated OpenAPI page |
 | `POST http://127.0.0.1:8004/v1/analyze` | Analysis endpoint |
@@ -232,6 +267,19 @@ $body = @'
 '@
 Invoke-RestMethod -Uri http://127.0.0.1:8004/v1/analyze -Method Post -ContentType application/json -Body $body
 ```
+
+Normal and suspicious synthetic analysis: in `/demo` choose **Benign** or **Suspicious API
+request** and click **Analyze**, or run the console version in "Other entry points" below.
+Both requests are synthetic; the suspicious scenario uses a mock rule fixture.
+
+**Output.** The prediction carries exactly three fields: `event_id`, `score` (float in [0, 1],
+uncalibrated, not an attack probability) and `model_version` (for the bundled model
+`ngram-linear-v1-trained`; an unfitted model reports `…-untrained` and refuses to predict). In the HTTP
+response these appear under `prediction`. No label, threshold or Allow/Block decision is produced.
+
+Note: the service also contains a pass-through `/api/v1/{path}` proxy to the standalone policy
+service (URL from settings), used only by dashboard policy pages; it is unrelated to the
+tokenization pipeline and needs that separate service to be running.
 
 Response (`contract_version: "logishield-analysis-v2"`) contains `event_id`, `provenance`
 (rule-source label, `verification_performed_by_this_service: false`, model note,
@@ -306,19 +354,25 @@ What do 0.34 ms (current code; 0.32 ms before the D3 masking fix) include and ex
 **Tests** (from the repository root):
 
 ```powershell
-.venv\Scripts\python.exe -m pytest tests/tokenization_ai -q     # 871 passed at cf1f200 (current)
-.venv\Scripts\python.exe -m pytest -q                           # 897 passed at cf1f200 (full repository)
+.venv\Scripts\python.exe -m pytest tests/tokenization_ai -q     # Member 4 automated tests
+.venv\Scripts\python.exe -m pytest -q                           # full repository (other members' tests included)
 ```
 
-Counts observed per commit (each is a record of that commit's run; older rows are kept as
-history, not corrected):
+**No current pass count is claimed.** The suite has grown since the table below (for example
+`test_model_initialization_safety.py`, `test_request_decision_adapter.py`,
+`test_runtime_handoff.py`, `test_attempt_gate.py` and held-out tests), and the suite was not re-run when
+this README was revised. Run the command above and record the output with the commit hash.
+
+Counts observed per commit (each is a record of that commit's run on the earlier
+`feature/member4-tokenization-ai` line; they are **historical**, not the result for the current
+branch):
 
 | Commit | Member 4 suite | Full repository | What changed |
 |---|---|---|---|
 | `ea50a49` | 560 passed | 586 passed | Counts at the post-D3 KPI 4 re-evaluation (the commit the KPI 4 figures are tied to) |
 | `a76ba11` | 673 passed | 699 passed | Verified baseline after the dashboard work |
 | `964813b` | 710 passed | 736 passed | Added `anomaly_signal.py` (+37 tests) |
-| `cf1f200` | **871 passed** | **897 passed** | Added `policy_report_adapter.py` (+161 tests); **current** |
+| `cf1f200` | **871 passed** | **897 passed** | Added `policy_report_adapter.py` (+161 tests); latest recorded count, superseded by later commits |
 
 Each run reported one pre-existing Starlette/httpx deprecation warning (third-party). Unit and
 framework tests establish behaviour, not research KPI attainment or detection quality.
@@ -341,7 +395,7 @@ original evidence — use an empty directory):
 | 1 Input alignment | ≥ 90% | **31 / 31** valid synthetic events (Wilson 95%: 89.0–100%); 5 / 5 invalid events rejected, reported separately | `evaluation/PROTOCOL.md` §4 |
 | 2 Token mapping | ≥ 90% | **31 / 31** sequences matched; 3719 / 3719 token positions; masking provenance 31 / 31 | same |
 | 3 Tensor correctness | ≥ 95% | **30 / 30** tensors (Wilson 88.7–100%); 1 / 1 capacity rejection as specified | same |
-| 4 Average prediction time | ≤ 5 ms | **Current code (`ea50a49`, post-D3): pre-registered B1 mean 0.3413 ms** (worst batch mean 0.3481 ms; 5 batches × 1000 = 5000 calls). Historical pre-D3 baseline: 0.3200 ms (worst batch 0.3371 ms). Both on one machine and a synthetic workload; target met in both | `evaluation/LATENCY_PROTOCOL.md` |
+| 4 Average prediction time | ≤ 5 ms | **Post-D3 benchmark at commit `ea50a49` (historical measurement): pre-registered B1 mean 0.3413 ms** (worst batch mean 0.3481 ms; 5 batches × 1000 = 5000 calls). Historical pre-D3 baseline: 0.3200 ms (worst batch 0.3371 ms). Both on one machine and a synthetic workload; target met in both | `evaluation/LATENCY_PROTOCOL.md` |
 | 5 Downstream usability | ≥ 90% | **Pending genuine Runtime Verification integration — not measured** | [INTEGRATION_STATUS.md](INTEGRATION_STATUS.md) |
 
 **KPI 4 in detail.** The same frozen latency protocol and harness were run twice:
@@ -435,7 +489,7 @@ original evidence — use an empty directory):
 | Symptom | Likely cause and fix |
 |---|---|
 | `ModuleNotFoundError: numpy` (tests or service) | NumPy is not in root `requirements.txt`. `pip install -r tokenization_ai\requirements-ml.txt` |
-| `No module named tokenization_ai` | Run from the repository root (`...\J26-IT-376`); `python -m` resolves the package from the current directory |
+| `No module named tokenization_ai` | Run from the repository root (the directory containing `requirements.txt`); `python -m` resolves the package from the current directory |
 | `[Errno 10048]` / port 8004 in use | An earlier server is still running. Stop it, or find it with `Get-NetTCPConnection -LocalPort 8004` |
 | `/demo` shows "Demo scenarios unavailable" | The page loaded but `/demo/assets/scenarios.json` failed; reload, confirm the server is on 127.0.0.1:8004 and check `/health` |
 | Analyze fails: "Could not reach the LogiShield service" | Server not running or a different port; start it as in §6 |
@@ -456,17 +510,21 @@ original evidence — use an empty directory):
 | `tokenizer.py`, `vocabulary.py`, `tensorizer.py` | Stages 4–5 |
 | `model.py`, `service.py` | Model and orchestration |
 | `tracing.py`, `metrics.py` | Per-stage tracing and runtime metrics |
-| `app.py`, `__main__.py`, `static/` | HTTP API and browser demo |
+| `app.py`, `__main__.py`, `static/` | HTTP API (`/health`, `/v1/analyze`) and `/demo` page; `python -m tokenization_ai` starts it on 127.0.0.1:8004 |
+| `dashboard.py`, `dashboard_static/` | Static host and client for `/dashboard` (presentation only) |
+| `runtime_handoff.py` | `runtime-verification-input-1` wrapper exposing only `event_id` and `score` for Runtime Verification's `evaluate_runtime`. Not wired |
+| `request_decision_adapter.py` | Standalone adapter from a caller-supplied Formal Verification `verify-request-response-v1` body to `VerifiedRuleInfo`. Not wired |
+| `heldout_eval/` | Held-out evaluation infrastructure (no confirmatory result) |
 | `demo.py` | Console demo and the fixtures that fit the bundled model |
 | `anomaly_signal.py` | Standalone `AnomalySignal` output schema (proposed format). **Not wired into any running service**: the API, dashboard and `service.py` do not use it |
 | `policy_report_adapter.py` | Standalone adapter from caller-supplied Member 2-style policy reports to `VerifiedRuleInfo`. **Not wired into any running service** and not Member 2 integration |
+| `dataset_adapters.py` | SR-BH 2020 row adapter (not run on real data) |
+| `evaluation/` | Protocols, frozen fixtures, KPI 1–4 runners |
+| `INTEGRATION_STATUS.md` | Cross-member integration state |
+| `LICENSE`, `NOTICE.md` | Licence and contribution notice |
 
 `anomaly_signal.py` and `policy_report_adapter.py` are exercised only by their own tests
 (`tests/tokenization_ai/test_anomaly_signal.py`, `test_policy_report_adapter.py`). Both sit outside
 the archived KPI source-hash inventory, so the historical KPI 1-4 evidence, which stays tied to
 its original evaluation protocol, does not cover them; a future evaluation using either module needs
 updated source provenance under a new protocol version.
-| `dataset_adapters.py` | SR-BH 2020 row adapter (not run on real data) |
-| `evaluation/` | Protocols, frozen fixtures, KPI 1–4 runners |
-| `INTEGRATION_STATUS.md` | Cross-member integration state |
-| `LICENSE`, `NOTICE.md` | Licence and contribution notice |
