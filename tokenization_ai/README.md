@@ -1,6 +1,14 @@
 # Member 4 — Hybrid Structure-Aware Tokenization & Lightweight AI Prediction
 
-**LogiShield** · Research ID **J-26-IT-376** · Neuro-Symbolic AI Verification for API Gateways
+**LogiShield** · Research Group **J26-IT-376** · Neuro-Symbolic AI Verification for API Gateways
+
+| | |
+|---|---|
+| Student | Abeykoon K.G.T.D. (IT23152946) |
+| Module / specialization | SLIIT IT4010 Research Project · Information Technology |
+| Component | Member 4 — Hybrid Structure-Aware Tokenization & Lightweight AI Prediction |
+| Group repository | <https://github.com/Dissa2003/J26-IT-376/tree/dev> |
+| This README (documentation branch) | <https://github.com/Dissa2003/J26-IT-376/blob/docs/member4-readme-checklist1-20261029/tokenization_ai/README.md> |
 
 > **Status in one paragraph.** This package is a working, tested **proof of concept** of
 > LogiShield's component: it fuses an API request with verified-rule information, masks
@@ -10,8 +18,9 @@
 > components, and every reported measurement is from **synthetic** data on a single machine.
 > See [Limitations](#9-scientific-limitations) and [INTEGRATION_STATUS.md](INTEGRATION_STATUS.md).
 
-*Documentation review of 29 October 2026, checked against the working tree of branch
-`integration/member4-dev-sync` (HEAD `81fd942`). Counts and numbers below come from the stated
+*Documentation review of 29 October 2026, checked against the repository source on branch
+`integration/member4-dev-sync`. The code under review is unchanged since commit `81fd942`; the
+README was finalized in commit `4c64a7a`. Counts and numbers below come from the stated
 source files or from the evidence reports named in §8; nothing was re-measured when writing it,
 except that the console demo (`python -m tokenization_ai.demo`) was re-run and reproduced the
 scores quoted in §7. Historical figures keep the commit they were recorded at. Commit `ea50a49`
@@ -21,8 +30,9 @@ scores quoted in §7. Historical figures keep the commit they were recorded at. 
 
 | Branch | Role |
 |---|---|
-| `dev` | Group integration branch. At review time, the local `origin/dev` ref contained this branch's committed work (merge of PR #16, tip `79df875`). This README edit is uncommitted and is not yet on `dev`. |
-| `integration/member4-dev-sync` | Branch this README was reviewed on: Member 4 merged with `dev`, plus the model-initialization fix and runtime adapters (`81fd942`). |
+| `dev` | Group integration branch (<https://github.com/Dissa2003/J26-IT-376/tree/dev>). At review time `origin/dev` was at `dcfa71c` (merge of PR #19). It already contains this component's code up to `81fd942` (merged via PR #16, `79df875`), but **not** the README finalization commit `4c64a7a`. |
+| `integration/member4-dev-sync` | Member 4 merged with `dev` (`f8282f5`), plus the model-initialization fix and runtime adapters (`81fd942`) and the README finalization (`4c64a7a`). |
+| `docs/member4-readme-checklist1-20261029` | Pushed documentation branch; its tip is `4c64a7a`. Draft PR #21 tracks it and is not merged. |
 | `feature/member4-tokenization-ai` | Member 4's earlier development branch; older than the two above and not the reference for current behaviour. |
 
 ---
